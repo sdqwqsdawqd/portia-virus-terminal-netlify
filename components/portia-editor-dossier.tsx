@@ -1,0 +1,420 @@
+"use client";
+
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { dossierTabs, type DossierTab } from "@/lib/editor-changes";
+import { makeId } from "@/lib/editor-items";
+import { classificationOptions, scientistLogPlainText, type Virus } from "@/lib/portia-content";
+import { LevelPicker } from "@/components/portia-level-picker";
+import { levelCopy } from "@/lib/level-copy";
+import { ImageFramingEditor, type ImageFramingBox } from "@/components/portia-image-framing";
+import type { ImageFraming } from "@/lib/image-framing";
+import { isLocalMediaPath } from "@/lib/media-url";
+import { MAX_SCIENTIST_LOGS } from "@/lib/content-limits";
+import { passesTarget, type Box } from "@/lib/sort-order";
+
+type ImagePlacement = "dossier" | "mutation" | "recycle" | "guide" | "employee";
+
+function mediaUrlFromText(value: string) {
+  const trimmed = value.trim();
+  const markdown = trimmed.match(/^!\[[^\]]*\]\((https:\/\/[^\s)]+)\)$/i);
+  const plain = trimmed.match(/https:\/\/[^\s<>"']+/i);
+  const extracted = (markdown?.[1] ?? plain?.[0] ?? (isLocalMediaPath(trimmed) ? trimmed : "")).replace(/[),.;]+$/, "");
+  if (!extracted) return trimmed;
+
+  try {
+    const url = new URL(extracted, window.location.origin);
+    if ((url.hostname === "giphy.com" || url.hostname === "www.giphy.com") && url.pathname.startsWith("/gifs/")) {
+      const id = url.pathname.split("/").filter(Boolean).at(-1)?.split("-").at(-1);
+      if (id && /^[a-z0-9]+$/i.test(id)) return `https://media.giphy.com/media/${id}/giphy.gif`;
+    }
+  } catch {}
+
+  return extracted;
+}
+
+// A card moved to another section remounts its handle, and the new handle takes the drag over so one drag stays one gesture and one undo step.
+let dragHandoff: { itemId: string; dragId: string; x: number; y: number } | null = null;
+
+export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: { index: number; onMove: (from: number, to: number) => void; label: string; itemId?: string; onMoveAcross?: (groupId: string, toIndex: number) => void }) {
+  const button = useRef<HTMLButtonElement>(null);
+  const indexRef = useRef(index);
+  const onMoveRef = useRef(onMove);
+  const onMoveAcrossRef = useRef(onMoveAcross);
+  const itemIdRef = useRef(itemId);
+  const holdTimer = useRef<number | null>(null);
+  const frame = useRef<number | null>(null);
+  const pointer = useRef({ x: 0, y: 0 });
+  const active = useRef(false);
+  useEffect(() => { indexRef.current = index; onMoveRef.current = onMove; onMoveAcrossRef.current = onMoveAcross; itemIdRef.current = itemId; });
+  const placed = useRef<{ index: number; left: number; top: number } | null>(null);
+  // Per-handle FLIP: every row whose index changed slides itself (along both axes, rows can sit in columns), so the dragged row and its displaced neighbours all animate.
+  useLayoutEffect(() => {
+    const row = button.current?.closest<HTMLElement>("[data-sort-index]");
+    if (!row || row.offsetParent === null) { placed.current = null; return; }
+    const { offsetLeft: left, offsetTop: top } = row;
+    const previous = placed.current;
+    placed.current = { index, left, top };
+    if (!previous || previous.index === index || (previous.left === left && previous.top === top)) return;
+    // Mirrors the CSS motion switch, which cannot clamp Web Animations started from script.
+    const motion = document.documentElement.dataset.motion;
+    if (motion === "reduced" || motion === "off") return;
+    const easing = getComputedStyle(document.documentElement).getPropertyValue("--ease-out").trim() || "ease-out";
+    row.animate([{ transform: `translate(${previous.left - left}px, ${previous.top - top}px)` }, { transform: "none" }], { duration: 160, easing });
+  });
+
+  const stop = (event?: React.PointerEvent<HTMLButtonElement>) => {
+    if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+    holdTimer.current = null;
+    frame.current = null;
+    active.current = false;
+    if (button.current) {
+      delete button.current.dataset.dragging;
+      delete button.current.dataset.dragId;
+    }
+    if (event?.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+  // Only lists of the same data-sort-group kind take a card (a card never becomes a block or a section, D-11); the new place is the row, the empty hint or the section head under the pointer.
+  const moveAcross = (own: HTMLElement | null | undefined, hits: Element[], x: number, y: number) => {
+    const kind = own?.dataset.sortGroup;
+    const across = onMoveAcrossRef.current;
+    const itemId = itemIdRef.current;
+    if (!own || !kind || !across || !itemId) return;
+    const list = `[data-sort-group="${kind}"]`;
+    for (const element of hits) {
+      let groupId: string | undefined;
+      let toIndex = 0;
+      const row = element.closest<HTMLElement>(`${list} > [data-sort-index]`);
+      const empty = element.closest<HTMLElement>(list);
+      const head = element.closest<HTMLElement>("[data-drop-group] > .nested-editor-head");
+      if (row && row.parentElement !== own) {
+        const { top, height } = row.getBoundingClientRect();
+        groupId = row.parentElement?.dataset.groupId;
+        toIndex = Number(row.dataset.sortIndex) + (y > top + height / 2 ? 1 : 0);
+      } else if (!row && empty && empty !== own && !empty.querySelector(":scope > [data-sort-index]")) {
+        groupId = empty.dataset.groupId;
+      } else if (head && head.parentElement?.dataset.dropGroup !== own.dataset.groupId) {
+        groupId = head.parentElement?.dataset.dropGroup;
+        toIndex = Number.MAX_SAFE_INTEGER;
+      }
+      if (!groupId) continue;
+      dragHandoff = { itemId, dragId: button.current?.dataset.dragId ?? makeId("drag"), x, y };
+      across(groupId, toIndex);
+      return;
+    }
+  };
+  // A row swaps only once the pointer crosses the target's middle in reading order (sideways in a row of columns, downwards otherwise), so rows of unequal height do not flip back and forth.
+  const moveTo = (x: number, y: number) => {
+    // Nested «Информация» lists must not swap across levels: only rows sharing the dragged row's parent are targets.
+    // D-42: section cards stand in [data-sort-column] columns of one [data-sort-columns] container; there every row of those columns is a target, and nothing nested (subsections, blocks, cards) ever is.
+    const ownRow = button.current?.closest<HTMLElement>("[data-sort-index]");
+    const parent = ownRow?.parentElement;
+    const columns = parent?.hasAttribute("data-sort-column") ? parent.parentElement : null;
+    const hits = document.elementsFromPoint(x, y);
+    const row = hits
+      .map((element) => element.closest<HTMLElement>("[data-sort-index]"))
+      .find((candidate) => candidate && (columns
+        ? candidate.parentElement?.hasAttribute("data-sort-column") && candidate.parentElement.parentElement === columns
+        : candidate.parentElement === parent));
+    if (!row) { moveAcross(parent, hits, x, y); return; }
+    const target = Number(row.dataset.sortIndex);
+    if (!row || !Number.isInteger(target) || target === indexRef.current) return;
+    const boxOf = ({ left, top, width, height }: DOMRect): Box => ({ left, top, width, height });
+    if (!ownRow || !passesTarget(boxOf(ownRow.getBoundingClientRect()), boxOf(row.getBoundingClientRect()), { x, y }, target > indexRef.current)) return;
+    // Another column remounts the card and its handle; the new handle takes the drag over, so it stays one gesture and one undo step.
+    const itemId = itemIdRef.current;
+    if (itemId && row.parentElement !== parent) dragHandoff = { itemId, dragId: button.current?.dataset.dragId ?? makeId("drag"), x, y };
+    onMoveRef.current(indexRef.current, target);
+    indexRef.current = target;
+  };
+
+  // Near the edge of whatever scrolls (the editor, or the page on phones) the list keeps moving under a still finger.
+  const autoscroll = () => {
+    const editor = button.current?.closest<HTMLElement>(".content-editor") ?? null;
+    const scrolls = editor !== null && editor.scrollHeight > editor.clientHeight && /auto|scroll/.test(getComputedStyle(editor).overflowY);
+    const scroller: { scrollBy: (x: number, y: number) => void } = scrolls ? editor : window;
+    // 56px: sticky system bar; 44px: taskbar (window mode only).
+    const { top, bottom } = scrolls ? editor.getBoundingClientRect() : { top: 56, bottom: window.innerHeight - 44 };
+    const { x, y } = pointer.current;
+    const direction = y < top + 48 ? -1 : y > bottom - 48 ? 1 : 0;
+    if (direction) {
+      scroller.scrollBy(0, direction * 8);
+      moveTo(x, y);
+    }
+    frame.current = requestAnimationFrame(autoscroll);
+  };
+
+  // A stuck drag marker would fold every later edit into one undo step, so the drag also ends on unmount, on lost
+  // window focus, and on a release anywhere: once pointer capture is lost the handle may never see its pointerup.
+  // Tracking lives on window too, because a downward swap re-inserts the dragged row and drops pointer capture (03-REVIEW IN-05).
+  useEffect(() => {
+    const onBlur = () => { dragHandoff = null; stop(); };
+    const onRelease = (event: PointerEvent) => { if (event.isPrimary) { dragHandoff = null; stop(); } };
+    const onTrack = (event: PointerEvent) => {
+      if (!event.isPrimary || holdTimer.current === null) return;
+      pointer.current = { x: event.clientX, y: event.clientY };
+      if (active.current) moveTo(event.clientX, event.clientY);
+    };
+    // Not cleared here: Strict Mode runs this effect twice; a release or blur clears it.
+    if (dragHandoff && dragHandoff.itemId === itemIdRef.current && button.current) {
+      holdTimer.current = 0;
+      active.current = true;
+      pointer.current = { x: dragHandoff.x, y: dragHandoff.y };
+      button.current.dataset.dragging = "true";
+      button.current.dataset.dragId = dragHandoff.dragId;
+      frame.current = requestAnimationFrame(autoscroll);
+    }
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("pointermove", onTrack);
+    window.addEventListener("pointerup", onRelease);
+    window.addEventListener("pointercancel", onRelease);
+    return () => {
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("pointermove", onTrack);
+      window.removeEventListener("pointerup", onRelease);
+      window.removeEventListener("pointercancel", onRelease);
+      stop();
+    };
+  }, []);
+
+  return <button
+    ref={button}
+    className="order-drag-handle"
+    type="button"
+    aria-label={`Изменить порядок: ${label}`}
+    aria-keyshortcuts="ArrowUp ArrowDown"
+    onPointerDown={(event) => {
+      // A second finger or a right-click must not start a drag or orphan the first one's timer and frame loop.
+      if (!event.isPrimary || event.button !== 0) return;
+      stop();
+      const target = event.currentTarget;
+      pointer.current = { x: event.clientX, y: event.clientY };
+      target.setPointerCapture(event.pointerId);
+      holdTimer.current = window.setTimeout(() => {
+        active.current = true;
+        target.dataset.dragging = "true";
+        target.dataset.dragId = makeId("drag");
+        frame.current = requestAnimationFrame(autoscroll);
+      }, 170);
+    }}
+    onPointerUp={stop}
+    onPointerCancel={stop}
+    onKeyDown={(event) => {
+      const step = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+      if (!step) return;
+      event.preventDefault();
+      onMove(index, index + step);
+    }}
+  ><span aria-hidden="true">≡</span></button>;
+}
+
+export function ArchivedVirusEditor({ virus, uploadState, uploadMessage, onUpload, onChange, onRemoveMutation, onRestore, onDelete, dossierChanged, restoreBlocked }: {
+  restoreBlocked: boolean;
+  virus: Virus;
+  uploadState: "idle" | "uploading" | "error";
+  uploadMessage?: string;
+  onUpload: (file: File, onUploaded: (url: string) => void) => void;
+  onChange: (updater: (virus: Virus) => void) => void;
+  onRemoveMutation: (index: number) => void;
+  onRestore: () => void;
+  onDelete: () => void;
+  dossierChanged: DossierTab[];
+}) {
+  const [dossierTab, setDossierTab] = useState<DossierTab>("main");
+  return <div className="editor-form virus-editor-form etab-detail">
+    <p className="editor-guidance">Полная запись вируса в Корзине.</p>
+    <DossierTabs active={dossierTab} changed={dossierChanged} onSelect={setDossierTab} />
+    {dossierTab === "main" && <EditorGroup title="Основные данные">
+      <Field label="Название"><input value={virus.name} onChange={(event) => onChange((item) => { item.name = event.target.value; })} /></Field>
+      <LevelPicker name={`level-virus-${virus.id}`} value={virus.level} onChange={(level) => onChange((item) => { item.level = level; })} />
+      <Field label="Код"><input value={virus.code} onChange={(event) => onChange((item) => { item.code = event.target.value; })} /></Field>
+      <Field label="Статус"><input value={virus.status} onChange={(event) => onChange((item) => { item.status = event.target.value; })} /></Field>
+      <ImageEditorField label="Фото или GIF после заражения" value={virus.infectedImage} placement="dossier" maxHint="На странице: максимум 540 × 620 px" uploadState={uploadState} uploadMessage={uploadMessage} framing={virus.infectedImageFraming} framingBox="natural" onFramingChange={(frame) => onChange((item) => { if (frame) item.infectedImageFraming = frame; else delete item.infectedImageFraming; })} onChange={(value) => onChange((item) => { item.infectedImage = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { item.infectedImage = url; }))} />
+    </EditorGroup>}
+    {dossierTab === "text" && <EditorGroup title="Описание" stack>
+      <Field label="Внешние характеристики" wide><textarea value={virus.external} onChange={(event) => onChange((item) => { item.external = event.target.value; })} /></Field>
+      <Field label="Физиологические характеристики" wide><textarea value={virus.physiology} onChange={(event) => onChange((item) => { item.physiology = event.target.value; })} /></Field>
+    </EditorGroup>}
+    {dossierTab === "text" && <EditorGroup title="Характеристики PPU" stack>
+      {(["health", "speed", "abilities"] as const).map((key) => <Field key={key} label={{ health: "Здоровье", speed: "Скорость", abilities: "Способности" }[key]} wide><textarea value={virus.ppu[key]} onChange={(event) => onChange((item) => { item.ppu[key] = event.target.value; })} /></Field>)}
+    </EditorGroup>}
+    {dossierTab === "main" && <EditorGroup title="Классификация">
+      {([
+        ["danger", "Общий уровень опасности"], ["spread", "Распространение"], ["transmission", "Способ распространения"],
+        ["escapeRisk", "Угроза и риск побега"], ["mind", "Разум"], ["appearance", "Вид / внешность"], ["behavior", "Поведение"],
+      ] as [keyof Virus["classification"], string][]).map(([key, label]) => <ClassificationField key={key} label={label} classificationKey={key} value={virus.classification[key]} onChange={(value) => onChange((item) => { item.classification[key] = value; })} />)}
+    </EditorGroup>}
+    {dossierTab === "mutations" && <EditorGroup title="Мутации" stack>
+      {virus.mutations.map((mutation, index) => <div className="nested-editor-card" key={`${virus.id}-mutation-${index}`}>
+        <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={uploadState === "uploading"} onClick={() => onRemoveMutation(index)}>Удалить</button></div>
+        <Field label="Название"><input value={mutation.name} onChange={(event) => onChange((item) => { item.mutations[index].name = event.target.value; })} /></Field>
+        <Field label="Описание" wide><textarea value={mutation.description} onChange={(event) => onChange((item) => { item.mutations[index].description = event.target.value; })} /></Field>
+        <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} uploadMessage={uploadMessage} framing={mutation.imageFraming} framingBox="natural" onFramingChange={(frame) => onChange((item) => { const target = item.mutations[index]; if (!target) return; if (frame) target.imageFraming = frame; else delete target.imageFraming; })} onChange={(value) => onChange((item) => { item.mutations[index].image = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { const target = item.mutations[index]; if (target) target.image = url; }))} />
+      </div>)}
+      <button className="secondary-control" type="button" onClick={() => onChange((item) => { item.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }); })}>+ ДОБАВИТЬ МУТАЦИЮ</button>
+    </EditorGroup>}
+    {dossierTab === "logs" && <EditorGroup title="Записи учёных" stack>
+      {virus.scientistLogs.length === 0 && <p className="editor-guidance">{levelCopy.logsEmptyEditor}</p>}
+      {virus.scientistLogs.map((log, index) => <div className="nested-editor-card" key={log.id}>
+        <div className="nested-editor-head"><strong>ЗАПИСЬ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => onChange((item) => { item.scientistLogs.splice(index, 1); })}>Удалить</button></div>
+        <Field label="Название"><input value={log.title} onChange={(event) => onChange((item) => { item.scientistLogs[index].title = event.target.value; })} /></Field>
+        <Field label="Псевдоним учёного"><input value={log.scientist} onChange={(event) => onChange((item) => { item.scientistLogs[index].scientist = event.target.value; })} /></Field>
+        <LevelPicker name={`level-log-${log.id}`} value={log.lockedLevel} onChange={(level) => onChange((item) => { item.scientistLogs[index].lockedLevel = level; })} />
+        <Field label="Текст записи" wide><textarea value={scientistLogPlainText(log)} onChange={(event) => onChange((item) => { item.scientistLogs[index].content = event.target.value.split(/\n\s*\n/); item.scientistLogs[index].richContent = { runs: [{ text: event.target.value }] }; })} /></Field>
+      </div>)}
+      <button className="secondary-control" type="button" disabled={virus.scientistLogs.length >= MAX_SCIENTIST_LOGS} onClick={() => onChange((item) => { item.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(item.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 1, content: [""] }); })}>+ ДОБАВИТЬ ЗАПИСЬ</button>
+    </EditorGroup>}
+    <div className="archive-virus-actions"><button className="secondary-control" type="button" disabled={restoreBlocked} title={restoreBlocked ? "Раздел «База вирусов» для вас закрыт" : undefined} onClick={onRestore}>ВОССТАНОВИТЬ В БАЗУ</button><button className="danger-control" type="button" onClick={onDelete}>УДАЛИТЬ НАВСЕГДА</button></div>
+  </div>;
+}
+
+// `tabs` is optional: without it every dossier tab is shown, as the site editor does. The template builder passes the tabs without the scientist records.
+export function DossierTabs({ active, changed, onSelect, tabs }: { active: DossierTab; changed: DossierTab[]; onSelect: (id: DossierTab) => void; tabs?: readonly DossierTab[] }) {
+  return <nav className="editor-tabs dossier-tabs" aria-label="Разделы досье">
+    {dossierTabs.filter(([id]) => !tabs || tabs.includes(id)).map(([id, label]) => {
+      const unsaved = changed.includes(id);
+      return <button key={id} type="button" className={active === id ? "active" : ""} aria-label={unsaved ? `${label}, есть несохранённые правки` : undefined} onClick={() => onSelect(id)}>
+        {label}{unsaved && <i className="tab-dot" aria-hidden="true" />}
+      </button>;
+    })}
+  </nav>;
+}
+
+export function ClassificationField({ label, classificationKey, value, onChange }: {
+  label: string;
+  classificationKey: keyof Virus["classification"];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const options = classificationOptions[classificationKey] as readonly { value: string; level?: number }[];
+  const selected = options.find((option) => option.value === value);
+  const level = selected?.level;
+
+  return <label className="editor-field classification-editor-field">
+    <span>{label}</span>
+    <div className={`classification-select-wrap${level ? ` level-${level}` : ""}`}>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => {
+          const optionLevel = option.level;
+          return <option key={option.value} value={option.value}>{optionLevel ? `${optionLevel} уровень — ` : ""}{option.value}</option>;
+        })}
+      </select>
+      {level ? <strong>УРОВЕНЬ {level}</strong> : <strong className="neutral">МЕТОД</strong>}
+    </div>
+  </label>;
+}
+
+type ConfirmAction = { label: string; tone: "primary" | "secondary" | "danger"; onClick: () => void; autoFocus?: boolean; disabled?: boolean };
+
+// A native modal dialog lives in the top layer: above the transformed editor window, the taskbar and the boot screen,
+// with focus trapped and the page inert. Never use window.confirm for new prompts: embedded browsers answer it "no" unseen.
+export function ConfirmDialog({ title, text, actions, onCancel }: { title: string; text: string; actions: ConfirmAction[]; onCancel: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+  const textId = useId();
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog || dialog.open) return;
+    dialog.showModal();
+    // showModal focuses the first button; the safe action has to win instead.
+    dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+  }, []);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="portia-dialog"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      aria-describedby={textId}
+      onClose={() => onCancel()}
+      onClick={(event) => { if (event.target === event.currentTarget) onCancel(); }}
+    >
+      <div>
+        <h2 id={titleId}>{title}</h2>
+        <p id={textId}>{text}</p>
+        <div className="portia-dialog-actions">
+          {actions.map((action) => (
+            <button key={action.label} type="button" className={`${action.tone}-control`} autoFocus={action.autoFocus} data-autofocus={action.autoFocus || undefined} disabled={action.disabled} onClick={action.onClick}>{action.label}</button>
+          ))}
+        </div>
+      </div>
+    </dialog>
+  );
+}
+
+export function EditorGroup({ title, children, stack = false }: { title: string; children: React.ReactNode; stack?: boolean }) {
+  return <section className={`editor-group${stack ? " stack" : ""}`}><h2>{title}</h2><div className="editor-field-grid">{children}</div></section>;
+}
+
+export function Field({ label, children, wide = false, error, errorId }: { label: string; children: React.ReactNode; wide?: boolean; error?: string; errorId?: string }) {
+  // The error line is hidden from the label's name so it is not read twice; the input's aria-describedby still reads it.
+  return <label className={`editor-field${wide ? " wide" : ""}${error ? " is-invalid" : ""}`}><span>{label}</span>{children}{error && <small id={errorId} className="editor-field-error" aria-hidden="true">{error}</small>}</label>;
+}
+
+export function ImageEditorField({ label, value, placement, maxHint, removeLabel, showPreview = true, uploadState = "idle", uploadMessage = "", framing, framingBox, onFramingChange, onChange, onUpload }: {
+  label: string;
+  value: string;
+  placement: ImagePlacement;
+  maxHint: string;
+  // When set and the field holds an image, a button with this text clears it.
+  removeLabel?: string;
+    showPreview?: boolean;
+  uploadState?: "idle" | "uploading" | "error";
+  // Server or network refusal text, shown under the field; the value itself is never touched on refusal.
+  uploadMessage?: string;
+  // D-63: the visible part of the picture. The block «Видимая часть» shows under the preview when the picture opened and a handler is given.
+  // A new, cleared or uploaded address drops the frame: it belonged to the old picture.
+  framing?: ImageFraming;
+  framingBox?: ImageFramingBox;
+  onFramingChange?: (framing: ImageFraming | undefined) => void;
+  onChange: (value: string) => void;
+  onUpload?: (file: File) => void;
+}) {
+  const [failedPreviewUrl, setFailedPreviewUrl] = useState("");
+  const previewFailed = Boolean(value) && failedPreviewUrl === value;
+
+  // Shown only where a file was picked, so a refusal is not repeated under every image field on the page.
+  const [picked, setPicked] = useState(false);
+  const uploading = uploadState === "uploading";
+
+  // A typed, pasted or cleared address that differs from the current one takes the frame of the old picture with it.
+  const changeAddress = (next: string) => {
+    if (next !== value && framing && onFramingChange) onFramingChange(undefined);
+    onChange(next);
+  };
+  // An upload brings a new address through the parent: the value the file was picked on is remembered, and the first different value drops the frame.
+  const addressAtPick = useRef<string | null>(null);
+  useEffect(() => {
+    if (addressAtPick.current === null || addressAtPick.current === value) return;
+    addressAtPick.current = null;
+    if (framing && onFramingChange) onFramingChange(undefined);
+  }, [value, framing, onFramingChange]);
+  useEffect(() => { if (uploadState === "error") addressAtPick.current = null; }, [uploadState]);
+
+  const receiveFile = (file: File | undefined) => {
+    if (uploading) return;
+    if (file) setPicked(true);
+    if (file && onUpload) addressAtPick.current = value;
+    if (file && onUpload) onUpload(file);
+  };
+  const refusal = picked && uploadState === "error" ? uploadMessage : "";
+
+  return <div className={`editor-field wide image-editor-field image-placement-${placement}`}>
+    <span>{label}</span>
+    <input value={value} inputMode="url" autoCapitalize="none" spellCheck={false} placeholder="Прямая HTTPS-ссылка на изображение или .gif" onChange={(event) => changeAddress(event.target.value)} onBlur={(event) => changeAddress(mediaUrlFromText(event.currentTarget.value))} onPaste={(event) => { const text = event.clipboardData.getData("text"); const url = mediaUrlFromText(text); if (url && url !== text) { event.preventDefault(); changeAddress(url); } }} />
+    <small className="editor-media-hint">{maxHint}. Для Tenor нужна ссылка с <b>media.tenor.com</b>.</small>
+    {onUpload && <label className="editor-dropzone" aria-disabled={uploading || undefined} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={(event) => { event.preventDefault(); receiveFile(event.dataTransfer.files?.[0]); }}>
+      <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => { receiveFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
+      <strong>{uploading ? "ЗАГРУЖАЕМ…" : "ВЫБРАТЬ ФАЙЛ С КОМПЬЮТЕРА"}</strong>
+      <small>Перетащите · PNG, JPG, WEBP, GIF · до 4 МБ</small>
+    </label>}
+    {refusal && <span className="editor-media-error" role="alert">{refusal}</span>}
+      {value && showPreview && !previewFailed && <figure className={`editor-image-preview ${placement}`}><img src={value} alt={`Предпросмотр: ${label}`} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedPreviewUrl(value)} /></figure>}
+    {value && !previewFailed && framingBox && onFramingChange && <ImageFramingEditor src={value} framing={framing} box={framingBox} label={label} onChange={onFramingChange} />}
+    {value && removeLabel && <button type="button" className="secondary-control" onClick={() => changeAddress("")}>{removeLabel}</button>}
+    {value && previewFailed && <span className="editor-media-error">Не удалось открыть. Нужна прямая HTTPS-ссылка на файл.</span>}
+  </div>;
+}

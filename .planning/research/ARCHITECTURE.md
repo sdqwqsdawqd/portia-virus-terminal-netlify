@@ -1,339 +1,260 @@
-# Architecture Patterns
+# Architecture Research: v1.4 «Доступ и единый стиль»
 
-**Domain:** Next.js 16 + Supabase + Netlify fan-site "PORTIA OS" - subsequent milestone v1.1 (closing v1.0 code-review debt, no new features)
-**Researched:** 2026-10-19
-**Overall confidence:** HIGH for file/line mapping and root-cause clustering (every claim below was checked against the code at HEAD d40c8b5); MEDIUM for the two design decisions flagged "decision" (limits policy, public-column SQL); MEDIUM for 05-review findings (browser behaviour, needs device check).
+**Domain:** access gating + design system on an existing Next.js 16 / Supabase / Netlify "desktop OS" site
+**Researched:** 2026-11-09
+**Confidence:** HIGH on integration points (read from code), MEDIUM on Netlify billing/Supabase storage behaviour (flagged inline, verify on staging)
+**Scope:** only the four new feature groups. Existing architecture: `.planning/codebase/ARCHITECTURE.md`.
 
-> Scope note. This is not a greenfield architecture. The existing system is documented in `.planning/codebase/ARCHITECTURE.md`. This file answers only: where each group of review fixes lands, which findings share one root cause, and in what order to build to minimise file conflicts.
+## Decisions at a glance
 
-## Recommended Architecture (what already exists, and the seams v1.1 touches)
+| # | Decision | Why |
+|---|----------|-----|
+| D1 | Visitor identity = **opaque HttpOnly cookie `portia_access` + HMAC digest in DB**, not Supabase Auth | Reuses the proven promotion device-token pattern (`lib/portia-device-binding.ts`); no Supabase dashboard change; visitors never get a Supabase session; keeps `authenticated` role = editors only |
+| D2 | `/api/content` and `/api/employees` become **per-viewer, `no-store`**; the CDN cache and tag purge stop being the read path | A shared cache cannot be keyed by anything the client can forge; per-level CDN variants are unsafe (see 3.3) |
+| D3 | Level filtering = **server-side redaction in TypeScript** (`redactContentForLevel`), required level stored **inside the content JSON** | Rides the existing PUT/revision/undo/tab-refusal machinery; redaction is a pure, canary-testable function |
+| D4 | **Close direct anon reads** of `portia_content`, `portia_employee_profiles`, `portia_manual_employees`; reads go through token-gated `SECURITY DEFINER` RPCs (visitors) or editor-only policies | Today the publishable key in the bundle reads these tables directly (`using (true)`); an API-level gate alone is bypassable |
+| D5 | Two new tables: **`portia_access_people`** (identity + level) and **`portia_access_requests`** (one row per device/request); all writes via RPCs with an audit table | "Level per person" must not drift across devices; matches the promotion RPC style |
+| D6 | New editor tab **`users`** = one line in `tabRegistry` (kind `regular`, open to all by default) + `/api/users` route | Existing per-editor chips (owner "Доступ") can close it per editor with zero extra code |
+| D7 | Promotion takes the nickname **from the approved identity on the server**; the nick form is removed; promo device binding stays as is | Smallest diff to a 17-plan, heavily tested subsystem |
+| D8 | Design system = **tokens file at current values first, then primitives that emit the existing class names, then per-surface migration**; do not reorganise `portia.css` | Cascade order in `portia.css` is load-bearing; deploy is local-only so interim inconsistency never ships |
+| D9 | Build order: **access data layer -> Users tab -> visitor gate -> levels/content gating -> design restyle**; primitives skeleton lands with the Users tab | Gating cannot be enforced before someone can approve; restyle waits on owner variant choice and runs last, with physical UAT |
+
+## 1. Facts in the current code that drive the design
+
+- **Anon reads the DB directly.** Baseline migration: `portia_content`, `portia_employee_profiles`, `portia_manual_employees` have `select ... to anon, authenticated using (true)`. The publishable key is `NEXT_PUBLIC_*`, so redacting in `app/api/content/route.ts` alone protects nothing.
+- **`GET /api/content`** uses `createPublicSupabaseClient()` (no cookies), returns `publicCacheHeaders(contentCacheTag, 300)` (`s-maxage=300, durable, stale-while-revalidate=86400`); `PUT` purges the tag. `/api/employees` GET is the same with `employeesCacheTag` (600 s) and does sheet + Roblox lookups per cache miss.
+- **Bundle contains `defaultPortiaContent`** (`app/page.tsx` passes it as `initialContent`) and hard-coded embed URLs for «Таблица» (Google Sheets `htmlview`) and «Устав» (`github.io/S.E-Portia`) in `components/portia-desktop.tsx` lines 40-41.
+- **Device caches:** `portia-content-last-success-v1` and `portia-employees-last-success-v1` (localStorage) seed the UI before any fetch; stamped only with the Supabase URL (`lib/device-cache.ts`).
+- **Revision dedupe:** `acceptFetchedContent` (`lib/content-sync.ts`) drops any answer whose revision is not newer. One global revision + per-viewer payloads would make a level change invisible to the client.
+- **Search** (`lib/search-index.ts`) is a pure client-side function over whatever content/employees the client holds; it has no data access of its own. Server redaction therefore protects search for free. The caller already filters `apps` by what the visitor may open (D-07).
+- **`ScientistLog.lockedLevel` already exists** (default 3; UI hard-codes viewer level «II» and `isOpen = lockedLevel <= 2` in `components/portia-desktop-dossier.tsx`; editor offers II-IV). The locked log's text is currently shipped to every client. This is the seed of the new level model: same scale, real viewer level.
+- **`formattedText`** is a top-level map keyed `virus:<id>:*`, `info:<id>:body`, `info-block:<id>:text`, `guide-block:<id>:text`, ... holding rich text separately from the item. It is the easiest leak path for redaction.
+- **Promotion** already has a "restore" path: `GET /api/promotion/status` without `nickname` resolves the bound nickname from the device cookie (`portia_promo_resolve_device`). `register_attempt` is granted to `anon, authenticated` (baseline line 1597) but is only needed inside `submit_request` (definer).
+- **Editor tab model:** `lib/editor-tabs.ts` `tabRegistry` + `portia_editors.closed_tabs/granted_tabs`; `getEditorAccess` returns `openTabs`; `/api/access` (editor capabilities, polled by editors) — **do not reuse this name** for visitor routes.
+- **Proxy** (`proxy.ts`) excludes `/api/content` and `/api/employees` because cached GETs must never carry `Set-Cookie`. That reason disappears with `no-store`.
+- **Parity machinery:** any new table/RPC must be reflected in `supabase/fingerprint/expected/portia.fingerprint.json`, `tests/e2e/fixtures/data/expected-authz.json` (`lib/phase16-expected-authz.test.ts`), explicit `service_role` grants (migration `20261101000100` only covers objects that existed then), the offline Supabase harness `tests/e2e/harness/offline-supabase.cjs`, and `portia-canonical-parity.test.ts`.
+
+## 2. Target architecture
 
 ```
 Browser
-  components/portia-desktop.tsx (1861 lines)  public windows, polls /api/content (10 s) + /api/employees (5 min)
-  components/portia-editor.tsx  (2275 lines)  editor; EmployeeProfilesEditor is a self-contained region (1356-1645)
-        |  fetch                                   ^ CDN-cached GET (Netlify-CDN-Cache-Control, purge by tag on write)
-        v                                          |
-app/api/{content,employees,editors,uploads,access}/route.ts   <- trust boundary: JSON in, sanitize*, getEditorAccess
-        |
-lib/ (pure, node:test-covered)  portia-employees.ts | portia-content-normalize.ts | editor-items.ts | editor-history.ts
-                                 content-sync.ts | editor-changes.ts | broadcasts.ts | rich-text-style.ts
-        |
-Supabase (RLS + portia_* functions in supabase/portia_setup.sql; owner applies SQL by hand)
+ app/page.tsx (still static, no cookie read on the server)
+  └─ PortiaRoot            NEW  client wrapper; boot animation, then viewer state
+      ├─ AccessGate        NEW  nick form / pending / rejected / revoked  (wallpaper only, no content)
+      └─ PortiaDesktop     MOD  mounted only when viewer is approved or editor; gets {viewer}
+            ├─ windows      MOD  filter by level; stubs for locked scientist logs
+            ├─ PortiaEditor MOD  new "users" tab -> UsersPanel (NEW); level field in item editors
+            └─ PortiaPromotion MOD  no nick form; identity from server
+
+Route handlers (app/api)
+ /api/visitor    NEW  GET state | POST request | DELETE sign-out          (cookie portia_access)
+ /api/users      NEW  editor-only: GET list | POST decide | PATCH level | DELETE revoke
+ /api/content    MOD  GET per viewer, no-store, redacted;  PUT unchanged (+level normalisation)
+ /api/employees  MOD  GET per viewer, no-store, server-memoised roster
+ /api/promotion/{status,requests,test} MOD  require approved viewer; nickname from identity
+ lib/viewer.ts   NEW  resolveViewer(): editor session -> {kind:"editor"} | cookie -> RPC -> {kind:"visitor",level,...} | none
+
+Supabase (Postgres)
+ tables  NEW  portia_access_people, portia_access_requests, portia_access_audit_events
+ RPCs    NEW  portia_access_submit / _resolve / portia_content_for_visitor / portia_employee_data_for_visitor (anon, token-gated)
+              portia_access_list / _decide / _set_level / _revoke (authenticated, portia_can_edit_tab('users'))
+ RLS     MOD  portia_content, employee_profiles, manual_employees: drop anon select; editor-only select
+ grants  MOD  revoke anon/authenticated execute on portia_promo_register_attempt
 ```
 
-The seams that matter for v1.1:
+## 3. (a) Visitor identity, `/api/content`, CDN, search
 
-1. **Content poll seam**: `fetchContent` (desktop 349-378) -> `content` state -> editor `sync` effect (editor 565-573) -> `historyReducer` `sync` case (`lib/editor-history.ts:62`). Identity of `content` is load-bearing.
-2. **Employee write seam**: editor `EmployeeProfilesEditor.save` (editor ~1430) -> `PATCH /api/employees` -> `sanitizeEmployeeUpdate` -> `loadEmployees` (Sheets + Roblox + Supabase) -> `saveEmployeeProfile` upsert.
-3. **Employee read seam**: `GET /api/employees` -> `acceptsRoster` -> `fetchEmployees` (desktop ~417) -> `setEmployees` + `localStorage`.
-4. **Normalization seam**: `PUT /api/content` -> `normalizePortiaContent` (silent caps) -> DB -> `GET` -> `normalizePortiaContent` again.
-5. **Pure-logic-in-lib pattern**: every fix that can be a pure function goes in `lib/*.ts` with a `node:test` file (`npm test` = `node --experimental-strip-types --test lib/*.test.ts`). Keep doing this; components stay glue.
+### 3.1 Identity and session
+- `POST /api/visitor {nickname, fromSheet}` validates the nick (same regex family as `robloxNickname` in `lib/portia-employees.ts`), computes `nicknameKey`, mints a 32-byte token, stores only `HMAC(secret, "access:"+token)` and sets cookie `portia_access` (`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=1y`). Secret: reuse `PORTIA_PROMOTION_DEVICE_SECRET` with the distinct `access:` prefix (no new owner env step; domain-separated). Export `keyedDigest` from `lib/portia-device-binding.ts` or put the new helpers in `lib/access-session.ts`.
+- `fromSheet` is a claim only. The route also checks the sheet roster (`loadPromotionAccessRoster`) and stores `sheet_check = listed | not-listed | unknown`. A sheet outage records `unknown`; it never blocks the request and **never auto-approves**.
+- `GET /api/visitor` -> `{state: none|pending|approved|rejected|revoked, nickname?, level?}`, `no-store`. The pending screen polls it (10 s, visible tab only, like `contentSyncMs`).
+- Editors: a Supabase session with `getEditorAccess().canEdit` is treated as full access (level 5, unredacted) and skips the nick gate; they log in through `/owner-login` (public, shows no content). An editor who wants Promotion as a participant also holds an `portia_access` identity; resolution order is editor-session first for content, access cookie for Promotion.
+- One chokepoint, `resolveViewer(request)` (`lib/viewer.ts`): only attempts the Supabase path when an `sb-*-auth-token` cookie exists (same test as `lib/supabase/proxy.ts`), otherwise one RPC. Every GET route uses it. Add a unit test that scans `app/api/**/route.ts` and fails if a GET handler (other than `/api/visitor`, `/api/access`) does not call it, in the style of the existing `lib/security-matrix.test.ts`.
 
-### Component Boundaries (v1.1 write targets)
+### 3.2 `/api/content` after the change
+1. `viewer = await resolveViewer(request)`; `none|pending|rejected|revoked` -> `401 {code:"access-required", state}` with `noStoreHeaders`.
+2. Visitor: one RPC `portia_content_for_visitor(p_token_hash)` returns `{state, level, nicknameKey, payload, revision, updated_at}`; route runs `normalizePortiaContent` then `redactContentForLevel(content, level)`.
+3. Editor: direct select with the editor's session (new policy `select to authenticated using (portia_can_edit())`), no redaction.
+4. Response adds `viewer: {kind, level}`. PUT is unchanged except that `normalizePortiaContent` must preserve/clamp the new `level` fields (items are rebuilt field by field in places; unknown keys are not guaranteed to survive).
 
-| Component | Responsibility | v1.1 changes land here for |
-|-----------|---------------|---------------------------|
-| `app/api/employees/route.ts` (116 l) | auth + HTTP shape for roster CRUD | JSON 400 helper, partial PATCH, no-Roblox id lookup, `code:"sheet"` in 403, GET flags (`manualRead`) |
-| `app/api/content/route.ts` (71 l) | content GET/PUT with revision check | JSON 400 (currently `JSON.parse(raw)` -> 500), over-limit rejection |
-| `app/api/editors/route.ts` (65 l) | editor allow-list | JSON 400 only |
-| `lib/portia-employees.ts` (454 l) | roster, profile merge, sanitizers | partial-update sanitizer, roster-merge helper, `loadEmployees` option, strict `sanitizeManualDetails`, `startsWith("/")` regex, optional `staffRowsEnd` warn |
-| `lib/portia-content-normalize.ts` (273 l) + `lib/portia-content.ts` | shape + caps | shared `contentLimits`, string coercion for broadcasts/infoSections, `endsAt < startsAt` repair |
-| `lib/editor-items.ts` (52 l) + test | pure delete helpers | `removeRecycledVirus`, `removeRecycleFile` (orphan keys) |
-| `lib/editor-changes.ts` (98 l) | section diff | one-token `?? []` guard |
-| `lib/content-sync.ts` (4 l) | stale-answer guard | optional pure `shouldApplyFetched` for the poll fix |
-| `components/portia-desktop.tsx` | public windows | poll skip, roster merge, EmployeeImage key, assistant fallback, EmbeddedDocument zoom + sandbox, YouTube sandbox, toast a11y, `today` init, updater purity |
-| `components/portia-editor.tsx` | editor | three disjoint regions: (a) content editor 521-1350, (b) EmployeeProfilesEditor 1356-1645, (c) text formatting 1736-2036 |
-| `lib/rich-text-style.ts` + `app/portia.css` | format panel logic/CSS | Phase-05 findings only |
-| `supabase/portia_setup.sql` (+ `app/owner-login/actions.ts` if oracle is removed) | RLS, RPC | WR-11, IN-10, SQL half of IN-02 |
+Client (`components/portia-desktop.tsx` `fetchContent`): treat `401 access-required` as a gate trigger, **not** a sync failure (`failureFromResponse` would otherwise show the stale banner and keep cached content). Extend `acceptFetchedContent` so a changed `viewer.level` or identity resets `knownRevision` (same revision, different payload must be accepted). Stamp both localStorage caches with `viewKey = nicknameKey:level` (extend `stampCacheSource`/`cacheMatchesSource` in `lib/device-cache.ts`) and **delete both caches on any transition to non-approved**. `PortiaDesktop` must not mount, and must not read those caches, before `/api/visitor` says approved (or an editor session exists).
 
-## Root-Cause Clusters
+### 3.3 Cache and CDN
+- Gated responses: `Cache-Control: no-store` and `Netlify-CDN-Cache-Control: no-store` (`noStoreHeaders`), `force-dynamic` stays. Netlify dynamic responses are not cached without an opt-in header (docs), so no-store is belt and braces.
+- **Do not** vary the CDN cache on a level/role cookie (`Netlify-Vary: cookie=...`): the CDN cannot verify it, so anyone setting `level=5` would be served the level-5 copy. Varying on the unforgeable token cookie is safe but gives ~0 hit rate and delays revocation, so it is not worth it.
+- `purgeCacheTag(contentCacheTag)` after PUT becomes redundant (keep it for one release; it also clears stale pre-gate copies). `contentCacheTag` / `employeesCacheTag` can be retired once the gate is enforced.
+- **Rollout trap:** the old public response was stored `durable` with `stale-while-revalidate=86400`. After deploying the gated routes, purge both tags once, or the CDN keeps serving the open copy to everyone. Put this in the rollout checklist.
+- **Cost trap (MEDIUM):** the CDN used to absorb the 10 s content poll and the 5 min employee poll. Now each visible tab is a function invocation plus one RPC. Mitigations: visitors poll at 30-60 s (editors keep 10 s); memoise the expensive, viewer-independent half of `loadEmployees` (sheet CSV + Roblox lookups) in module memory with a 10 min TTL, and gate on every request (cold lambdas just recompute; Netlify Blobs is out of scope). Measure invocations on staging before choosing the interval.
 
-Finding IDs are `<phase>-<ID>`: `31`=03.1, `32`=03.2, `33`=03.3, `01`, `05`. Line numbers are HEAD, not the line numbers in the reviews (which have drifted).
+### 3.4 Redaction rules (`lib/content-redact.ts`, NEW, pure)
+Required level lives in the JSON: `level?: 1..5` on `Virus`, `InfoSection`, `InfoSubsection`, `GuideSection`, `GuideCard`; `appLevels?: { charter?: 1..5 }` for «Устав». **Missing = 1** (existing content stays visible to every approved person). Scientist logs keep `lockedLevel` (optional, same 1-5 scale, editor dropdown widened from II-IV).
 
-### Cluster A - Poll replaces `content` object every 10 s (one bug, two findings, plus noise)
+| Part of `PortiaContent` | Rule for viewer level L |
+|---|---|
+| `viruses[]` | omit if `level > L` |
+| `viruses[].scientistLogs[]` | keep a stub `{id,title,scientist,lockedLevel}` if `lockedLevel > L` (UI already renders locked rows); drop `content`, `richContent` |
+| `infoSections[]`, `subsections[]`, `guideSections[]`, `cards[]` | omit; effective level = max(section, child); omitted parent removes children |
+| `recycledViruses[]`, `recycleFiles[]` (kind `virus`) | inherit the virus level; text/image files level 1 |
+| `formattedText` | **allowlist by key prefix**: drop every `virus:<id>:*`, `info:*`, `info-block:*`, `guide-block:*` key whose owner was omitted; unknown prefixes are dropped (fail closed) |
+| `broadcasts`, assistant fields, `searchRecommendations` | visible to every approved viewer |
 
-| Closes | Evidence at HEAD |
-|--------|------------------|
-| **31-WR-04 = 32-WR-01** (same defect, reported twice) | `fetchContent` calls `setContent(fetched)` unconditionally after `acceptFetchedContent` (which deliberately accepts an equal revision) |
+- Omit, not "locked placeholder", is the default: it is fail-closed and search/lists need no change. A teaser row for locked items (title + lock) is a later owner-decided option because the title itself can be sensitive.
+- Test with **canary strings**: build a fixture where every leveled item and every rich-text key carries a unique marker; assert no marker above level L appears in `JSON.stringify(redacted)` for L = 1..5.
+- The function is pure and secret-free, so the editor can reuse it for a "preview as level N" control (cheap differentiator).
+- «Устав»/«Таблица» embeds: the iframe URLs are public by themselves (github.io page, Google Sheet). Level-gating the **window** is UI-level; hiding the URL needs it moved from the bundle into the server response (optional hardening). The owner must know the sheet and the Pages site stay reachable by URL unless unshared. Same for the open `portia-media` bucket: with omission, locked-item image URLs are never delivered; removing the broad `select` policy on `storage.objects` should close listing while public URLs keep working (**LOW-MEDIUM, official docs say a broad SELECT policy permits listing; public-GET-without-policy not confirmed, test on staging**).
 
-**Root cause:** a fresh object identity on every poll. `historyReducer` `sync` compares `action.content === state.source` (identity), so after any poll the clean-state sync effect runs `initHistory` and drops `past`/`future`. The same identity churn re-runs every `[content]` effect (broadcast signature, quest-toast recompute, `rememberActiveQuests` localStorage write).
+### 3.5 Search
+No change to `buildSearchIndex`/`matchSearch`. Required: (1) content and employees arrive already redacted, (2) the `apps` list passed to the index excludes apps whose level exceeds the viewer's (`appLevels.charter`), (3) caches cleared on view change so a downgraded user cannot search stale local copies. Add a `search-index` test over the redacted canary fixture.
 
-**Fix (one place, desktop `fetchContent`):** after the stale-answer guard, `if (fetchedRevision === knownRevision.current) return;` (the `finally { setContentReady(true) }` still runs). `knownRevision` starts at 0, and a row with a payload always has revision >= 1, so the first real fetch always applies; the 409 reset (`knownRevision = -1`) also still applies. The `contentApplied` ref proposed in the review is unnecessary; verify with a test on a pure predicate in `lib/content-sync.ts` (`shouldApplyFetched(revision, known)`), keeping `acceptFetchedContent` unchanged.
-**Optional hardening:** editor sync effect (`[content, dirty, revision]`) could key on `revision` instead of identity; not needed once the poll stops re-issuing identical objects, so skip (ponytail).
-**Files:** `components/portia-desktop.tsx` (fetchContent only), `lib/content-sync.ts` + `lib/content-sync.test.ts`.
-**Also removes** the "toast effect re-runs every 10 s" churn noted in 32-WR-01 with no extra code.
+## 4. (b) Database model, RLS, RPCs, editor tab
 
-### Cluster B - Employee PATCH is a full-replace of a full draft (root of the data-loss findings)
-
-| Closes | Where |
-|--------|-------|
-| **31-WR-02** missing `biography`/`photoUrl` -> `""` -> wiped | `sanitizeEmployeeUpdate` (`lib/portia-employees.ts:~436`) |
-| **32-WR-04** every save writes all six ratings, concurrent editors clobber | editor `save` sends `changes: draft` |
-| **32-WR-02** payload without rating keys -> `profileOf` makes explicit `null` -> a save clears stored ratings; and `profilesRead === false` check misses an absent key | `profileOf` (portia-employees.ts:~45), editor load (editor 1421) |
-| **33-IN-02** `sanitizeManualDetails({})` clears title/rank/callsign; duplicated `text` closure | `sanitizeManualDetails` / `sanitizeManualEmployee` |
-| **31-WR-03** PATCH needs live Sheets + Roblox (up to ~18 s) and can 404 a valid employee when Roblox is down | PATCH calls `loadEmployees(supabase)` in full |
-| **33-WR-03** details save non-atomic; "zero rows" mislabelled `pending-database` | PATCH route lines ~46-52, `updateManualEmployee` |
-
-**Root cause:** the contract is "client sends the whole profile, server treats absent/mistyped as empty". Ratings already had the right semantics (absent = unchanged, `null` = clear) but biography/photo/knowledge did not, and the client never exploited it.
-
-**Fix shape (one contract change, then three call sites):**
-1. `sanitizeEmployeeUpdate` returns a patch containing only keys that are present and valid; `biography`/`photoUrl` become optional (`Partial`), wrong-typed present values reject with `null` (400). Drop the forced `knowledgeRating` (omit it from the upsert; the column has a default and is untouched on conflict). Add the tests the reviews ask for (`{pawsRating:5}` keeps biography untouched; `{}` is a 400 or a no-op).
-2. `saveEmployeeProfile` builds the upsert from present keys only (PostgREST merge-duplicates updates only supplied columns). The existing "tolerate missing rating columns" retry stays.
-3. Editor `save` sends only keys where `draft[key] !== profileOf(selected)[key]` (a tiny pure `profileDiff(saved, draft)` next to `profileChanged` in `lib/portia-employees.ts`, tested), plus `details` only when `detailsChanged`.
-4. PATCH resolves the employee from the sheet + stored manual rows only (add an option to `loadEmployees`, e.g. `{ roblox: false }`) and matches by `id` or, failing that, by `employeeId(nickname,null)`/nickname key, saving under the client's `roblox-\d+` id. This drops the 8 s + 5 s + 5 s stack and the Roblox-outage 404.
-5. `sanitizeManualDetails` returns `null` unless all three keys are strings; hoist one `clip64` helper used by both manual sanitizers. `updateManualEmployee` returns a distinct `"not-found"` for zero rows after the table is known to exist; route wraps it so a thrown error still returns the saved profile with `detailsPending: true`.
-6. Editor load: `if (payload.profilesRead !== true) throw` (covers absent key and old cached degraded copy).
-
-**Files:** `lib/portia-employees.ts` (+ `.test.ts`), `app/api/employees/route.ts`, `components/portia-editor.tsx` region (b) only.
-**Decision for requirements:** PostgREST/`supabase-js` upsert of a partial object is documented to update only supplied columns on conflict, but a brand-new profile row (insert path) relies on column defaults (`biography ''`, `knowledge_rating 1`). Confirm with one integration check on the first save for an employee with no stored row (MEDIUM; cheap to test locally).
-
-### Cluster C - Editor employee form: state races around a save
-
-| Closes | Where |
-|--------|-------|
-| **32-WR-03** edits typed during an in-flight save are replaced by the server copy | `save` -> `setDraft(profileOf(payload.employee))`, inputs enabled while `saving` |
-| **31-WR-06** `setTimeout(..., 1800)` "СОХРАНЕНО" never cleared; a second save is flipped to idle, employee switch allowed mid-PATCH | editor ~1463 |
-| **33-WR-04** employees tab is a dead end when the roster is empty (cannot add) | editor ~1537 early `return` before the add button/form |
-| **33-IN-04b** delete path matches Russian substring `includes("таблицы")` | editor ~1552 + route `DELETE` 403 body |
-
-**Root cause:** `EmployeeProfilesEditor` has no single "saving" lock and renders the profile pane and the roster list in one early-return branch.
-**Fix:** wrap the form in `<fieldset disabled={state === "saving"}>` (closes 32-WR-03 with zero logic and also makes `chooseEmployee` safe); `savedTimer` ref cleared before each save and on unmount (31-WR-06); render list aside + add form always, empty state only in the profile pane (33-WR-04); route returns `{ error, code: "sheet" }` for the sheet-employee 403 and the editor checks `payload.code` (33-IN-04b).
-**Files:** `components/portia-editor.tsx` region (b) only; `app/api/employees/route.ts` (DELETE 403 body - same wave as Cluster D to avoid touching the route twice).
-**Dependency:** apply after Cluster B step 3 (same `save` function); doing both in one plan avoids rebase pain.
-
-### Cluster D - Reader-side roster accepts degraded answers (blank profile / vanished manual staff)
-
-| Closes | Where |
-|--------|-------|
-| **31-WR-01** profiles read failed -> every employee blank on screen and in localStorage | `fetchEmployees` + `acceptsRoster` |
-| **33-WR-02** manual read failed -> manual employees vanish on every device (and `DELETE` misreports 404) | same functions; `loadEmployees` returns only a combined `complete` |
-
-**Root cause:** `acceptsRoster` guards only the empty-list case; `GET` exposes `profilesRead` but not "manual rows read".
-**Fix (single pure function):** `mergeDegradedRoster(current, payload)` in `lib/portia-employees.ts`: if `profilesRead === false`, take roster/avatar fields from `payload` but keep the profile fields from `current`; if `manualRead === false`, keep `current` entries with `source === "manual"` that the payload lacks; never write a degraded payload to `localStorage`. `loadEmployees` returns `manualRead: manual.ok`; `GET` forwards `profilesRead` and `manualRead`. `DELETE`: when the manual read failed, answer 503 instead of "not found".
-**Files:** `lib/portia-employees.ts` (+ test), `app/api/employees/route.ts` (GET, DELETE), `components/portia-desktop.tsx` (`fetchEmployees` only).
-**Ordering:** after Cluster B (both change `loadEmployees` return/signature and the same route file).
-
-### Cluster E - One missing helper: bad JSON body -> 500 (and its 413/shape siblings)
-
-| Closes | Where |
-|--------|-------|
-| **31-IN-06** PATCH: invalid JSON / `null` body -> 500 | `employees/route.ts:33` |
-| **33-IN-03** POST and DELETE same | `employees/route.ts:69,102` |
-| (unreported siblings, same defect) | `content/route.ts:44` `JSON.parse(raw)` throws -> 500; `editors/route.ts:33` |
-
-**Fix:** a ~6-line `readJsonObject(request): Promise<Record<string, unknown> | null>` (new `lib/api-json.ts`, or exported from `portia-cdn.ts` if you want zero new files) that does `request.json().catch(() => null)` and returns `null` unless the value is a non-null plain object; each handler returns 400 `{error:"Некорректные данные."}`. Content PUT keeps its `request.text()` + 2 MB check and wraps its own `JSON.parse` in the same null-return.
-**Files:** the three route files + the new helper (+ a tiny test for the helper).
-**Ordering:** put this in the **first** wave: every later API cluster edits these routes, and doing the boundary helper first removes one merge conflict source. Cluster B/D then build on the new handlers.
-
-### Cluster F - Content normalizer: silent caps, loose shapes, orphan keys, type-change residue
-
-| Closes | Where |
-|--------|-------|
-| **31-WR-07** 500 runs / 1000 `formattedText` keys cut silently; `infoSections`/`broadcasts`/`viruses` shapes not validated (`title: {}` crashes every visitor) | `portia-content-normalize.ts:46,67,176` |
-| **33-WR-01** 50 subsections / 100 blocks / 100 rows silently dropped on save | `portia-content-normalize.ts:129,144,159` |
-| **31-IN-08** quest with `endsAt < startsAt` never shows | `normalizeBroadcasts` (~79-95) + editor date inputs |
-| **31-WR-08** hard-deleting a recycled virus / recycle file leaves `formattedText` orphans that eat the 1000-key cap | editor `deleteSelectedRecycledVirus` (~642), recycle-file delete, `lib/editor-items.ts` |
-| **31-WR-09** `important` survives a type change and shows ВАЖНО on a quest | editor type `onChange` (~1077) and reader card (desktop ~1265) |
-| **31-WR-12** `changedDossierTabs` spreads possibly missing `recycledViruses` | `lib/editor-changes.ts:76` |
-| **31-IN-02** `startsWith("/")` admits `//host` | `portia-employees.ts` (sanitizer), `portia-content-normalize.ts:76`, editor `mediaUrlFromText` (~78), SQL `photo_url` check |
-
-**Root cause:** the normalizer is the only validation layer, it truncates instead of rejecting, and the editor has no knowledge of its limits, so "saved" can mean "partially saved".
-**Fix shape (decision: pick one policy up front - recommended below):**
-- Add `contentLimits` to `lib/portia-content.ts` (runs, formattedText keys, subsections, blocks, tableRows) and import it in the normalizer and the editor. **Recommended policy:** raise the caps well above realistic use (runs 5 000, keys 5 000, 100/200/500) *and* reject with 400 in `PUT` when the incoming payload exceeds a cap (cheap pre-normalize count) so truncation can never be silent; disable the editor's "+" buttons at the limit. This is the least code that makes loss impossible.
-- Coerce `id/title/body/published/important` in `normalizeBroadcasts` and `infoSections` item fields with the existing `asText`/boolean pattern; drop items without a non-empty string `id` (this is the "no crash on `title: {}`" fix; also add `text ?? ""` in desktop `FormattedText`, see Cluster H).
-- `normalizeBroadcasts`: when `endsAt < startsAt`, clear `endsAt`; editor shows a one-line hint under the date inputs.
-- `editor-items.ts`: add `removeRecycledVirus(content, id)` (deletes `virus:${id}:*` keys, including mutations) and `removeRecycleFile(content, id)` (deletes `portiaTextKey.recycle(id)`), with tests beside `removeBroadcast`'s. Wire the two editor call sites. A server-side "prune keys whose owner id is gone" in the normalizer would also close it, but needs every key pattern enumerated; prefer the explicit helpers (matches the existing `removeBroadcast`/`removeInfoSection` convention).
-- Type change: in the editor handler `if (type !== "news") item.important = false`; gate the reader card on `item.type === "news" && item.important`.
-- `lib/editor-changes.ts:76`: `...(content.recycledViruses ?? [])`.
-- URL check: one `/^\/(?!\/)/` constant exported from `lib/portia-content.ts`, used by the three TS sites; SQL half goes to Cluster I.
-**Files:** `lib/portia-content.ts`, `lib/portia-content-normalize.ts` (+ test), `lib/editor-items.ts` (+ test), `lib/editor-changes.ts`, `app/api/content/route.ts`, `lib/portia-employees.ts` (one regex), `components/portia-editor.tsx` region (a) only, `components/portia-desktop.tsx` (one-line reader gate).
-**Ordering inside the cluster:** limits + normalizer first -> editor-items helpers -> editor wiring (buttons, type handler, hint). Cluster F (editor region a) and Cluster G (region c) never touch the same lines.
-
-### Cluster G - Embedded frames and zoom (all in `EmbeddedDocument` + two iframes)
-
-| Closes | Where |
-|--------|-------|
-| **01-WR-01** Ctrl+wheel lost once the iframe has focus | `EmbeddedDocument` (desktop 1484-1535) |
-| **01-WR-02** `metaKey` counted as zoom modifier | same, two spots |
-| **01-WR-03** overlay stuck / eats Ctrl+click, listeners per instance | same |
-| **01-IN-03** `aria-label` hides the zoom level | same, line ~1531 |
-| **31-IN-07** charter iframe has no `sandbox` | same iframe (line ~1524) |
-| **33-IN-04a** YouTube iframe has no `sandbox` | desktop ~1245 |
-
-**Root cause:** zoom is driven by keyboard state on the parent `window`, which an iframe swallows; the overlay is the mechanism.
-**Fix:** drop `ctrlHeld`/keydown/keyup/blur listeners entirely; keep the overlay mounted with `pointer-events: none` (CSS `.document-app-zoom-layer`) and switch it to `auto` from a `pointermove` on the frame when `event.ctrlKey` (the review's own recommendation; ctrlKey only, which also covers trackpad pinch). `aria-label={`Сбросить масштаб, сейчас ${pct}%`}`. Add `sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"` to the document iframe (no `allow-top-navigation`) and `sandbox="allow-scripts allow-same-origin allow-presentation allow-popups"` to the YouTube iframe. Needs a real-browser check: Google's viewer and the GitHub Pages charter must still render, and the `transform: scale` zoom must still work with `allow-same-origin` absent/present (HIGH risk if `allow-same-origin` is omitted - keep it).
-**Files:** `components/portia-desktop.tsx` (EmbeddedDocument + YouTube block), `app/portia.css` (one rule).
-**01-CR-01 and 01-IN-01 are already fixed at HEAD** (see Stale list).
-
-### Cluster H - Desktop render robustness and small a11y/idiom items (desktop only)
-
-| Closes | Where |
-|--------|-------|
-| **31-WR-10** `assistantAdvice[assistantTipIndex]` can be `undefined` -> `FormattedText` throws -> whole desktop unmounts (no error boundary) | desktop ~1115 (the `??` fallback exists for idle/activity/offended branches only) + `FormattedText` (~1782) `runs` map |
-| **31-WR-05** `EmployeeImage` keeps `failed`/`loaded` after `src` changes | desktop 1379; add `key={src}` at both call sites (1194-1195) |
-| **31-IN-04 = 32-IN-01** (same finding twice) Escape only works if focus is in the toast; `role="status"` with buttons; `role="listbox"` without `option` | `QuestToast` (~1763), virus list (~1157) |
-| **32-IN-03** toast over the owner's editor window; CSS comment overclaims | desktop toast effect + `app/portia.css:~446` |
-| **32-IN-05** `today` is `""` until first tick -> wrong badges for one render | desktop ~276, `lib/broadcasts.ts` |
-| **31-IN-09** side effects inside state updaters (`updateEmployee`, `removeEmployee`, `focusApp`) | desktop ~393-402, ~703 |
-| **31-IN-01** settings storage key literal in 3 places (+ weak test) | `lib/accent-boot.ts:10`, desktop 541/682, `lib/accent-theme.test.ts` |
-| **31-IN-03** `staffRowsEnd = 35` silently drops a 35th employee | `lib/portia-employees.ts` (optional `console.warn`; trivial) |
-| **32-IN-02** poll freshness vs CDN purge: one-line comment/log | `portia-cdn.ts` / `content/route.ts` comment |
-| **32-IN-04** undo of a type change leaves the Сводка on the wrong tab | editor `step` (region a, line ~610) |
-
-**Root cause:** no error boundary and unchecked indices into content arrays that a 10 s sync can shorten. Two quick fixes (`?? "..."` and `text ?? ""` in `FormattedText`) remove the crash class. Consider adding `app/error.tsx`-style protection only if the milestone wants it; it is **not** in the findings, so do not add it (ponytail).
-**Files:** `components/portia-desktop.tsx` (several disjoint regions), `lib/accent-boot.ts`, `lib/accent-theme.test.ts`, `lib/broadcasts.ts`, `app/portia.css`.
-**Conflict note:** `updateEmployee`/`removeEmployee` (IN-09) sit in the same block as `fetchEmployees` (Cluster D). Do IN-09 in the same plan as Cluster D's `fetchEmployees` change.
-
-### Cluster I - Database/security (SQL only; owner applies it manually)
-
-| Closes | Where |
-|--------|-------|
-| **31-WR-11** authorization trusts JWT email without `email_confirmed_at`; anon oracle `portia_editor_is_approved` | `supabase/portia_setup.sql:52-97` |
-| **31-IN-10** anon can read `updated_by`/`nickname`; owner email hard-coded; storage `select` policy lists the bucket | SQL 49, 155-162, 192-196, 243 |
-| **31-IN-02** SQL half: `like '/%' and photo_url not like '//%'` | SQL line 22 |
-
-**Code coupling to watch:**
-- `portia_editor_is_approved(text)` is called from `app/owner-login/actions.ts:32` (sign-up gate). Removing the anon grant means rewriting the sign-up flow (hook or server-side check using a service-role/definer path). **Decision:** the minimum that closes the finding without a flow rewrite is to require `email_confirmed_at is not null` in `portia_can_edit`/`portia_is_owner` (join `auth.users` on `auth.uid()` inside the SECURITY DEFINER function) and document "Confirm email must stay on". Treat the oracle removal as optional/deferred unless the owner insists.
-- IN-10 column-level grants break `readEmployeeProfiles`, which deliberately uses `.select("*")` (`lib/portia-employees.ts:~232`) so missing columns cannot fail the read. Either keep `select *` and expose a public view without `updated_by`, or switch to an explicit column list in the same change. Do not ship the SQL before the code change. Classify IN-10 as "owner decision / possible defer".
-**Files:** `supabase/portia_setup.sql` (+ docs/comment), optionally `app/owner-login/actions.ts`, `lib/portia-employees.ts` (only if explicit columns).
-**Conflict profile:** zero overlap with components; can be built **in parallel with anything**, but the owner-apply step needs lead time, so start it early.
-
-### Cluster J - Phase-05 text-format panel (editor region c + rich-text-style + CSS)
-
-| Closes | Where |
-|--------|-------|
-| **05-WR-01** ГОТОВО with unknown selection -> default caret `{0,0}` -> first word targeted | `FloatingTextFormatPanel.finish` / `FormattedTextarea` focus (editor ~1908-1915, 1759-1762) |
-| **05-WR-06** underline `rgba(0,188,166,.9)` ~2.1:1 on the light field | `app/portia.css:516` |
-| **05-IN-01** wiring untested | `lib/rich-text-style.test.ts` boundary test (3 lines) |
-| **05-IN-02** own-input window edge cases | accept / document only (review: "None required") |
-| **05-IN-03** import merge (comment half already fixed) | editor lines 23-24 |
-| **05-IN-04** disposition doc says WR-02 plainly "fixed" | `.planning/phases/.../05-REVIEW-DISPOSITION.md` text edit |
-| **05-IN-05** underline thickness unverified across browsers | device check, no code |
-| **05-IN-06** "no fill in marker" guarantee not in `npm test` | new `lib/` test reading `app/portia.css` |
-| **01-IN-02** drag handle lost its hint | `OrderDragHandle` (editor 179) - add `title` |
-| **31-IN-05** unprofessional strings + empty `<small>` | editor ~1244/1258, ~1790, ~1840 |
-| Excluded by owner decision | panel size presets (PROJECT.md Out of Scope) |
-
-**Files:** `components/portia-editor.tsx` region (c) plus three string sites, `lib/rich-text-style.ts` + test, `app/portia.css`, planning doc. Behavioural items (WR-01, WR-06, IN-02) need a **device check** (phone + PC, light and dark field) - the only cluster that cannot be proven by unit tests alone.
-
-## Findings that need no code or a recheck (close with a note)
-
-Verified against HEAD:
-
-| Finding | Status at HEAD |
-|---------|----------------|
-| 01-CR-01 darkreader-lock never rendered | `app/layout.tsx:22` now `{ "darkreader-lock": "true" }` -> fixed; confirm the `<meta>` in rendered HTML, then close |
-| 01-IN-01 unlabelled Roblox portrait link | anchor has `aria-label="Профиль Roblox: {nickname}"` (desktop 1195) -> functionally fixed (add `title` only if you want a hover hint) |
-| 32 "Resolved since previous review" list (CR-01, CR-02, old WR-04, IN-03, old IN-01) | resolved per the review itself - note only |
-| 32 "not re-reviewed" old WR-02 / WR-03 / IN-02 | map onto 31-WR-07 / `markQuestsSeen` pruning / 31-IN-08; the first and third are Cluster F; `markQuestsSeen` pruning has no finding text in the supplied reviews - recheck |
-| 05-IN-03 comment half | fixed by 7191038 |
-
-Not individually verified at HEAD (treat as "verify first, then fix or close"): 31-IN-02 SQL, 31-IN-03, 05-IN-05, 32-IN-02. Everything else in Clusters A-J was confirmed present.
-
-## Duplicate map (one fix, several findings)
-
-| One fix | Closes |
-|---------|--------|
-| `fetchContent`: skip apply at equal revision | 31-WR-04, 32-WR-01 (+ toast/broadcast-effect churn) |
-| `readJsonObject` helper | 31-IN-06, 33-IN-03 (+ content PUT, editors) |
-| Partial PATCH contract + diff on client + no-Roblox id lookup | 31-WR-02, 31-WR-03, 32-WR-02, 32-WR-04, 33-IN-02, (33-WR-03 half) |
-| `mergeDegradedRoster` | 31-WR-01, 33-WR-02 |
-| `<fieldset disabled>` | 32-WR-03 (+ makes 31-WR-06 consequence harmless) |
-| `contentLimits` shared + reject on PUT | 31-WR-07 (truncation half), 33-WR-01 |
-| orphan helpers | 31-WR-08 (+ frees the 1000-key budget) |
-| QuestToast Esc on `window` + `role="region"` | 31-IN-04, 32-IN-01 |
-| `sandbox` on two iframes | 31-IN-07, 33-IN-04a |
-| EmbeddedDocument pointer-driven overlay | 01-WR-01, 01-WR-02, 01-WR-03 (+ 01-IN-03 same lines) |
-| `/^\/(?!\/)/` constant | 31-IN-02 (three TS sites) |
-
-## Data Flow (corrected target state)
+Forward-only migrations (baseline is frozen), timestamped after `20261106000000`. Production is owner-run; this repo work targets an isolated staging only.
 
 ```
-Employee save:  form -> profileDiff(saved, draft) -> PATCH {id, changes: patch, details?}
-                -> readJsonObject -> sanitizeEmployeeUpdate (patch, 400 on bad types)
-                -> roster from Sheets + stored rows only (no Roblox) -> saveEmployeeProfile(upsert present cols)
-                -> purge tag -> 200 employee -> fieldset re-enabled, draft = server copy
+portia_access_people
+  id uuid pk, nickname text, nickname_key text unique (= lower(trim)), level smallint 1..5 default 1,
+  origin text ('sheet'|'outside'), status text ('active'|'blocked'),
+  created_at, approved_at, approved_by uuid -> auth.users, level_changed_at, level_changed_by uuid, updated_at
 
-Employee read:  GET -> {employees, degraded, profilesRead, manualRead}
-                -> mergeDegradedRoster(current, payload) -> setEmployees + (non-degraded only) localStorage
+portia_access_requests          -- one row per device/request; an approved row IS a session
+  id uuid pk, person_id uuid null -> people, nickname, nickname_key, claimed_from_sheet bool,
+  sheet_check text ('listed'|'not-listed'|'unknown'), token_hash text unique, ip_bucket text,
+  status text ('pending'|'approved'|'rejected'|'revoked'), created_at, decided_at, decided_by uuid,
+  decision_note text, last_seen_at (updated at most every ~10 min, never per poll)
 
-Content poll:   GET /api/content (CDN) -> acceptFetchedContent -> equal revision? stop : setContent(new object)
-                -> editor sync effect only when revision truly changed -> history survives
+portia_access_audit_events      -- append-only, like portia_promo_audit_events
+  id bigint identity, actor_id uuid, event_type text, nickname_key text, details jsonb, created_at
 ```
+- Both main tables and the audit table: RLS on, `revoke all from public, anon, authenticated` (promotion pattern); no direct table grants; PostgREST never touches them.
+- Second device for an already-approved nick is a **new pending request**, never auto-attached (otherwise typing someone's nick grants access). Approving it attaches the device to the existing person.
+- One person, one level; devices inherit it. Level change/revoke/block take effect on the visitor's next poll because nothing is cached.
 
-## Patterns to Follow
+| RPC (`security definer`, `set search_path = ''`) | Caller | Gate |
+|---|---|---|
+| `portia_access_submit(nickname, nickname_key, claimed, sheet_check, token_hash, ip_bucket)` | anon via route | DB-side caps (global pending max, per-nick max, per-ip-bucket) independent of what the caller passes |
+| `portia_access_resolve(token_hash)` | anon via route | valid HMAC digest only |
+| `portia_content_for_visitor(token_hash)` | anon via route | approved + active person; returns payload for TS redaction |
+| `portia_employee_data_for_visitor(token_hash)` | anon via route | same; returns profiles + manual rows |
+| `portia_access_list()` | authenticated | `portia_can_edit_tab('users')`; people + requests, pending first |
+| `portia_access_decide(request_id, decision, level, sheet_listed)` | authenticated | tab `users`; default level 2 if the **editor route's** fresh sheet check says listed, else 1; never trust stored `sheet_check` |
+| `portia_access_set_level(person_id, level, expected_level)` | authenticated | tab `users`; optimistic via `expected_level` |
+| `portia_access_revoke(request_id \| person_id)`, block toggle | authenticated | tab `users` |
+| `portia_access_cleanup()` | pg_cron | purge rejected/stale pending (same job style as `portia-promo-cleanup`) |
 
-### Pattern 1: Pure function in `lib/` + node:test, component stays glue
-**What:** `profileDiff`, `mergeDegradedRoster`, `shouldApplyFetched`, `removeRecycledVirus`, `readJsonObject`, `contentLimits` check.
-**When:** any fix whose logic can be tested without React. Matches the existing 202-test suite.
-```ts
-// lib/content-sync.ts
-export function shouldApplyFetched(revision: number, known: number): boolean {
-  return revision !== known; // an equal revision is the copy already shown: a new object would reset editor history
-}
+Notes:
+- The anon-callable RPCs are only unreachable-without-secret for `resolve`/`*_for_visitor` (attacker cannot compute a valid digest). `submit` is reachable directly with the public key (same as `portia_promo_submit_request` today), hence the DB-side caps.
+- `portia_content` / employee tables: replace the three `Public can read` policies with `select to authenticated using (portia_can_edit())` (employees: `portia_can_edit_tab('employees')` is not needed for read); `revoke select ... from anon`. `portia_editor_is_approved` (anon, needed for sign-up) is untouched.
+- **Expand/contract order:** migration 1 adds tables/RPCs (additive, old code still works) -> deploy code that reads via RPC/session -> purge CDN tags -> migration 2 revokes anon table reads and anon `register_attempt`. Never ship migration 2 before the code, never the reverse for the gate. Rollback = re-grant.
+- Editor tab: `tabRegistry` gets `{ id: "users", label: "Пользователи", kind: "regular" }`; `PortiaEditor` renders `UsersPanel` for `tab === "users"` (sibling of the `promo` and `access` branches around lines 1626-1628). `UsersPanel` talks only to `/api/users` (routes, not supabase-js in the browser, matching `/api/editors`); the route does `getEditorAccess` -> `openTabs.includes("users")` -> RPC. Add `/api/users` to the `proxy.ts` matcher. Optional: include `pendingRequests` in `/api/access` for editors with the tab open to badge the tab.
+- Escalation note: a restricted editor (some content tabs closed) can still grant a visitor level 5. Accepted: it is audited, and the owner can close the `users` tab per editor with the existing chips.
+- Shared normaliser: `nicknameKey` is a private function in `lib/portia-employees.ts` (`trim().toLocaleLowerCase("en-US")`); SQL uses `lower(trim(...))`. Export one function, use it in access, promotion and employees, and add a parity test against the SQL expression.
+
+## 5. (c) Promotion mapping
+
+| Today | After |
+|---|---|
+| `PromotionIdentityGate` asks for a nick; `GET /api/promotion/status?nickname=` and `POST /api/promotion/requests {nickname}` trust the client | Routes call `resolveViewer`; **client-sent nickname is ignored**; `nicknameKey` comes from the approved person |
+| Sheet access roster check (`findPromotionAccessEntry`) | Unchanged (a "not in table" person gets the existing `not-listed` 404 and a friendly screen) |
+| Device cookie `portia_promo_device` -> `portia_promo_device_bindings` (`bind`/`resolve`/`deny`), `PORTIA_PROMOTION_DEVICE_SECRET` | **Unchanged.** Same secret, new `access:` digest prefix for the new cookie. Merging the two cookies is a possible later cleanup, not v1.4 |
+| UI "restore" path (`status` without nickname) | Becomes the only path: `PortiaPromotion` auto-loads status on mount, `PromotionIdentityGate` is deleted |
+
+- Existing promo bindings were made under open nick entry; a binding whose `nickname_key` differs from the later-approved nick yields `device-denied`. Reviewer `device-reset` already handles this; note it in the rollout.
+- `test/`, `reviewer/`, `banks/` routes: add the approved-viewer requirement to `test/` (participant path); reviewer/banks stay editor-grant based.
+- Revoking anon `portia_promo_register_attempt`: forward migration `revoke execute ... from anon, authenticated`; update fingerprint and `expected-authz.json`; confirm `submit_request` (definer) still passes (staging proof; Postgres execution is BLOCKED until a phase proves it).
+
+## 6. (d) Design system
+
+**Current state (measured):** `app/portia.css` 2456 lines of dense one-line rules, global, order-sensitive (comments such as "after X so it wins the cascade"); Tailwind is imported but unused for components; 15 distinct `border-radius` values (7px x31, 4px x17, 10px x12, 6px, 3px, 5px, 8px, 9px, 2px, 14px, 19px...); button classes `primary-control` / `secondary-control` / `danger-control` / `promotion-action`; two editor tab strips (`editor-tabs`, `dossier-tabs`); tokens exist for colour/fonts (`--bg --panel --line --teal --paper --ink ...`, accent via `--accent-hue`/`--accent-chroma`, written by `lib/accent-custom.ts`/`accent-boot.ts` — **names must not change**).
+
+**Placement**
 ```
+app/styles/tokens.css       NEW  radius/space/type/border scale + semantic aliases (--radius-control, --space-2 ...) pointing at existing vars; first version = CURRENT values
+app/styles/primitives.css   NEW  rules for ui/* primitives; imported BEFORE portia.css so legacy still wins until its rule is deleted
+components/ui/              NEW  Button, TabStrip, Field, Chip/Badge, Panel/Dialog shell, WindowChrome parts
+app/portia.css              MOD in place, never reorganised or split (moving rules changes cascade)
+app/layout.tsx              MOD  two extra imports
+```
+- Primitives first emit the **existing class names** (`<Button variant="secondary">` -> `className="secondary-control"`): DOM/CSS identical, the same technique as v1.3's byte-for-byte decomposition (`phase17-move-parity`).
+- New UI (AccessGate, UsersPanel) is the pilot consumer from day one.
+- Window chrome (close cross in the corner, maximized windows) -> `components/portia-desktop-window.tsx`; class icons -> `components/portia-icons.tsx`; phone «Информация» button -> `lib/info-phone-nav.ts` + its component; template-builder «Видимая часть» window -> `components/portia-template-builder.tsx`. Tab formats: replace `nav.editor-tabs` (portia-editor.tsx ~1175) and `dossier-tabs` (~1449) and the apps' tab bars with one `TabStrip`.
 
-### Pattern 2: Patch semantics end to end
-**What:** absent key = unchanged, `null` = clear (ratings already work this way). Extend to biography/photo, and have the client send only what changed.
+**Migration order (no big bang):**
+1. Tokens at current values -> existing visual baselines must pass unchanged (zero-diff proof).
+2. Primitives with identical output (zero-diff again).
+3. Owner picks the variant. Variants are **token sets rendered through the existing candidate lane** (`npm run test:e2e:candidates`, `tests/e2e/visual-candidates`), not a runtime switch; the winner is baked into `tokens.css`, losers deleted.
+4. Surface by surface, one plan each, smallest first: AccessGate + UsersPanel (already new) -> editor shell/tab strips -> window chrome + desktop -> apps (Информация, Справочник, Сводка, Сотрудники) -> «Повышение». Per surface: replace literal radii/colours with tokens, delete the superseded legacy rule, regenerate only that surface's baselines.
+5. Ratchet test (like `lib/editor-field-look.test.ts`): count of literal `border-radius: Npx` and raw hex in `portia.css` may only go down; target <= 4 radius tokens.
+- Deploy is local-only (PROJECT.md), so interim visual inconsistency never reaches users; a scope-flag (`data-ui="v2"`) would double the CSS and is not needed.
+- Visual evidence: per the owner's 2026-11-08 decision there are no galleries or per-hash ledger; use Playwright screenshots in `tests/e2e/visual/{desktop,apps,editor,promotion,motion}.spec.ts` (1:1 with surfaces), never `--verify` of the visual manifest (CLAUDE.md), report changes as text. Axe findings and the 521-900 px shortcut layout ride in the same per-surface plans; `accessibility.spec.ts` is the gate.
+- Do not use Tailwind utilities for the system; keep hand-written CSS on tokens (optionally mirror tokens in `@theme` later).
 
-### Pattern 3: Reject, do not truncate
-**What:** the trust boundary returns 400 with a Russian message when a cap is exceeded; normalizer caps stay as a backstop only.
+## 7. (e) Suggested build order and phase boundaries
 
-## Anti-Patterns to Avoid
+| Phase (v1.4) | Contents | Depends on | Notes |
+|---|---|---|---|
+| **A. Access foundation** | migration 1 (tables, RPCs, audit, cron cleanup), `lib/access-levels.ts`, `lib/access-session.ts`, shared `nicknameKey`, `lib/viewer.ts`, fingerprint/authz/harness updates, explicit `service_role` grants, RLS review via `supabase-rls-reviewer` | none | Postgres/RLS execution is BLOCKED until proven on isolated staging (project rule); unit tests + offline harness first |
+| **B. Users tab + primitives skeleton** | `users` in `tabRegistry`, `/api/users`, `UsersPanel` (list, approve/reject, level, revoke), `components/ui` + `tokens.css` at current values, proxy matcher | A | Editors can approve requests seeded on staging; first consumer of primitives; parity with zero visual diff elsewhere |
+| **C. Visitor gate + Promotion identity** | `PortiaRoot`, `AccessGate`, `/api/visitor`, boot-screen text (fake «УРОВЕНЬ II» line removed), sign-out/change nick, Promotion routes + UI use identity, gate behind an `ACCESS_ENFORCED`-style switch defaulting off until D | A (B for approving) | Test with approve-all; cache clearing on transitions |
+| **D. Levels + content gating** | `level` fields in types/normalise/limits, editor level controls (virus, info, guide, charter, scientist logs widened to 1-5), `content-redact.ts` + canary tests, `/api/content` & `/api/employees` per viewer, client `viewer`/dedupe/cache-stamp changes, search app filter, CDN purge, **migration 2 (contract)**, `register_attempt` revoke | A, B, C | Highest risk: leak paths (`formattedText`, recycle, logs), rollout order, poll cost |
+| **E. Unified style** | owner variant choice (collect early, in parallel with A-D), per-surface migration, window chrome, tabs, class icons, 521-900 px shortcuts, axe, phone «Информация», «Видимая часть», Promotion/desktop regression set, owner PC + phone acceptance | B (primitives); independent of A-D logically | Runs last so baselines change once and UAT covers the finished UI; the regression set for «Повышение» should be written **before** C changes the Promotion UI |
 
-### Anti-Pattern 1: Fixing the same defect twice because it was reported twice
-31-WR-04/32-WR-01 and 31-IN-04/32-IN-01 are single fixes; track them as one requirement with two closers.
+Why not design first: it delays the security value and blocks on the owner's variant choice; why not gate before the Users tab: nobody could approve anyone. Phases B and C can overlap after A. Nothing is enforced for real visitors until A-D are all in and migration 2 is applied (owner-run).
 
-### Anti-Pattern 2: Shipping SQL before the code that depends on it
-Column-level `select` grants (IN-10) break `select("*")`; the sign-up oracle removal breaks `editorSignUp`. SQL changes are applied by the owner out of band, so code must work **before and after** the SQL is applied (the repo already follows this: `isMissingColumnError` retry, `pending-database` statuses).
+## 8. New vs modified
 
-### Anti-Pattern 3: Adding an error boundary / rewrite "while here"
-Not in any finding. v1.1 is review-debt only.
+| Item | Status |
+|---|---|
+| `components/portia-root.tsx` (PortiaRoot), `components/access-gate.tsx`, `components/users-panel.tsx`, `components/ui/*` | NEW |
+| `app/api/visitor/route.ts`, `app/api/users/route.ts` | NEW |
+| `lib/viewer.ts`, `lib/access-session.ts`, `lib/access-levels.ts`, `lib/content-redact.ts`, shared `lib/nickname.ts` | NEW |
+| `app/styles/tokens.css`, `app/styles/primitives.css` | NEW |
+| `supabase/migrations/*_portia_access.sql`, `*_portia_access_contract.sql` | NEW |
+| `app/page.tsx` (render `PortiaRoot`), `app/layout.tsx` (CSS imports) | MOD (small) |
+| `components/portia-desktop.tsx` (`fetchContent`, `fetchAccess`, boot lines, cache keys, level-aware lists, search app filter), `portia-desktop-dossier.tsx` (real viewer level for logs), `portia-desktop-window.tsx` | MOD |
+| `components/portia-editor.tsx` (`users` branch, tab strips), `portia-editor-dossier.tsx` (log levels 1-5), item editors (level field) | MOD |
+| `components/portia-promotion.tsx` (remove `PromotionIdentityGate`, auto status) | MOD |
+| `app/api/content/route.ts`, `app/api/employees/route.ts`, `app/api/promotion/{status,requests,test}/route.ts`, `proxy.ts` | MOD |
+| `lib/portia-content.ts` (types), `portia-content-normalize.ts`, `content-limits.ts`, `editor-tabs.ts`, `content-sync.ts`, `device-cache.ts`, `portia-employees.ts` (reader abstraction: token-RPC vs editor client; export `nicknameKey`), `portia-promotion-api.ts`, `portia-device-binding.ts` (export digest helper), `portia-cdn.ts` | MOD |
+| `lib/search-index.ts` | **UNCHANGED** (+ tests) |
+| `lib/editor-access.ts`, `/api/access`, `/api/editors`, `EditorAccessManager` | UNCHANGED (chips list the new tab automatically via `tabRegistry`) |
+| Tests/fixtures: `tests/e2e/harness/offline-supabase.cjs`, `fixtures/actors.ts` (visitor actors by level), `expected-authz.json`, fingerprint JSON, `visitor.spec.ts`, `roles.spec.ts`, `staging-authz.spec.ts`, promotion specs | MOD |
+| `app/portia.css`, `portia-promotion-editor.css` | MOD in place, incrementally |
 
-### Anti-Pattern 4: Parallel plans in `portia-editor.tsx` or `portia-desktop.tsx` without region discipline
-Both files are >1800 lines; use the region map above.
+## 9. Anti-patterns to avoid
 
-## Change-Risk Considerations (replaces Scalability)
+- **Gating only in the route.** The anon key reads the tables; close RLS or the gate is decorative.
+- **CDN cache keyed by a client-set role/level cookie.** Forgeable; leaks the highest level.
+- **Per-item `if (level >= x)` in React components.** Content must arrive already redacted; the UI only renders what it got. Filtering client-side leaves data in memory, devtools and localStorage.
+- **Trusting client-sent nickname or `sheet_check`.** Derive identity from the cookie and re-check the sheet at decision time.
+- **Auto-approving sheet nicks.** Anyone can type a sheet nick.
+- **Storing levels in a separate table keyed to content ids.** Breaks undo/history, revision CAS, and tab refusal; JSON field keeps one source of truth.
+- **Restyling by editing `portia.css` globally.** Cascade order is load-bearing; migrate rule by rule with a baseline per surface.
+- **Adding a fifth parallel per-app record for a new app/gate** (see codebase anti-patterns); this milestone adds no new `AppId`.
 
-| Concern | Low risk | Needs care |
-|---------|----------|-----------|
-| Shared hot files | route files (small), lib modules | `portia-editor.tsx` (3 regions) and `portia-desktop.tsx` (6 clusters touch it) |
-| Behavioural regressions | pure lib fixes (A, E, D-merge, F helpers) - unit-testable | G (iframe sandbox + zoom), J (focus/selection on phone) - need a real browser/device |
-| Data safety | B and D protect data; test on a local profile row first | B insert-path with defaults; F reject-on-limit must not block a legitimately large existing document (check current prod payload size against new caps) |
-| Out-of-band | I (SQL) depends on owner timing | start early |
+## 10. Scaling (realistic)
 
-## Suggested Build Order (phases/waves, conflict-minimised)
+| Concern | ~30 people (today) | ~300 | ~3000 |
+|---|---|---|---|
+| Content GET | per-viewer function + 1 RPC at 30-60 s poll: fine | measure invocations/month; widen poll or add `If-None-Match` revision short-circuit in the RPC | per-level memoised redacted payload in lambda memory keyed by (revision, level) |
+| Users list | single `portia_access_list()` | paginate pending/people | search + pagination |
+| Approval queue abuse | DB caps | tighten buckets / add captcha-free proof-of-work | consider Supabase anon auth + captcha |
 
-Ordering principles: (1) shared boundary helpers before consumers; (2) lib/API contract before the client that uses it; (3) one cluster per hot region of each giant component; (4) things that need owner or device time start early.
+## 11. Open questions for the owner / later phase research
 
-| # | Phase candidate | Clusters | Files touched (exclusive in this phase) | Depends on |
-|---|-----------------|----------|-----------------------------------------|-----------|
-| 0 | Triage ledger (docs only) | stale-list above | `.planning/` only | none; do first, shrinks scope |
-| 1 | Server boundary + employee API contract | E, B (server half), D (server half), C (route 403 `code`) | `app/api/{employees,content,editors}/route.ts`, `lib/api-json.ts`, `lib/portia-employees.ts` + test, `lib/portia-content.ts` (limits), `lib/portia-content-normalize.ts` + test | 0 |
-| 2 | Employees client (desktop + editor region b) | B (client half), C, D (client half), H (31-WR-05, 31-IN-09) | `components/portia-editor.tsx` 1356-1645, `components/portia-desktop.tsx` employee blocks (~393-440, 1379, 1194), `lib/portia-employees.ts` (`profileDiff`, merge) | 1 |
-| 3 | Content integrity | A, F | `lib/content-sync.ts`, desktop `fetchContent`, `lib/editor-items.ts`, `lib/editor-changes.ts`, editor region (a) (delete handlers 642/1185, type handler 1077, add buttons, date hint), desktop reader gate | 1 (limits constants, normalizer) |
-| 4 | Desktop robustness and embeds | G, rest of H | desktop (`EmbeddedDocument`, YouTube, assistant bubble, `FormattedText`, `QuestToast`, virus list, `today`), `lib/accent-boot.ts` + test, `app/portia.css` | 2 and 3 done (same file, different regions: sequence, do not parallelise) |
-| 5 | Editor text-format panel and copy | J, 32-IN-04 (`step`), 31-IN-05 | editor region (c), `lib/rich-text-style.ts` + test, `app/portia.css:~516`, strings | 3 (region a done) |
-| 6 | SQL / security | I | `supabase/portia_setup.sql`, possibly `app/owner-login/actions.ts`, `lib/portia-employees.ts` `readEmployeeProfiles` | none functionally; **start in parallel from Phase 1** because owner applies it by hand; IN-10 column-grant part only after Phase 2 |
-
-Why this order:
-- Phase 1 first because three routes and `lib/portia-employees.ts` are touched by clusters B, C, D, E; finishing the server contract once avoids four rebases, and Phase 2's `profileDiff`/`code:"sheet"`/`manualRead` need it.
-- Phase 2 before 3 because data loss (employee wipe) is the milestone's stated priority and Cluster B/D are the only HIGH-impact defects; Cluster A/F are next.
-- Phases 3 -> 4 -> 5 serialise the two giant components so no two plans edit the same file in one wave. If the roadmapper wants parallelism, Phase 6 (SQL) and a pure-lib-only slice of Phase 3 (normalizer, editor-items, editor-changes) are the only safe parallel pairs.
-- Phase 5 last among code phases because it is the only one that needs on-device verification and has the weakest data-safety value.
-
-Research flags for phases:
-- Phase 1/2: Likely needs a short spike - confirm partial-column upsert behaviour on the insert path with the real Supabase project (MEDIUM now).
-- Phase 3: Needs one check of the current production `portia_content` payload size/run counts before picking new caps (otherwise reject-on-limit could block an existing document).
-- Phase 4: Needs a browser check of sandboxed Google viewer + GitHub Pages charter + YouTube nocookie embed.
-- Phase 5: Needs device check (phone + PC, light/dark preview) - cannot be closed by tests.
-- Phase 6: Owner decision on oracle removal and public-column strategy; otherwise standard.
-- Phase 0: no research; standard.
+- Names and meaning of levels 3-5 (only 1 observer and 2 employee are defined); labels needed in `lib/access-levels.ts` and the editor.
+- Default level for existing content (recommended 1 = everyone approved sees it) and whether locked items should show a teaser row.
+- Whether editors with a closed content tab may grant levels above their own.
+- Unsharing the Google Sheet and the github.io charter (otherwise they stay public by URL).
+- Poll interval for visitors and Netlify invocation budget (Phase D research flag).
+- Supabase storage: does dropping the broad `select` policy close listing without breaking public URLs (Phase D, verify on staging).
 
 ## Sources
 
-- Review files (HIGH, primary): `.planning/milestones/v1.0-phases/PORTIA-01-ispravlenie-bagov/01-REVIEW.md`, `PORTIA-03.1-stabilizatsiya/03.1-REVIEW.md`, `PORTIA-03.2-sotrudniki-i-svodka/03.2-REVIEW.md`, `PORTIA-03.3-sotrudniki-vne-tablitsy-i-gaydy-v-informatsii/03.3-REVIEW.md`, `PORTIA-05-oformlenie-teksta/05-REVIEW.md`
-- Code at HEAD d40c8b5 (HIGH): `app/api/employees/route.ts`, `app/api/content/route.ts`, `lib/portia-employees.ts`, `lib/portia-content-normalize.ts`, `lib/editor-items.ts`, `lib/editor-history.ts`, `lib/content-sync.ts`, `lib/editor-access.ts`, `components/portia-desktop.tsx`, `components/portia-editor.tsx`, `app/layout.tsx`, `supabase/portia_setup.sql`, `app/owner-login/actions.ts`
-- `.planning/PROJECT.md`, `.planning/codebase/ARCHITECTURE.md` (HIGH, project context)
-- PostgREST upsert merge semantics (MEDIUM, from training knowledge, not re-fetched this session; verify locally in Phase 1/2 spike)
+- Code read: `app/api/{content,employees,editors,promotion/*}/route.ts`, `lib/{editor-access,editor-tabs,portia-cdn,portia-promotion-api,portia-device-binding,search-index,portia-employees,device-cache}.ts`, `proxy.ts`, `lib/supabase/{server,proxy}.ts`, `supabase/migrations/20261101000000_portia_baseline.sql`, `20261101000100_portia_explicit_grants.sql`, `components/portia-desktop*.tsx`, `components/portia-editor.tsx`, `app/portia.css`, `.planning/PROJECT.md`, `.planning/codebase/ARCHITECTURE.md` (HIGH)
+- Netlify caching docs: https://docs.netlify.com/build/caching/caching-overview and https://www.netlify.com/knowledge-base/how-to-control-cdn-caching-on-netlify/ (MEDIUM: dynamic responses uncached by default; avoid varying on whole Cookie; per-user `private` semantics not confirmed)
+- Supabase storage access control: https://supabase.com/docs/guides/storage/security/access-control (MEDIUM: broad SELECT policy permits listing; public-GET behaviour needs staging verification)
+- Context7 was unavailable (connection closed) during this run; no library-doc claims beyond the above are made.
+
+---
+*Architecture research for: PORTIA OS v1.4 access gating and unified design system*
+*Researched: 2026-11-09*

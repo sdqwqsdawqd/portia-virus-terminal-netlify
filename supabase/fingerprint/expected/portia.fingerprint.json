@@ -1,0 +1,4330 @@
+{
+  "pg_major": 17,
+  "schema": "portia-fingerprint-v1",
+  "search_path": "\"\\$user\", public, extensions",
+  "sections": {
+    "bucket": {
+      "portia-media": {
+        "allowed_mime_types": [
+          "image/gif",
+          "image/jpeg",
+          "image/png",
+          "image/webp"
+        ],
+        "file_size_limit": 4194304,
+        "name": "portia-media",
+        "public": true
+      }
+    },
+    "columns": {
+      "public.portia_access_journal.actor_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_access_journal.created_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_access_journal.details": {
+        "acl": null,
+        "default": "'{}'::jsonb",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "jsonb"
+      },
+      "public.portia_access_journal.event_type": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_journal.id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "a",
+        "notnull": true,
+        "type": "bigint"
+      },
+      "public.portia_access_journal.nickname_key": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_journal.person_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_access_journal.request_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_access_people.account_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_access_people.approved_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_access_people.approved_by": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_access_people.id": {
+        "acl": null,
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_access_people.level": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "smallint"
+      },
+      "public.portia_access_people.nickname": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_people.nickname_key": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_people.origin": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_people.status": {
+        "acl": null,
+        "default": "'active'::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_people.updated_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_access_people.updated_by": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_access_requests.cooldown_cleared_at": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_access_requests.cooldown_cleared_by": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_access_requests.created_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_access_requests.decided_at": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_access_requests.decided_by": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_access_requests.id": {
+        "acl": null,
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_access_requests.ip_bucket": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_requests.nickname": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_requests.nickname_key": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_requests.origin": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_requests.person_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_access_requests.requested_by": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_access_requests.status": {
+        "acl": null,
+        "default": "'pending'::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_requests.token_hash": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_secrets.name": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_secrets.secret": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_secrets.updated_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_access_settings.closure_enabled": {
+        "acl": null,
+        "default": "true",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "boolean"
+      },
+      "public.portia_access_settings.id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_access_settings.updated_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_access_settings.updated_by": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_content.id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_content.payload": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "jsonb"
+      },
+      "public.portia_content.revision": {
+        "acl": null,
+        "default": "1",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "integer"
+      },
+      "public.portia_content.updated_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_content.updated_by": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_editors.closed_tabs": {
+        "acl": [
+          "authenticated:UPDATE"
+        ],
+        "default": "'{}'::text[]",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text[]"
+      },
+      "public.portia_editors.created_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_editors.email": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_editors.granted_by": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_editors.granted_tabs": {
+        "acl": [
+          "authenticated:UPDATE"
+        ],
+        "default": "'{}'::text[]",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text[]"
+      },
+      "public.portia_employee_profiles.activity_rating": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "integer"
+      },
+      "public.portia_employee_profiles.bio_rating": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "integer"
+      },
+      "public.portia_employee_profiles.biography": {
+        "acl": null,
+        "default": "''::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_employee_profiles.employee_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_employee_profiles.knowledge_rating": {
+        "acl": null,
+        "default": "1",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "integer"
+      },
+      "public.portia_employee_profiles.nickname": {
+        "acl": null,
+        "default": "''::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_employee_profiles.overall_rating": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "integer"
+      },
+      "public.portia_employee_profiles.paws_rating": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "integer"
+      },
+      "public.portia_employee_profiles.photo_url": {
+        "acl": null,
+        "default": "''::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_employee_profiles.s_rating": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "integer"
+      },
+      "public.portia_employee_profiles.tests_rating": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "integer"
+      },
+      "public.portia_employee_profiles.updated_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_employee_profiles.updated_by": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_manual_employees.callsign": {
+        "acl": [
+          "authenticated:UPDATE"
+        ],
+        "default": "''::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_manual_employees.created_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_manual_employees.created_by": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_manual_employees.employee_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_manual_employees.nickname": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_manual_employees.rank": {
+        "acl": [
+          "authenticated:UPDATE"
+        ],
+        "default": "''::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_manual_employees.title": {
+        "acl": [
+          "authenticated:UPDATE"
+        ],
+        "default": "''::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_answers.answer": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "jsonb"
+      },
+      "public.portia_promo_answers.answer_nonce": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "text"
+      },
+      "public.portia_promo_answers.attempt_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_answers.graded_at": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_answers.id": {
+        "acl": null,
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_answers.question_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_answers.reviewer_correct": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "boolean"
+      },
+      "public.portia_promo_answers.submitted_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_assignment_items.assignment_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_assignment_items.id": {
+        "acl": null,
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_assignment_items.snapshot_text": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_assignment_items.sort_order": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "integer"
+      },
+      "public.portia_promo_assignment_items.source_item_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_promo_assignments.approved_at": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_assignments.id": {
+        "acl": null,
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_assignments.issued_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_assignments.request_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_assignments.reviewer_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_assignments.status": {
+        "acl": null,
+        "default": "'active'::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_assignments.updated_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_attempt_buckets.blocked_until": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_attempt_buckets.bucket_key": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_attempt_buckets.failures": {
+        "acl": null,
+        "default": "0",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "integer"
+      },
+      "public.portia_promo_attempt_buckets.ip_bucket": {
+        "acl": null,
+        "default": "''::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_attempt_buckets.updated_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_attempt_questions.answer_key": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "jsonb"
+      },
+      "public.portia_promo_attempt_questions.attempt_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_attempt_questions.id": {
+        "acl": null,
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_attempt_questions.question_type": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_attempt_questions.snapshot_options": {
+        "acl": null,
+        "default": "'[]'::jsonb",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "jsonb"
+      },
+      "public.portia_promo_attempt_questions.snapshot_text": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_attempt_questions.sort_order": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "integer"
+      },
+      "public.portia_promo_attempt_questions.source_question_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_promo_attempts.client_mode": {
+        "acl": null,
+        "default": "'desktop'::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_attempts.created_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_attempts.current_question_index": {
+        "acl": null,
+        "default": "0",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "integer"
+      },
+      "public.portia_promo_attempts.deadline_at": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_attempts.failure_overridden_at": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_attempts.final_percent": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "integer"
+      },
+      "public.portia_promo_attempts.id": {
+        "acl": null,
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_attempts.last_seen_at": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_attempts.lease_expires_at": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_attempts.request_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_attempts.retake_at": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_attempts.retake_released_at": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_attempts.reviewer_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_attempts.started_at": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_attempts.status": {
+        "acl": null,
+        "default": "'prepared'::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_attempts.technical_failure": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "text"
+      },
+      "public.portia_promo_attempts.updated_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_audit_events.actor_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_promo_audit_events.created_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_audit_events.details": {
+        "acl": null,
+        "default": "'{}'::jsonb",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "jsonb"
+      },
+      "public.portia_promo_audit_events.event_type": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_audit_events.id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "a",
+        "notnull": true,
+        "type": "bigint"
+      },
+      "public.portia_promo_audit_events.nickname_key": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "text"
+      },
+      "public.portia_promo_device_bindings.bound_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_device_bindings.id": {
+        "acl": null,
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_device_bindings.nickname_key": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_device_bindings.reset_at": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_device_bindings.risk_bucket": {
+        "acl": null,
+        "default": "''::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_device_bindings.token_hash": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_qualification_banks.created_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_qualification_banks.free_text_count": {
+        "acl": null,
+        "default": "0",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "integer"
+      },
+      "public.portia_promo_qualification_banks.id": {
+        "acl": null,
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_qualification_banks.multiple_count": {
+        "acl": null,
+        "default": "0",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "integer"
+      },
+      "public.portia_promo_qualification_banks.rules_text": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "text"
+      },
+      "public.portia_promo_qualification_banks.single_count": {
+        "acl": null,
+        "default": "0",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "integer"
+      },
+      "public.portia_promo_qualification_banks.transition_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_qualification_banks.updated_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_qualification_options.id": {
+        "acl": null,
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_qualification_options.is_correct": {
+        "acl": null,
+        "default": "false",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "boolean"
+      },
+      "public.portia_promo_qualification_options.option_text": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_qualification_options.question_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_qualification_options.sort_order": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "integer"
+      },
+      "public.portia_promo_qualification_questions.active": {
+        "acl": null,
+        "default": "true",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "boolean"
+      },
+      "public.portia_promo_qualification_questions.answer_key": {
+        "acl": null,
+        "default": "'{}'::jsonb",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "jsonb"
+      },
+      "public.portia_promo_qualification_questions.bank_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_qualification_questions.created_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_qualification_questions.id": {
+        "acl": null,
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_qualification_questions.question_text": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_qualification_questions.question_type": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_qualification_questions.sort_order": {
+        "acl": null,
+        "default": "0",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "integer"
+      },
+      "public.portia_promo_qualification_questions.updated_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_qualification_requests.created_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_qualification_requests.id": {
+        "acl": null,
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_qualification_requests.internal_note": {
+        "acl": null,
+        "default": "''::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_qualification_requests.nickname": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_qualification_requests.nickname_key": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_qualification_requests.reviewer_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_promo_qualification_requests.status": {
+        "acl": null,
+        "default": "'pending'::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_qualification_requests.title_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_qualification_requests.transition_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_qualification_requests.updated_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_requests.created_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_requests.id": {
+        "acl": null,
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_requests.internal_note": {
+        "acl": null,
+        "default": "''::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_requests.nickname": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_requests.nickname_key": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_requests.reviewer_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "uuid"
+      },
+      "public.portia_promo_requests.status": {
+        "acl": null,
+        "default": "'pending'::text",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_requests.target_title_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_requests.title_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_requests.updated_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_results.compact": {
+        "acl": null,
+        "default": "'{}'::jsonb",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "jsonb"
+      },
+      "public.portia_promo_results.created_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_results.id": {
+        "acl": null,
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_results.nickname_key": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_results.outcome": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_results.result_kind": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_task_banks.created_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_task_banks.id": {
+        "acl": null,
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_task_banks.required_count": {
+        "acl": null,
+        "default": "1",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "integer"
+      },
+      "public.portia_promo_task_banks.target_title_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_task_banks.updated_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_task_items.active": {
+        "acl": null,
+        "default": "true",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "boolean"
+      },
+      "public.portia_promo_task_items.bank_id": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_task_items.created_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      },
+      "public.portia_promo_task_items.id": {
+        "acl": null,
+        "default": "gen_random_uuid()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "uuid"
+      },
+      "public.portia_promo_task_items.sort_order": {
+        "acl": null,
+        "default": "0",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "integer"
+      },
+      "public.portia_promo_task_items.task_text": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "text"
+      },
+      "public.portia_promo_task_items.updated_at": {
+        "acl": null,
+        "default": "now()",
+        "generated": "",
+        "identity": "",
+        "notnull": true,
+        "type": "timestamp with time zone"
+      }
+    },
+    "constraints": {
+      "portia_access_journal.portia_access_journal_details_check": {
+        "def": "CHECK (((jsonb_typeof(details) = 'object'::text) AND (pg_column_size(details) <= 4096)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_journal.portia_access_journal_event_type_check": {
+        "def": "CHECK ((event_type = ANY (ARRAY['approve'::text, 'reject'::text, 'level-change'::text, 'revoke'::text, 'cooldown-clear'::text])))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_journal.portia_access_journal_nickname_key_check": {
+        "def": "CHECK ((portia_access_nickname_key(nickname_key) = nickname_key))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_journal.portia_access_journal_person_id_fkey": {
+        "def": "FOREIGN KEY (person_id) REFERENCES portia_access_people(id)",
+        "type": "f",
+        "validated": true
+      },
+      "portia_access_journal.portia_access_journal_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_access_people.portia_access_people_account_unique": {
+        "def": "UNIQUE (account_id)",
+        "type": "u",
+        "validated": true
+      },
+      "portia_access_people.portia_access_people_level_check": {
+        "def": "CHECK (((level >= 1) AND (level <= 5)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_people.portia_access_people_nickname_check": {
+        "def": "CHECK ((portia_access_nickname_key(nickname) IS NOT NULL))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_people.portia_access_people_nickname_key_check": {
+        "def": "CHECK ((nickname_key = portia_access_nickname_key(nickname)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_people.portia_access_people_nickname_key_unique": {
+        "def": "UNIQUE (nickname_key)",
+        "type": "u",
+        "validated": true
+      },
+      "portia_access_people.portia_access_people_origin_check": {
+        "def": "CHECK ((origin = ANY (ARRAY['sheet'::text, 'outside'::text])))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_people.portia_access_people_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_access_people.portia_access_people_status_check": {
+        "def": "CHECK ((status = ANY (ARRAY['active'::text, 'revoked'::text])))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_requests.portia_access_requests_decided_check": {
+        "def": "CHECK (((status = 'pending'::text) = (decided_at IS NULL)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_requests.portia_access_requests_ip_bucket_check": {
+        "def": "CHECK ((ip_bucket ~ '^[0-9a-f]{32}$'::text))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_requests.portia_access_requests_nickname_check": {
+        "def": "CHECK ((portia_access_nickname_key(nickname) IS NOT NULL))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_requests.portia_access_requests_nickname_key_check": {
+        "def": "CHECK ((nickname_key = portia_access_nickname_key(nickname)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_requests.portia_access_requests_origin_check": {
+        "def": "CHECK ((origin = ANY (ARRAY['sheet'::text, 'outside'::text])))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_requests.portia_access_requests_person_check": {
+        "def": "CHECK (((status = ANY (ARRAY['pending'::text, 'rejected'::text])) OR (person_id IS NOT NULL)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_requests.portia_access_requests_person_id_fkey": {
+        "def": "FOREIGN KEY (person_id) REFERENCES portia_access_people(id)",
+        "type": "f",
+        "validated": true
+      },
+      "portia_access_requests.portia_access_requests_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_access_requests.portia_access_requests_status_check": {
+        "def": "CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'revoked'::text])))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_requests.portia_access_requests_token_hash_check": {
+        "def": "CHECK ((token_hash ~ '^[0-9a-f]{64}$'::text))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_secrets.portia_access_secrets_name_check": {
+        "def": "CHECK ((name = 'submit'::text))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_secrets.portia_access_secrets_pkey": {
+        "def": "PRIMARY KEY (name)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_access_secrets.portia_access_secrets_secret_check": {
+        "def": "CHECK ((length(secret) >= 32))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_settings.portia_access_settings_id_check": {
+        "def": "CHECK ((id = 'main'::text))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_access_settings.portia_access_settings_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_content.portia_content_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_content.portia_content_updated_by_fkey": {
+        "def": "FOREIGN KEY (updated_by) REFERENCES auth.users(id)",
+        "type": "f",
+        "validated": true
+      },
+      "portia_editors.portia_editors_email_check": {
+        "def": "CHECK ((email = lower(email)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_editors.portia_editors_granted_by_fkey": {
+        "def": "FOREIGN KEY (granted_by) REFERENCES auth.users(id)",
+        "type": "f",
+        "validated": true
+      },
+      "portia_editors.portia_editors_pkey": {
+        "def": "PRIMARY KEY (email)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_employee_profiles.portia_employee_profiles_activity_rating_check": {
+        "def": "CHECK (((activity_rating >= 1) AND (activity_rating <= 10)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_employee_profiles.portia_employee_profiles_bio_rating_check": {
+        "def": "CHECK (((bio_rating >= 1) AND (bio_rating <= 10)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_employee_profiles.portia_employee_profiles_biography_check": {
+        "def": "CHECK ((length(biography) <= 20000))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_employee_profiles.portia_employee_profiles_knowledge_rating_check": {
+        "def": "CHECK (((knowledge_rating >= 1) AND (knowledge_rating <= 10)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_employee_profiles.portia_employee_profiles_nickname_check": {
+        "def": "CHECK ((length(nickname) <= 64))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_employee_profiles.portia_employee_profiles_overall_rating_check": {
+        "def": "CHECK (((overall_rating >= 1) AND (overall_rating <= 10)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_employee_profiles.portia_employee_profiles_paws_rating_check": {
+        "def": "CHECK (((paws_rating >= 1) AND (paws_rating <= 10)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_employee_profiles.portia_employee_profiles_photo_url_local": {
+        "def": "CHECK (((photo_url = ''::text) OR (photo_url ~~ 'https://%'::text) OR (photo_url ~ '^/([^/\\\\[:cntrl:]][^[:cntrl:]]*)?$'::text)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_employee_profiles.portia_employee_profiles_pkey": {
+        "def": "PRIMARY KEY (employee_id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_employee_profiles.portia_employee_profiles_s_rating_check": {
+        "def": "CHECK (((s_rating >= 1) AND (s_rating <= 10)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_employee_profiles.portia_employee_profiles_tests_rating_check": {
+        "def": "CHECK (((tests_rating >= 1) AND (tests_rating <= 10)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_employee_profiles.portia_employee_profiles_updated_by_fkey": {
+        "def": "FOREIGN KEY (updated_by) REFERENCES auth.users(id)",
+        "type": "f",
+        "validated": true
+      },
+      "portia_manual_employees.portia_manual_employees_callsign_check": {
+        "def": "CHECK ((length(callsign) <= 64))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_manual_employees.portia_manual_employees_created_by_fkey": {
+        "def": "FOREIGN KEY (created_by) REFERENCES auth.users(id)",
+        "type": "f",
+        "validated": true
+      },
+      "portia_manual_employees.portia_manual_employees_employee_id_check": {
+        "def": "CHECK ((employee_id ~ '^roblox-[0-9]+$'::text))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_manual_employees.portia_manual_employees_nickname_check": {
+        "def": "CHECK (((length(nickname) >= 3) AND (length(nickname) <= 20)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_manual_employees.portia_manual_employees_pkey": {
+        "def": "PRIMARY KEY (employee_id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_manual_employees.portia_manual_employees_rank_check": {
+        "def": "CHECK ((length(rank) <= 64))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_manual_employees.portia_manual_employees_title_check": {
+        "def": "CHECK ((length(title) <= 64))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_answers.portia_promo_answers_answer_check": {
+        "def": "CHECK ((pg_column_size(answer) <= 32768))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_answers.portia_promo_answers_answer_nonce_check": {
+        "def": "CHECK (((answer_nonce IS NULL) OR ((length(answer_nonce) >= 16) AND (length(answer_nonce) <= 80))))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_answers.portia_promo_answers_attempt_id_fkey": {
+        "def": "FOREIGN KEY (attempt_id) REFERENCES portia_promo_attempts(id) ON DELETE CASCADE",
+        "type": "f",
+        "validated": true
+      },
+      "portia_promo_answers.portia_promo_answers_attempt_id_question_id_key": {
+        "def": "UNIQUE (attempt_id, question_id)",
+        "type": "u",
+        "validated": true
+      },
+      "portia_promo_answers.portia_promo_answers_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_promo_answers.portia_promo_answers_question_id_fkey": {
+        "def": "FOREIGN KEY (question_id) REFERENCES portia_promo_attempt_questions(id) ON DELETE CASCADE",
+        "type": "f",
+        "validated": true
+      },
+      "portia_promo_assignment_items.portia_promo_assignment_items_assignment_id_fkey": {
+        "def": "FOREIGN KEY (assignment_id) REFERENCES portia_promo_assignments(id) ON DELETE CASCADE",
+        "type": "f",
+        "validated": true
+      },
+      "portia_promo_assignment_items.portia_promo_assignment_items_assignment_id_sort_order_key": {
+        "def": "UNIQUE (assignment_id, sort_order)",
+        "type": "u",
+        "validated": true
+      },
+      "portia_promo_assignment_items.portia_promo_assignment_items_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_promo_assignment_items.portia_promo_assignment_items_snapshot_text_check": {
+        "def": "CHECK (((length(snapshot_text) >= 1) AND (length(snapshot_text) <= 4000)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_assignment_items.portia_promo_assignment_items_sort_order_check": {
+        "def": "CHECK (((sort_order >= 0) AND (sort_order <= 100000)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_assignment_items.portia_promo_assignment_items_source_item_id_fkey": {
+        "def": "FOREIGN KEY (source_item_id) REFERENCES portia_promo_task_items(id) ON DELETE SET NULL",
+        "type": "f",
+        "validated": true
+      },
+      "portia_promo_assignments.portia_promo_assignments_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_promo_assignments.portia_promo_assignments_request_id_fkey": {
+        "def": "FOREIGN KEY (request_id) REFERENCES portia_promo_requests(id) ON DELETE CASCADE",
+        "type": "f",
+        "validated": true
+      },
+      "portia_promo_assignments.portia_promo_assignments_request_id_key": {
+        "def": "UNIQUE (request_id)",
+        "type": "u",
+        "validated": true
+      },
+      "portia_promo_assignments.portia_promo_assignments_reviewer_id_fkey": {
+        "def": "FOREIGN KEY (reviewer_id) REFERENCES auth.users(id)",
+        "type": "f",
+        "validated": true
+      },
+      "portia_promo_assignments.portia_promo_assignments_status_check": {
+        "def": "CHECK ((status = ANY (ARRAY['active'::text, 'approved'::text, 'closed'::text])))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_attempt_buckets.portia_promo_attempt_buckets_bucket_key_check": {
+        "def": "CHECK (((length(bucket_key) >= 1) AND (length(bucket_key) <= 160)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_attempt_buckets.portia_promo_attempt_buckets_failures_check": {
+        "def": "CHECK (((failures >= 0) AND (failures <= 1000)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_attempt_buckets.portia_promo_attempt_buckets_ip_bucket_check": {
+        "def": "CHECK ((length(ip_bucket) <= 128))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_attempt_buckets.portia_promo_attempt_buckets_pkey": {
+        "def": "PRIMARY KEY (bucket_key)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_promo_attempt_questions.portia_promo_attempt_questions_answer_key_check": {
+        "def": "CHECK ((pg_column_size(answer_key) <= 16384))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_attempt_questions.portia_promo_attempt_questions_attempt_id_fkey": {
+        "def": "FOREIGN KEY (attempt_id) REFERENCES portia_promo_attempts(id) ON DELETE CASCADE",
+        "type": "f",
+        "validated": true
+      },
+      "portia_promo_attempt_questions.portia_promo_attempt_questions_attempt_id_sort_order_key": {
+        "def": "UNIQUE (attempt_id, sort_order)",
+        "type": "u",
+        "validated": true
+      },
+      "portia_promo_attempt_questions.portia_promo_attempt_questions_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_promo_attempt_questions.portia_promo_attempt_questions_question_type_check": {
+        "def": "CHECK ((question_type = ANY (ARRAY['single'::text, 'multiple'::text, 'free-text'::text])))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_attempt_questions.portia_promo_attempt_questions_snapshot_options_check": {
+        "def": "CHECK ((pg_column_size(snapshot_options) <= 32768))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_attempt_questions.portia_promo_attempt_questions_snapshot_text_check": {
+        "def": "CHECK (((length(snapshot_text) >= 1) AND (length(snapshot_text) <= 4000)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_attempt_questions.portia_promo_attempt_questions_sort_order_check": {
+        "def": "CHECK (((sort_order >= 0) AND (sort_order <= 100000)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_attempt_questions.portia_promo_attempt_questions_source_question_id_fkey": {
+        "def": "FOREIGN KEY (source_question_id) REFERENCES portia_promo_qualification_questions(id) ON DELETE SET NULL",
+        "type": "f",
+        "validated": true
+      },
+      "portia_promo_attempts.portia_promo_attempts_client_mode_check": {
+        "def": "CHECK ((client_mode = ANY (ARRAY['desktop'::text, 'phone'::text])))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_attempts.portia_promo_attempts_current_question_index_check": {
+        "def": "CHECK (((current_question_index >= 0) AND (current_question_index <= 100000)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_attempts.portia_promo_attempts_final_percent_check": {
+        "def": "CHECK (((final_percent >= 0) AND (final_percent <= 100)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_attempts.portia_promo_attempts_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_promo_attempts.portia_promo_attempts_request_id_fkey": {
+        "def": "FOREIGN KEY (request_id) REFERENCES portia_promo_qualification_requests(id) ON DELETE CASCADE",
+        "type": "f",
+        "validated": true
+      },
+      "portia_promo_attempts.portia_promo_attempts_request_id_key": {
+        "def": "UNIQUE (request_id)",
+        "type": "u",
+        "validated": true
+      },
+      "portia_promo_attempts.portia_promo_attempts_reviewer_id_fkey": {
+        "def": "FOREIGN KEY (reviewer_id) REFERENCES auth.users(id)",
+        "type": "f",
+        "validated": true
+      },
+      "portia_promo_attempts.portia_promo_attempts_status_check": {
+        "def": "CHECK ((status = ANY (ARRAY['prepared'::text, 'active'::text, 'grading'::text, 'passed'::text, 'failed'::text, 'closed'::text])))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_attempts.portia_promo_attempts_technical_failure_check": {
+        "def": "CHECK (((technical_failure IS NULL) OR (length(technical_failure) <= 64)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_audit_events.portia_promo_audit_events_actor_id_fkey": {
+        "def": "FOREIGN KEY (actor_id) REFERENCES auth.users(id)",
+        "type": "f",
+        "validated": true
+      },
+      "portia_promo_audit_events.portia_promo_audit_events_details_check": {
+        "def": "CHECK ((pg_column_size(details) <= 16384))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_audit_events.portia_promo_audit_events_event_type_check": {
+        "def": "CHECK (((length(event_type) >= 1) AND (length(event_type) <= 80)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_audit_events.portia_promo_audit_events_nickname_key_check": {
+        "def": "CHECK (((nickname_key IS NULL) OR ((length(nickname_key) >= 1) AND (length(nickname_key) <= 64))))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_audit_events.portia_promo_audit_events_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_promo_device_bindings.portia_promo_device_bindings_nickname_key_check": {
+        "def": "CHECK (((length(nickname_key) >= 1) AND (length(nickname_key) <= 64)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_device_bindings.portia_promo_device_bindings_nickname_key_key": {
+        "def": "UNIQUE (nickname_key)",
+        "type": "u",
+        "validated": true
+      },
+      "portia_promo_device_bindings.portia_promo_device_bindings_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_promo_device_bindings.portia_promo_device_bindings_risk_bucket_check": {
+        "def": "CHECK ((length(risk_bucket) <= 128))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_device_bindings.portia_promo_device_bindings_token_hash_check": {
+        "def": "CHECK (((length(token_hash) >= 32) AND (length(token_hash) <= 128)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_device_bindings.portia_promo_device_bindings_token_hash_key": {
+        "def": "UNIQUE (token_hash)",
+        "type": "u",
+        "validated": true
+      },
+      "portia_promo_qualification_banks.portia_promo_qualification_banks_free_text_count_check": {
+        "def": "CHECK (((free_text_count >= 0) AND (free_text_count <= 100)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_qualification_banks.portia_promo_qualification_banks_multiple_count_check": {
+        "def": "CHECK (((multiple_count >= 0) AND (multiple_count <= 100)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_qualification_banks.portia_promo_qualification_banks_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_promo_qualification_banks.portia_promo_qualification_banks_rules_text_check": {
+        "def": "CHECK (((rules_text IS NULL) OR ((length(rules_text) >= 1) AND (length(rules_text) <= 4000))))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_qualification_banks.portia_promo_qualification_banks_single_count_check": {
+        "def": "CHECK (((single_count >= 0) AND (single_count <= 100)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_qualification_banks.portia_promo_qualification_banks_transition_id_check": {
+        "def": "CHECK (((length(transition_id) >= 1) AND (length(transition_id) <= 48)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_qualification_banks.portia_promo_qualification_banks_transition_id_key": {
+        "def": "UNIQUE (transition_id)",
+        "type": "u",
+        "validated": true
+      },
+      "portia_promo_qualification_options.portia_promo_qualification_options_option_text_check": {
+        "def": "CHECK (((length(option_text) >= 1) AND (length(option_text) <= 1000)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_qualification_options.portia_promo_qualification_options_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_promo_qualification_options.portia_promo_qualification_options_question_id_fkey": {
+        "def": "FOREIGN KEY (question_id) REFERENCES portia_promo_qualification_questions(id) ON DELETE CASCADE",
+        "type": "f",
+        "validated": true
+      },
+      "portia_promo_qualification_options.portia_promo_qualification_options_question_id_sort_order_key": {
+        "def": "UNIQUE (question_id, sort_order)",
+        "type": "u",
+        "validated": true
+      },
+      "portia_promo_qualification_options.portia_promo_qualification_options_sort_order_check": {
+        "def": "CHECK (((sort_order >= 0) AND (sort_order <= 100000)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_qualification_questions.portia_promo_qualification_questions_answer_key_check": {
+        "def": "CHECK ((pg_column_size(answer_key) <= 16384))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_qualification_questions.portia_promo_qualification_questions_bank_id_fkey": {
+        "def": "FOREIGN KEY (bank_id) REFERENCES portia_promo_qualification_banks(id) ON DELETE CASCADE",
+        "type": "f",
+        "validated": true
+      },
+      "portia_promo_qualification_questions.portia_promo_qualification_questions_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_promo_qualification_questions.portia_promo_qualification_questions_question_text_check": {
+        "def": "CHECK (((length(question_text) >= 1) AND (length(question_text) <= 4000)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_qualification_questions.portia_promo_qualification_questions_question_type_check": {
+        "def": "CHECK ((question_type = ANY (ARRAY['single'::text, 'multiple'::text, 'free-text'::text])))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_qualification_questions.portia_promo_qualification_questions_sort_order_check": {
+        "def": "CHECK (((sort_order >= 0) AND (sort_order <= 100000)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_qualification_requests.portia_promo_qualification_requests_internal_note_check": {
+        "def": "CHECK ((length(internal_note) <= 2000))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_qualification_requests.portia_promo_qualification_requests_nickname_check": {
+        "def": "CHECK (((length(nickname) >= 1) AND (length(nickname) <= 64)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_qualification_requests.portia_promo_qualification_requests_nickname_key_check": {
+        "def": "CHECK (((length(nickname_key) >= 1) AND (length(nickname_key) <= 64)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_qualification_requests.portia_promo_qualification_requests_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_promo_qualification_requests.portia_promo_qualification_requests_reviewer_id_fkey": {
+        "def": "FOREIGN KEY (reviewer_id) REFERENCES auth.users(id)",
+        "type": "f",
+        "validated": true
+      },
+      "portia_promo_qualification_requests.portia_promo_qualification_requests_status_check": {
+        "def": "CHECK ((status = ANY (ARRAY['pending'::text, 'claimed'::text, 'approved'::text, 'testing'::text, 'grading'::text, 'passed'::text, 'failed'::text, 'rejected'::text, 'closed'::text])))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_qualification_requests.portia_promo_qualification_requests_title_id_check": {
+        "def": "CHECK (((length(title_id) >= 1) AND (length(title_id) <= 48)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_qualification_requests.portia_promo_qualification_requests_transition_id_check": {
+        "def": "CHECK (((length(transition_id) >= 1) AND (length(transition_id) <= 48)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_requests.portia_promo_requests_internal_note_check": {
+        "def": "CHECK ((length(internal_note) <= 2000))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_requests.portia_promo_requests_nickname_check": {
+        "def": "CHECK (((length(nickname) >= 1) AND (length(nickname) <= 64)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_requests.portia_promo_requests_nickname_key_check": {
+        "def": "CHECK (((length(nickname_key) >= 1) AND (length(nickname_key) <= 64)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_requests.portia_promo_requests_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_promo_requests.portia_promo_requests_reviewer_id_fkey": {
+        "def": "FOREIGN KEY (reviewer_id) REFERENCES auth.users(id)",
+        "type": "f",
+        "validated": true
+      },
+      "portia_promo_requests.portia_promo_requests_status_check": {
+        "def": "CHECK ((status = ANY (ARRAY['pending'::text, 'claimed'::text, 'assigned'::text, 'awaiting-sheet-change'::text, 'rejected'::text, 'closed'::text])))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_requests.portia_promo_requests_target_title_id_check": {
+        "def": "CHECK (((length(target_title_id) >= 1) AND (length(target_title_id) <= 48)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_requests.portia_promo_requests_title_id_check": {
+        "def": "CHECK (((length(title_id) >= 1) AND (length(title_id) <= 48)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_results.portia_promo_results_compact_check": {
+        "def": "CHECK ((pg_column_size(compact) <= 16384))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_results.portia_promo_results_nickname_key_check": {
+        "def": "CHECK (((length(nickname_key) >= 1) AND (length(nickname_key) <= 64)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_results.portia_promo_results_outcome_check": {
+        "def": "CHECK ((outcome = ANY (ARRAY['approved'::text, 'passed'::text, 'failed'::text, 'rejected'::text, 'technical-failure'::text, 'retake-released'::text])))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_results.portia_promo_results_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_promo_results.portia_promo_results_result_kind_check": {
+        "def": "CHECK ((result_kind = ANY (ARRAY['ordinary'::text, 'qualification'::text])))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_task_banks.portia_promo_task_banks_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_promo_task_banks.portia_promo_task_banks_required_count_check": {
+        "def": "CHECK (((required_count >= 1) AND (required_count <= 50)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_task_banks.portia_promo_task_banks_target_title_id_check": {
+        "def": "CHECK (((length(target_title_id) >= 1) AND (length(target_title_id) <= 48)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_task_banks.portia_promo_task_banks_target_title_id_key": {
+        "def": "UNIQUE (target_title_id)",
+        "type": "u",
+        "validated": true
+      },
+      "portia_promo_task_items.portia_promo_task_items_bank_id_fkey": {
+        "def": "FOREIGN KEY (bank_id) REFERENCES portia_promo_task_banks(id) ON DELETE CASCADE",
+        "type": "f",
+        "validated": true
+      },
+      "portia_promo_task_items.portia_promo_task_items_pkey": {
+        "def": "PRIMARY KEY (id)",
+        "type": "p",
+        "validated": true
+      },
+      "portia_promo_task_items.portia_promo_task_items_sort_order_check": {
+        "def": "CHECK (((sort_order >= 0) AND (sort_order <= 100000)))",
+        "type": "c",
+        "validated": true
+      },
+      "portia_promo_task_items.portia_promo_task_items_task_text_check": {
+        "def": "CHECK (((length(task_text) >= 1) AND (length(task_text) <= 4000)))",
+        "type": "c",
+        "validated": true
+      }
+    },
+    "cron": {
+      "jobs": {
+        "portia-promo-cleanup": {
+          "active": "true",
+          "command_is_expected": true,
+          "command_sha256": "cc6a1737b2093bca7593470ca7c632e3cc74018980e7d8a09e67605849f03750",
+          "schedule": "17 3 * * *",
+          "username": "postgres"
+        }
+      },
+      "present": true,
+      "rls_filtered": false,
+      "select_privilege": true,
+      "visible": true
+    },
+    "default_acls": {
+      "postgres:S": {
+        "acl": [
+          "anon:SELECT",
+          "anon:UPDATE",
+          "anon:USAGE",
+          "authenticated:SELECT",
+          "authenticated:UPDATE",
+          "authenticated:USAGE",
+          "service_role:SELECT",
+          "service_role:UPDATE",
+          "service_role:USAGE"
+        ]
+      },
+      "postgres:f": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ]
+      },
+      "postgres:r": {
+        "acl": [
+          "anon:DELETE",
+          "anon:INSERT",
+          "anon:MAINTAIN",
+          "anon:REFERENCES",
+          "anon:SELECT",
+          "anon:TRIGGER",
+          "anon:TRUNCATE",
+          "anon:UPDATE",
+          "authenticated:DELETE",
+          "authenticated:INSERT",
+          "authenticated:MAINTAIN",
+          "authenticated:REFERENCES",
+          "authenticated:SELECT",
+          "authenticated:TRIGGER",
+          "authenticated:TRUNCATE",
+          "authenticated:UPDATE",
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ]
+      },
+      "supabase_admin:S": {
+        "acl": [
+          "anon:SELECT",
+          "anon:UPDATE",
+          "anon:USAGE",
+          "authenticated:SELECT",
+          "authenticated:UPDATE",
+          "authenticated:USAGE",
+          "service_role:SELECT",
+          "service_role:UPDATE",
+          "service_role:USAGE"
+        ]
+      },
+      "supabase_admin:f": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ]
+      },
+      "supabase_admin:r": {
+        "acl": [
+          "anon:DELETE",
+          "anon:INSERT",
+          "anon:MAINTAIN",
+          "anon:REFERENCES",
+          "anon:SELECT",
+          "anon:TRIGGER",
+          "anon:TRUNCATE",
+          "anon:UPDATE",
+          "authenticated:DELETE",
+          "authenticated:INSERT",
+          "authenticated:MAINTAIN",
+          "authenticated:REFERENCES",
+          "authenticated:SELECT",
+          "authenticated:TRIGGER",
+          "authenticated:TRUNCATE",
+          "authenticated:UPDATE",
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ]
+      }
+    },
+    "extensions": {
+      "pg_cron": {
+        "present": true
+      },
+      "pg_net": {
+        "present": false
+      },
+      "pgcrypto": {
+        "present": true
+      },
+      "plpgsql": {
+        "present": true
+      },
+      "uuid-ossp": {
+        "present": true
+      }
+    },
+    "functions": {
+      "public.portia_access_bulk_candidates()": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "2eadf802e4ada806541d1822526140fe36c7780985436ace42ffc25ad6abee26",
+        "volatility": "s"
+      },
+      "public.portia_access_caller_level()": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "smallint",
+        "secdef": true,
+        "src_sha256": "8cb0b2f76c2428121b22fdabed2cdff07f12ad7aa1e054c4fdf13d328a929efb",
+        "volatility": "s"
+      },
+      "public.portia_access_clear_cooldown(p_nickname_key text)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "dd90e478e0b4fd127e4e005d160cb1892c4811ebd9a64d3d40d0c5f0cd15e760",
+        "volatility": "v"
+      },
+      "public.portia_access_closure_enabled()": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "020b70abe480605583b673f0c8038ff329b3b5ff287ec037299f41ec94bd8f63",
+        "volatility": "s"
+      },
+      "public.portia_access_decide(p_request_id uuid, p_decision text, p_level smallint)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "a8d4316758ac8f875f825ca673d7cbe2d77c36fa22e1ed285841954bd55d2c0f",
+        "volatility": "v"
+      },
+      "public.portia_access_editor_request_status(p_token_hash text)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "d85bed89a0fb254c2fc99af824229ea5a5f05c5cddf41743f31970c51a1ab422",
+        "volatility": "s"
+      },
+      "public.portia_access_history(p_nickname_key text)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "e70deb47a0666575007b80c22d2bef93aa4a8b85ca5e1d7c79e97cfad133e5e3",
+        "volatility": "s"
+      },
+      "public.portia_access_journal_append_only()": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "trigger",
+        "secdef": false,
+        "src_sha256": "d87f99c5792842fc656a309117e90aa41c544f1dea2dc522251fe4a1561c5ea6",
+        "volatility": "v"
+      },
+      "public.portia_access_journal_prune()": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "trigger",
+        "secdef": true,
+        "src_sha256": "b26934e55d2adac36451831e204762bb3bc249a1fe4cebbedad48ba80e5873ea",
+        "volatility": "v"
+      },
+      "public.portia_access_list(p_query text, p_limit integer)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "b8581a5a4daa96a09eab063e7e736ca8c6f0d1cf432f2f29006c57c49810aaa8",
+        "volatility": "s"
+      },
+      "public.portia_access_mask_email(p_email text)": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "text",
+        "secdef": false,
+        "src_sha256": "9037d0a413c9aeb37bd53b2ad91b4ba4b542a33f6ac143de1eb4ccb26ca9b1a2",
+        "volatility": "i"
+      },
+      "public.portia_access_nickname_key(p_nickname text)": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "text",
+        "secdef": false,
+        "src_sha256": "3713a99c1a51ac35716b1070fdb3dccfdc48abb21b6376ea9ce508813714dd23",
+        "volatility": "i"
+      },
+      "public.portia_access_resolve(p_token_hash text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "dbdbe7137e67ac55310f8652f8746b02ac0839715ea7efe7a2c4742676fa1a3f",
+        "volatility": "s"
+      },
+      "public.portia_access_revoke(p_person_id uuid)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "e9b2422225d06fa0130be01f1e45e6dcc72db0a7a14878520c7da052b66807a1",
+        "volatility": "v"
+      },
+      "public.portia_access_set_closure(p_enabled boolean)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "24c96da402a6c3c48d738aef0daad6cd2156830bf93f8d5ff799db1b52525f83",
+        "volatility": "v"
+      },
+      "public.portia_access_set_level(p_person_id uuid, p_level smallint, p_expected_level smallint)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "0626c25872d2c0d5eb2cd6b507996ef1c41b2c184fc0e42d6ac1c3803421bd5a",
+        "volatility": "v"
+      },
+      "public.portia_access_submit_request(p_nickname text, p_origin text, p_token_hash text, p_ip_bucket text, p_issued_at bigint, p_signature text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "5e8f0ee87ca6bcd67e61ea22afd5a430e0da681059028907b3a96d953b1b6472",
+        "volatility": "v"
+      },
+      "public.portia_access_target_guard(p_nickname_key text, p_requested_by uuid)": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "void",
+        "secdef": false,
+        "src_sha256": "8ff3f11b9d8edbabdde37f367ade29624bd27b428d62efe2b0e85bfdcf4087e5",
+        "volatility": "s"
+      },
+      "public.portia_can_edit()": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "5a9880f2808ce2968f25d831a9326e4b4464ff90cee8441d383a216c9178472a",
+        "volatility": "s"
+      },
+      "public.portia_can_edit_tab(tab_id text)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "f24bfc4ea7cf53adcb6e45c0da4b5837560bf5d6003ff11eb997b1d5f1675f4d",
+        "volatility": "s"
+      },
+      "public.portia_content_read(p_issued_at bigint, p_signature text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "9aae7e8988c5de4394f2cf8a2c645114f3e3cfc3edb13cd47aa65ac0c63c5898",
+        "volatility": "s"
+      },
+      "public.portia_editor_is_approved(candidate_email text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "254f4345701b3bf1db5606de8528c1d996b3cd7c19fd29ece97274290e227807",
+        "volatility": "s"
+      },
+      "public.portia_email_confirmed()": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "3dd2b7021fa61e03e67ccbb0c19cf15049f98fbbccf014dc0b5ee16b15c169d8",
+        "volatility": "s"
+      },
+      "public.portia_employees_read(p_issued_at bigint, p_signature text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "be25367052a4635f2f8b85b82bc56db4650ff2b36bfca2ef172008ea5ac49635",
+        "volatility": "s"
+      },
+      "public.portia_has_tab_grant(tab_id text)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "b408d9a961a049f722976c48231338a51596dcef9950fb5661ff61316bb3ba05",
+        "volatility": "s"
+      },
+      "public.portia_is_owner()": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "480998c8c5a4a436194a31198a6c66e68f58d32db84a61d4e425da842475c007",
+        "volatility": "s"
+      },
+      "public.portia_owner_email()": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "text",
+        "secdef": false,
+        "src_sha256": "5746532a10bf79cc542045388a96783ec34383a1d09631db01fed056b1b07e89",
+        "volatility": "i"
+      },
+      "public.portia_promo_answer_question(p_attempt_id uuid, p_question_id uuid, p_expected_question_index integer, p_answer jsonb, p_nonce text, p_token_hash text)": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "3a49fc3ff4fdfc6b21b62874a06133c0af2304193f12fed2b02b4cda14faccf6",
+        "volatility": "v"
+      },
+      "public.portia_promo_approve_assignment(p_request_id uuid)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "2ef3ee6b01f8463d21ed166abfa48be6c47d2f60a1e25ac4487fdf11c4af8a71",
+        "volatility": "v"
+      },
+      "public.portia_promo_bank_command(p_action text, p_payload jsonb)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "uuid",
+        "secdef": true,
+        "src_sha256": "4e62f73886ca4f05fecc0f58bfb6daba506797cc38c489d7d841c90a12bb9cc0",
+        "volatility": "v"
+      },
+      "public.portia_promo_bank_state()": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "ecabc734bcd2a8707d86e77d10e955501e713c3a903cdd7979533d061688e8b5",
+        "volatility": "v"
+      },
+      "public.portia_promo_bind_device(p_nickname_key text, p_token_hash text, p_risk_bucket text)": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "uuid",
+        "secdef": true,
+        "src_sha256": "6dedf45445940680feda2e5ed8ca2979a60f1b68ed3c48cfc81b96355c3437c1",
+        "volatility": "v"
+      },
+      "public.portia_promo_claim_request(p_kind text, p_request_id uuid)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "a6623d75489fe70c719457f85f1a5fa54ae19a53945edd021250914572313272",
+        "volatility": "v"
+      },
+      "public.portia_promo_cleanup()": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "integer",
+        "secdef": true,
+        "src_sha256": "0d3858d9a53d1741b2aaa6b3b243dc05833bec534cba9fc683e0297437d3f740",
+        "volatility": "v"
+      },
+      "public.portia_promo_close(p_kind text, p_request_id uuid, p_outcome text, p_compact jsonb)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "f54af29fe033e13527756516a9163af215b6e332887fadd831884d3b13bc9ddd",
+        "volatility": "v"
+      },
+      "public.portia_promo_confirm_assignment(p_request_id uuid, p_bank_id uuid, p_bank_version text, p_items jsonb)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "uuid",
+        "secdef": true,
+        "src_sha256": "efb314a7d53bd9087bdf3104ee0a37a59f918a8900d356682c49a745d3f66c0e",
+        "volatility": "v"
+      },
+      "public.portia_promo_confirm_test(p_request_id uuid, p_bank_id uuid, p_bank_version text, p_questions jsonb)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "uuid",
+        "secdef": true,
+        "src_sha256": "9e8cd567f2406362e1ec1ba2340c2efad764a038652b53fe7c8780c3e0e9c056",
+        "volatility": "v"
+      },
+      "public.portia_promo_current_test(p_attempt_id uuid, p_token_hash text, p_client_mode text)": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "330e941cfc645b8309973dd4a459287b021af73612443609a727328337004820",
+        "volatility": "v"
+      },
+      "public.portia_promo_delete_request(p_kind text, p_request_id uuid)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "840581be3e24b828a278d629234671d62a08e6612e89457804806bc8a11258a0",
+        "volatility": "v"
+      },
+      "public.portia_promo_expire_stale_attempt(p_attempt_id uuid)": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "28de9f31add31f71c4ee7ee9391862ebbd67687da4cc0d9634b79bea3367c018",
+        "volatility": "v"
+      },
+      "public.portia_promo_fail_attempt(p_attempt_id uuid, p_reason text, p_token_hash text)": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "d64152d0ef32aa3c8bd0d4dff951a521745aae1ee0ade74258a0c3452ad763fa",
+        "volatility": "v"
+      },
+      "public.portia_promo_finalize_attempt(p_attempt_id uuid, p_passed boolean, p_percent integer, p_retake_days integer)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "177f4442f68b0d6b53ff76486d6ed8e71a4b1022ba83b51cb2cc4b0eefe75c44",
+        "volatility": "v"
+      },
+      "public.portia_promo_grade_answer(p_answer_id uuid, p_correct boolean)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "a8cd9f4214b5311e2de830ef7c67f030bf5aac3541be1ae788f3ef14eb489fc3",
+        "volatility": "v"
+      },
+      "public.portia_promo_heartbeat_test(p_attempt_id uuid, p_token_hash text)": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "8b48bf1b312b0063c5641f144b72a6d54b8bd51cca78b2dbb883f288c0ec89b0",
+        "volatility": "v"
+      },
+      "public.portia_promo_override_failure(p_attempt_id uuid)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "968d3c83de2a1028d2b7afcbeb4e888bcf9af825f82885ef89c66d3026adaa7c",
+        "volatility": "v"
+      },
+      "public.portia_promo_participant_key(p_access_hash text)": {
+        "acl": [],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "text",
+        "secdef": true,
+        "src_sha256": "b11a04778a96001a5d6b3f6afad280f2398d63c0fcec0140154f5e4b06b0d5dc",
+        "volatility": "v"
+      },
+      "public.portia_promo_public_status(p_nickname_key text, p_title_id text, p_token_hash text)": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "ffbf4d42f4b61456f97b0a663c537765f7ddccb3f7f99d353d9c61c2159177fd",
+        "volatility": "v"
+      },
+      "public.portia_promo_register_attempt(p_bucket_key text, p_ip_bucket text, p_success boolean)": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "timestamp with time zone",
+        "secdef": true,
+        "src_sha256": "00a4e0718ed9edca63811b5982a665ab182eb179d89fe3a2fa6acea648c8a6ed",
+        "volatility": "v"
+      },
+      "public.portia_promo_reject_request(p_kind text, p_request_id uuid, p_internal_note text)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "5f172b09ba30fe62a103c75ed561a607098a0f1e09dc64dea29d55d969545244",
+        "volatility": "v"
+      },
+      "public.portia_promo_release_request(p_kind text, p_request_id uuid, p_force boolean)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "0fb1014239227d8e98e44bc702875f59eb03d56495f41a2c6a4d85f77273fe96",
+        "volatility": "v"
+      },
+      "public.portia_promo_release_retake(p_attempt_id uuid)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "d673b644bd1add73bf3c1f40fa12c6bfefbbdf6a53758e822d3965df210711a7",
+        "volatility": "v"
+      },
+      "public.portia_promo_reset_device(p_nickname_key text)": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "19280f279d80526a84145b73a121706d2ccbd5b08f675b7351bad2f0020e39ab",
+        "volatility": "v"
+      },
+      "public.portia_promo_resolve_device(p_token_hash text)": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "text",
+        "secdef": true,
+        "src_sha256": "df7be7d399696d6e8f7b56a97dd4a3727985f1d3f17e5f210eee99f550bd7f52",
+        "volatility": "v"
+      },
+      "public.portia_promo_reviewer_state()": {
+        "acl": [
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "6268ffb636e3d3b8b3cf91a9f11c3c1ab3fe725d3f00618a891dfb06ecfcfa30",
+        "volatility": "v"
+      },
+      "public.portia_promo_save_qualification_rules(p_transition_id text, p_rules_text text)": {
+        "acl": [
+          "authenticated:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "uuid",
+        "secdef": true,
+        "src_sha256": "2d10d50e2be9cae4694b79238a4a9f697f547dc349f63a1117430e5005a1244f",
+        "volatility": "v"
+      },
+      "public.portia_promo_secure_answer_question(p_access_hash text, p_attempt_id uuid, p_question_id uuid, p_expected_question_index integer, p_answer jsonb, p_nonce text, p_token_hash text, p_issued_at bigint, p_signature text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "7b65f83daf7c28b6ee05e1d0250d9ec56d4ec55500d680d3d39e9f581861ab40",
+        "volatility": "v"
+      },
+      "public.portia_promo_secure_attempt(p_access_hash text, p_attempt_id uuid)": {
+        "acl": [],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "dc40534a9f2ddb96c04431c74546798716fabd9182dc57a3359ef2283e644737",
+        "volatility": "v"
+      },
+      "public.portia_promo_secure_current_test(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_client_mode text, p_title_id text, p_issued_at bigint, p_signature text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "2a7d95be251a9d6995c9e64d91e254fbbaaa28a08fd1c50e1110039e4862561f",
+        "volatility": "v"
+      },
+      "public.portia_promo_secure_fail_attempt(p_access_hash text, p_attempt_id uuid, p_reason text, p_token_hash text, p_issued_at bigint, p_signature text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "86aec04f1362625489c63a0866cbc3b2e59218e6ee47c1f51511f58ed6006aec",
+        "volatility": "v"
+      },
+      "public.portia_promo_secure_heartbeat_test(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_issued_at bigint, p_signature text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "6b62cb4f952212fe1589a52cd4a36ba72ca4ee60e3534ee1d973bb42c64b699a",
+        "volatility": "v"
+      },
+      "public.portia_promo_secure_start_test(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_client_mode text, p_title_id text, p_issued_at bigint, p_signature text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "timestamp with time zone",
+        "secdef": true,
+        "src_sha256": "1d94b5896feab7851b413c15a289ba806c3860d523f9b3682b7ebcd738fd684a",
+        "volatility": "v"
+      },
+      "public.portia_promo_secure_status(p_access_hash text, p_title_id text, p_token_hash text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "b47a32502226a507a2526c18cb4543e14a2bd9f3601c7d68ca80092c9d2853ab",
+        "volatility": "v"
+      },
+      "public.portia_promo_secure_submit(p_access_hash text, p_kind text, p_title_id text, p_target_id text, p_token_hash text, p_risk_bucket text, p_bucket_key text, p_ip_bucket text, p_issued_at bigint, p_signature text)": {
+        "acl": [
+          "anon:EXECUTE",
+          "authenticated:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "5c2c45729dbbe4b7f12972a01385a5004e6666b8951623ca8b0fb2ed8a462ef6",
+        "volatility": "v"
+      },
+      "public.portia_promo_start_test(p_attempt_id uuid, p_token_hash text, p_client_mode text)": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "timestamp with time zone",
+        "secdef": true,
+        "src_sha256": "8e237b6334594772578cc9b04e1df7e099d0b8f44b1c3de72c28f489048c77bf",
+        "volatility": "v"
+      },
+      "public.portia_promo_submit_request(p_kind text, p_nickname text, p_nickname_key text, p_title_id text, p_target_id text, p_token_hash text, p_risk_bucket text, p_bucket_key text, p_ip_bucket text)": {
+        "acl": [
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "jsonb",
+        "secdef": true,
+        "src_sha256": "78a6f9beeb1a2f317428bd4dac75bd7c1fc536f70f953810695c3ff707ffb91d",
+        "volatility": "v"
+      },
+      "public.portia_promo_test_proof_valid(p_access_hash text, p_attempt_id uuid, p_token_hash text, p_action text, p_issued_at bigint, p_signature text)": {
+        "acl": [],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "boolean",
+        "secdef": true,
+        "src_sha256": "ccfd784b8da9e115c649ce1e39ee2072dbd63ee3f9033a4cb6f84b20bf955c8d",
+        "volatility": "v"
+      },
+      "public.rls_auto_enable()": {
+        "acl": [
+          "PUBLIC:EXECUTE",
+          "anon:EXECUTE",
+          "authenticated:EXECUTE",
+          "service_role:EXECUTE"
+        ],
+        "config": [
+          "search_path=pg_catalog"
+        ],
+        "kind": "f",
+        "returns": "event_trigger",
+        "secdef": true,
+        "src_sha256": "325ae266d9b166715ef5230ceaf7ff9d523e483cf5610dfb9779ab3f183f4af9",
+        "volatility": "v"
+      }
+    },
+    "indexes": {
+      "portia_access_journal.portia_access_journal_by_nickname": {
+        "def": "CREATE INDEX portia_access_journal_by_nickname ON public.portia_access_journal USING btree (nickname_key, id DESC)",
+        "unique": false,
+        "valid": true
+      },
+      "portia_access_journal.portia_access_journal_by_person": {
+        "def": "CREATE INDEX portia_access_journal_by_person ON public.portia_access_journal USING btree (person_id, id DESC)",
+        "unique": false,
+        "valid": true
+      },
+      "portia_access_journal.portia_access_journal_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_access_journal_pkey ON public.portia_access_journal USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_access_people.portia_access_people_account_unique": {
+        "def": "CREATE UNIQUE INDEX portia_access_people_account_unique ON public.portia_access_people USING btree (account_id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_access_people.portia_access_people_nickname_key_unique": {
+        "def": "CREATE UNIQUE INDEX portia_access_people_nickname_key_unique ON public.portia_access_people USING btree (nickname_key)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_access_people.portia_access_people_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_access_people_pkey ON public.portia_access_people USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_access_requests.portia_access_one_active_request_per_device": {
+        "def": "CREATE UNIQUE INDEX portia_access_one_active_request_per_device ON public.portia_access_requests USING btree (token_hash) WHERE (status = ANY (ARRAY['pending'::text, 'approved'::text]))",
+        "unique": true,
+        "valid": true
+      },
+      "portia_access_requests.portia_access_one_pending_per_nickname": {
+        "def": "CREATE UNIQUE INDEX portia_access_one_pending_per_nickname ON public.portia_access_requests USING btree (nickname_key) WHERE (status = 'pending'::text)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_access_requests.portia_access_requests_created_recent": {
+        "def": "CREATE INDEX portia_access_requests_created_recent ON public.portia_access_requests USING btree (created_at DESC)",
+        "unique": false,
+        "valid": true
+      },
+      "portia_access_requests.portia_access_requests_ip_recent": {
+        "def": "CREATE INDEX portia_access_requests_ip_recent ON public.portia_access_requests USING btree (ip_bucket, created_at DESC)",
+        "unique": false,
+        "valid": true
+      },
+      "portia_access_requests.portia_access_requests_nickname_recent": {
+        "def": "CREATE INDEX portia_access_requests_nickname_recent ON public.portia_access_requests USING btree (nickname_key, created_at DESC)",
+        "unique": false,
+        "valid": true
+      },
+      "portia_access_requests.portia_access_requests_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_access_requests_pkey ON public.portia_access_requests USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_access_requests.portia_access_requests_token_recent": {
+        "def": "CREATE INDEX portia_access_requests_token_recent ON public.portia_access_requests USING btree (token_hash, created_at DESC)",
+        "unique": false,
+        "valid": true
+      },
+      "portia_access_secrets.portia_access_secrets_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_access_secrets_pkey ON public.portia_access_secrets USING btree (name)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_access_settings.portia_access_settings_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_access_settings_pkey ON public.portia_access_settings USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_content.portia_content_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_content_pkey ON public.portia_content USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_editors.portia_editors_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_editors_pkey ON public.portia_editors USING btree (email)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_employee_profiles.portia_employee_profiles_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_employee_profiles_pkey ON public.portia_employee_profiles USING btree (employee_id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_manual_employees.portia_manual_employees_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_manual_employees_pkey ON public.portia_manual_employees USING btree (employee_id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_answers.portia_promo_answer_nonce": {
+        "def": "CREATE UNIQUE INDEX portia_promo_answer_nonce ON public.portia_promo_answers USING btree (attempt_id, answer_nonce) WHERE (answer_nonce IS NOT NULL)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_answers.portia_promo_answers_attempt_id_question_id_key": {
+        "def": "CREATE UNIQUE INDEX portia_promo_answers_attempt_id_question_id_key ON public.portia_promo_answers USING btree (attempt_id, question_id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_answers.portia_promo_answers_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_promo_answers_pkey ON public.portia_promo_answers USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_assignment_items.portia_promo_assignment_items_assignment_id_sort_order_key": {
+        "def": "CREATE UNIQUE INDEX portia_promo_assignment_items_assignment_id_sort_order_key ON public.portia_promo_assignment_items USING btree (assignment_id, sort_order)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_assignment_items.portia_promo_assignment_items_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_promo_assignment_items_pkey ON public.portia_promo_assignment_items USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_assignments.portia_promo_assignments_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_promo_assignments_pkey ON public.portia_promo_assignments USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_assignments.portia_promo_assignments_request_id_key": {
+        "def": "CREATE UNIQUE INDEX portia_promo_assignments_request_id_key ON public.portia_promo_assignments USING btree (request_id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_attempt_buckets.portia_promo_attempt_buckets_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_promo_attempt_buckets_pkey ON public.portia_promo_attempt_buckets USING btree (bucket_key)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_attempt_questions.portia_promo_attempt_questions_attempt_id_sort_order_key": {
+        "def": "CREATE UNIQUE INDEX portia_promo_attempt_questions_attempt_id_sort_order_key ON public.portia_promo_attempt_questions USING btree (attempt_id, sort_order)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_attempt_questions.portia_promo_attempt_questions_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_promo_attempt_questions_pkey ON public.portia_promo_attempt_questions USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_attempts.portia_promo_attempts_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_promo_attempts_pkey ON public.portia_promo_attempts USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_attempts.portia_promo_attempts_request_id_key": {
+        "def": "CREATE UNIQUE INDEX portia_promo_attempts_request_id_key ON public.portia_promo_attempts USING btree (request_id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_audit_events.portia_promo_audit_events_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_promo_audit_events_pkey ON public.portia_promo_audit_events USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_device_bindings.portia_promo_device_bindings_nickname_key_key": {
+        "def": "CREATE UNIQUE INDEX portia_promo_device_bindings_nickname_key_key ON public.portia_promo_device_bindings USING btree (nickname_key)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_device_bindings.portia_promo_device_bindings_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_promo_device_bindings_pkey ON public.portia_promo_device_bindings USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_device_bindings.portia_promo_device_bindings_token_hash_key": {
+        "def": "CREATE UNIQUE INDEX portia_promo_device_bindings_token_hash_key ON public.portia_promo_device_bindings USING btree (token_hash)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_qualification_banks.portia_promo_qualification_banks_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_promo_qualification_banks_pkey ON public.portia_promo_qualification_banks USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_qualification_banks.portia_promo_qualification_banks_transition_id_key": {
+        "def": "CREATE UNIQUE INDEX portia_promo_qualification_banks_transition_id_key ON public.portia_promo_qualification_banks USING btree (transition_id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_qualification_options.portia_promo_qualification_options_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_promo_qualification_options_pkey ON public.portia_promo_qualification_options USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_qualification_options.portia_promo_qualification_options_question_id_sort_order_key": {
+        "def": "CREATE UNIQUE INDEX portia_promo_qualification_options_question_id_sort_order_key ON public.portia_promo_qualification_options USING btree (question_id, sort_order)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_qualification_questions.portia_promo_qualification_questions_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_promo_qualification_questions_pkey ON public.portia_promo_qualification_questions USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_qualification_requests.portia_promo_one_active_qualification_request": {
+        "def": "CREATE UNIQUE INDEX portia_promo_one_active_qualification_request ON public.portia_promo_qualification_requests USING btree (nickname_key) WHERE (status = ANY (ARRAY['pending'::text, 'claimed'::text, 'approved'::text, 'testing'::text, 'grading'::text]))",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_qualification_requests.portia_promo_qualification_requests_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_promo_qualification_requests_pkey ON public.portia_promo_qualification_requests USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_requests.portia_promo_one_active_request": {
+        "def": "CREATE UNIQUE INDEX portia_promo_one_active_request ON public.portia_promo_requests USING btree (nickname_key) WHERE (status = ANY (ARRAY['pending'::text, 'claimed'::text, 'assigned'::text, 'awaiting-sheet-change'::text]))",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_requests.portia_promo_requests_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_promo_requests_pkey ON public.portia_promo_requests USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_results.portia_promo_results_history": {
+        "def": "CREATE INDEX portia_promo_results_history ON public.portia_promo_results USING btree (nickname_key, created_at DESC)",
+        "unique": false,
+        "valid": true
+      },
+      "portia_promo_results.portia_promo_results_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_promo_results_pkey ON public.portia_promo_results USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_task_banks.portia_promo_task_banks_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_promo_task_banks_pkey ON public.portia_promo_task_banks USING btree (id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_task_banks.portia_promo_task_banks_target_title_id_key": {
+        "def": "CREATE UNIQUE INDEX portia_promo_task_banks_target_title_id_key ON public.portia_promo_task_banks USING btree (target_title_id)",
+        "unique": true,
+        "valid": true
+      },
+      "portia_promo_task_items.portia_promo_task_items_pkey": {
+        "def": "CREATE UNIQUE INDEX portia_promo_task_items_pkey ON public.portia_promo_task_items USING btree (id)",
+        "unique": true,
+        "valid": true
+      }
+    },
+    "policies": {
+      "public.portia_content:Editors can create PORTIA content": {
+        "check": "( SELECT portia_can_edit() AS portia_can_edit)",
+        "cmd": "a",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": null
+      },
+      "public.portia_content:Editors can read PORTIA content": {
+        "check": null,
+        "cmd": "r",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "( SELECT portia_can_edit() AS portia_can_edit)"
+      },
+      "public.portia_content:Editors can update PORTIA content": {
+        "check": "( SELECT portia_can_edit() AS portia_can_edit)",
+        "cmd": "w",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "( SELECT portia_can_edit() AS portia_can_edit)"
+      },
+      "public.portia_editors:Editors can see their access": {
+        "check": null,
+        "cmd": "r",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "((email = lower(( SELECT (auth.jwt() ->> 'email'::text)))) OR ( SELECT portia_is_owner() AS portia_is_owner))"
+      },
+      "public.portia_editors:Owner can change editor tabs": {
+        "check": "( SELECT portia_is_owner() AS portia_is_owner)",
+        "cmd": "w",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "( SELECT portia_is_owner() AS portia_is_owner)"
+      },
+      "public.portia_editors:Owner can grant editor access": {
+        "check": "( SELECT portia_is_owner() AS portia_is_owner)",
+        "cmd": "a",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": null
+      },
+      "public.portia_editors:Owner can revoke editor access": {
+        "check": null,
+        "cmd": "d",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "( SELECT portia_is_owner() AS portia_is_owner)"
+      },
+      "public.portia_employee_profiles:Editors can create PORTIA employee profiles": {
+        "check": "( SELECT portia_can_edit_tab('employees'::text) AS portia_can_edit_tab)",
+        "cmd": "a",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": null
+      },
+      "public.portia_employee_profiles:Editors can read PORTIA employee profiles": {
+        "check": null,
+        "cmd": "r",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "( SELECT portia_can_edit() AS portia_can_edit)"
+      },
+      "public.portia_employee_profiles:Editors can update PORTIA employee profiles": {
+        "check": "( SELECT portia_can_edit_tab('employees'::text) AS portia_can_edit_tab)",
+        "cmd": "w",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "( SELECT portia_can_edit_tab('employees'::text) AS portia_can_edit_tab)"
+      },
+      "public.portia_manual_employees:Editors can add PORTIA manual employees": {
+        "check": "( SELECT portia_can_edit_tab('employees'::text) AS portia_can_edit_tab)",
+        "cmd": "a",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": null
+      },
+      "public.portia_manual_employees:Editors can edit PORTIA manual employees": {
+        "check": "( SELECT portia_can_edit_tab('employees'::text) AS portia_can_edit_tab)",
+        "cmd": "w",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "( SELECT portia_can_edit_tab('employees'::text) AS portia_can_edit_tab)"
+      },
+      "public.portia_manual_employees:Editors can read PORTIA manual employees": {
+        "check": null,
+        "cmd": "r",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "( SELECT portia_can_edit() AS portia_can_edit)"
+      },
+      "public.portia_manual_employees:Editors can remove PORTIA manual employees": {
+        "check": null,
+        "cmd": "d",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "( SELECT portia_can_edit_tab('employees'::text) AS portia_can_edit_tab)"
+      },
+      "storage.objects:Editors can delete PORTIA media": {
+        "check": null,
+        "cmd": "d",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "((bucket_id = 'portia-media'::text) AND ( SELECT portia_can_edit() AS portia_can_edit))"
+      },
+      "storage.objects:Editors can read PORTIA media": {
+        "check": null,
+        "cmd": "r",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "((bucket_id = 'portia-media'::text) AND ( SELECT portia_can_edit() AS portia_can_edit))"
+      },
+      "storage.objects:Editors can update PORTIA media": {
+        "check": "((bucket_id = 'portia-media'::text) AND ( SELECT portia_can_edit() AS portia_can_edit))",
+        "cmd": "w",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": "((bucket_id = 'portia-media'::text) AND ( SELECT portia_can_edit() AS portia_can_edit))"
+      },
+      "storage.objects:Editors can upload PORTIA media": {
+        "check": "((bucket_id = 'portia-media'::text) AND ( SELECT portia_can_edit() AS portia_can_edit))",
+        "cmd": "a",
+        "permissive": true,
+        "roles": [
+          "authenticated"
+        ],
+        "using": null
+      }
+    },
+    "publications": {},
+    "roles": {
+      "anon": {
+        "bypassrls": false,
+        "member_of": [],
+        "super": false
+      },
+      "authenticated": {
+        "bypassrls": false,
+        "member_of": [],
+        "super": false
+      },
+      "authenticator": {
+        "bypassrls": false,
+        "member_of": [
+          "anon",
+          "authenticated",
+          "service_role"
+        ],
+        "super": false
+      },
+      "service_role": {
+        "bypassrls": true,
+        "member_of": [],
+        "super": false
+      }
+    },
+    "schemas": {
+      "public": {
+        "acl": [
+          "PUBLIC:USAGE",
+          "anon:USAGE",
+          "authenticated:USAGE",
+          "service_role:USAGE"
+        ]
+      },
+      "storage": {
+        "acl": [
+          "anon:USAGE",
+          "authenticated:USAGE",
+          "service_role:USAGE"
+        ]
+      }
+    },
+    "tables": {
+      "public.portia_access_journal": {
+        "acl": [
+          "service_role:INSERT",
+          "service_role:SELECT"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_access_journal_id_seq": {
+        "acl": [
+          "service_role:SELECT",
+          "service_role:USAGE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "S",
+        "rls": false,
+        "viewdef": null
+      },
+      "public.portia_access_people": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_access_requests": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_access_secrets": {
+        "acl": [],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_access_settings": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_content": {
+        "acl": [
+          "authenticated:INSERT",
+          "authenticated:SELECT",
+          "authenticated:UPDATE",
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_editors": {
+        "acl": [
+          "authenticated:DELETE",
+          "authenticated:INSERT",
+          "authenticated:SELECT",
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_employee_profiles": {
+        "acl": [
+          "authenticated:INSERT",
+          "authenticated:SELECT",
+          "authenticated:UPDATE",
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_manual_employees": {
+        "acl": [
+          "authenticated:DELETE",
+          "authenticated:INSERT",
+          "authenticated:SELECT",
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_promo_answers": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_promo_assignment_items": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_promo_assignments": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_promo_attempt_buckets": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_promo_attempt_questions": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_promo_attempts": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_promo_audit_events": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_promo_audit_events_id_seq": {
+        "acl": [
+          "service_role:SELECT",
+          "service_role:UPDATE",
+          "service_role:USAGE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "S",
+        "rls": false,
+        "viewdef": null
+      },
+      "public.portia_promo_device_bindings": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_promo_qualification_banks": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_promo_qualification_options": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_promo_qualification_questions": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_promo_qualification_requests": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_promo_requests": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_promo_results": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_promo_task_banks": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "public.portia_promo_task_items": {
+        "acl": [
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "storage.buckets": {
+        "acl": [
+          "anon:DELETE",
+          "anon:INSERT",
+          "anon:SELECT",
+          "anon:UPDATE",
+          "authenticated:DELETE",
+          "authenticated:INSERT",
+          "authenticated:SELECT",
+          "authenticated:UPDATE",
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      },
+      "storage.objects": {
+        "acl": [
+          "anon:DELETE",
+          "anon:INSERT",
+          "anon:SELECT",
+          "anon:UPDATE",
+          "authenticated:DELETE",
+          "authenticated:INSERT",
+          "authenticated:SELECT",
+          "authenticated:UPDATE",
+          "service_role:DELETE",
+          "service_role:INSERT",
+          "service_role:MAINTAIN",
+          "service_role:REFERENCES",
+          "service_role:SELECT",
+          "service_role:TRIGGER",
+          "service_role:TRUNCATE",
+          "service_role:UPDATE"
+        ],
+        "force_rls": false,
+        "options": null,
+        "relkind": "r",
+        "rls": true,
+        "viewdef": null
+      }
+    },
+    "triggers": {
+      "portia_access_journal.portia_access_journal_append_only": {
+        "def": "CREATE TRIGGER portia_access_journal_append_only BEFORE DELETE OR UPDATE ON public.portia_access_journal FOR EACH ROW EXECUTE FUNCTION portia_access_journal_append_only()",
+        "enabled": "O"
+      },
+      "portia_access_journal.portia_access_journal_no_truncate": {
+        "def": "CREATE TRIGGER portia_access_journal_no_truncate BEFORE TRUNCATE ON public.portia_access_journal FOR EACH STATEMENT EXECUTE FUNCTION portia_access_journal_append_only()",
+        "enabled": "O"
+      },
+      "portia_access_journal.portia_access_journal_prune": {
+        "def": "CREATE TRIGGER portia_access_journal_prune AFTER INSERT ON public.portia_access_journal FOR EACH ROW EXECUTE FUNCTION portia_access_journal_prune()",
+        "enabled": "O"
+      }
+    }
+  }
+}

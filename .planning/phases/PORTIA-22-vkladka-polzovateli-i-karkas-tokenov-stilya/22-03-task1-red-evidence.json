@@ -1,0 +1,10 @@
+{
+  "command": "$env:NODE_NO_WARNINGS='1'; node --experimental-strip-types --test --test-reporter=tap --test-name-pattern=\"email masking is internal and matches the D-05 reference table\" lib/users-sql.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: email masking is internal and matches the D-05 reference table\nnot ok 1 - email masking is internal and matches the D-05 reference table\n  ---\n  duration_ms: 2.6884\n  location: 'C:\\\\Users\\\\User\\\\code\\\\portia-site\\\\lib\\\\users-sql.test.ts:43:1'\n  failureType: 'testCodeFailure'\n  error: 'mask helper must be present'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: true\n  operator: '=='\n  stack: |-\n    TestContext.<anonymous> (file:///C:/Users/User/code/portia-site/lib/users-sql.test.ts:49:10)\n    Test.runInAsyncScope (node:async_hooks:211:14)\n    Test.run (node:internal/test_runner/test:931:25)\n    Test.start (node:internal/test_runner/test:829:17)\n    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 150.3873\n",
+  "targetTest": "email masking is internal and matches the D-05 reference table",
+  "targetFile": "lib/users-sql.test.ts",
+  "expected": "The Phase 22 migration defines the internal immutable portia_access_mask_email helper and its ACL contract.",
+  "actual": "The helper definition is absent from the pre-GREEN migration.",
+  "semanticAssessment": "The target test executed and failed on the planned behavior assertion because the mask helper is absent; there was no import, syntax, fixture, setup, or discovery failure."
+}

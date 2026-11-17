@@ -1,0 +1,186 @@
+{
+  "schema": "phase20-dependency-audit/1",
+  "commit": "8edd3d6c552ce509ae6c6577bd57c798b99d5e47",
+  "capturedAt": "2026-11-15T22:42:58.096Z",
+  "node": "v24.21.0",
+  "lockfileSha256": "b255c0b350a79a6f260c0f9721b25ac5c35f8748446c3735abebe1fb1fee29fa",
+  "packageJsonSha256": "d4fd9021f565c13740274ac14b69458a9a9bb0675f755412f5021eb46d5f1691",
+  "audits": {
+    "production": {
+      "command": "npm.cmd audit --omit=dev --json",
+      "exitCode": 0,
+      "counts": {
+        "info": 0,
+        "low": 0,
+        "moderate": 0,
+        "high": 0,
+        "critical": 0,
+        "total": 0
+      },
+      "findings": []
+    },
+    "full": {
+      "command": "npm.cmd audit --json",
+      "exitCode": 1,
+      "counts": {
+        "info": 0,
+        "low": 0,
+        "moderate": 7,
+        "high": 0,
+        "critical": 0,
+        "total": 7
+      },
+      "findings": [
+        {
+          "id": "via:@typescript-eslint/eslint-plugin",
+          "package": "@typescript-eslint/eslint-plugin",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            "@typescript-eslint/type-utils",
+            "@typescript-eslint/utils"
+          ],
+          "effects": [
+            "typescript-eslint"
+          ],
+          "nodes": [
+            "node_modules/@typescript-eslint/eslint-plugin"
+          ],
+          "path": "@typescript-eslint/eslint-plugin",
+          "range": "6.16.0 - 8.72.2",
+          "fix": "true",
+          "advisory": null
+        },
+        {
+          "id": "via:@typescript-eslint/parser",
+          "package": "@typescript-eslint/parser",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            "@typescript-eslint/typescript-estree"
+          ],
+          "effects": [
+            "typescript-eslint"
+          ],
+          "nodes": [
+            "node_modules/@typescript-eslint/parser"
+          ],
+          "path": "@typescript-eslint/parser",
+          "range": "6.16.0 - 8.72.2",
+          "fix": "true",
+          "advisory": null
+        },
+        {
+          "id": "via:@typescript-eslint/type-utils",
+          "package": "@typescript-eslint/type-utils",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            "@typescript-eslint/typescript-estree",
+            "@typescript-eslint/utils"
+          ],
+          "effects": [
+            "@typescript-eslint/eslint-plugin"
+          ],
+          "nodes": [
+            "node_modules/@typescript-eslint/type-utils"
+          ],
+          "path": "@typescript-eslint/type-utils",
+          "range": "6.16.0 - 8.72.2",
+          "fix": "true",
+          "advisory": null
+        },
+        {
+          "id": "via:@typescript-eslint/typescript-estree",
+          "package": "@typescript-eslint/typescript-estree",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            "minimatch"
+          ],
+          "effects": [
+            "@typescript-eslint/parser",
+            "@typescript-eslint/type-utils",
+            "@typescript-eslint/utils",
+            "typescript-eslint"
+          ],
+          "nodes": [
+            "node_modules/@typescript-eslint/typescript-estree"
+          ],
+          "path": "@typescript-eslint/typescript-estree",
+          "range": "6.16.0 - 8.72.2",
+          "fix": "true",
+          "advisory": null
+        },
+        {
+          "id": "via:@typescript-eslint/utils",
+          "package": "@typescript-eslint/utils",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            "@typescript-eslint/typescript-estree"
+          ],
+          "effects": [
+            "@typescript-eslint/eslint-plugin",
+            "@typescript-eslint/type-utils",
+            "typescript-eslint"
+          ],
+          "nodes": [
+            "node_modules/@typescript-eslint/utils"
+          ],
+          "path": "@typescript-eslint/utils",
+          "range": "6.16.0 - 8.72.2",
+          "fix": "true",
+          "advisory": null
+        },
+        {
+          "id": "GHSA-g3hv-75wg-m249",
+          "package": "minimatch",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            "GHSA-g3hv-75wg-m249"
+          ],
+          "effects": [
+            "@typescript-eslint/typescript-estree"
+          ],
+          "nodes": [
+            "node_modules/@typescript-eslint/typescript-estree/node_modules/minimatch"
+          ],
+          "path": "minimatch",
+          "range": "7.0.0 - 11.0.0",
+          "fix": "true",
+          "advisory": {
+            "source": 1244623,
+            "title": "minimatch has potential denial of service via globparts amplification",
+            "url": "https://github.com/advisories/GHSA-g3hv-75wg-m249",
+            "range": ">=7.0.0 <11.0.1",
+            "cwe": [
+              "CWE-405"
+            ]
+          }
+        },
+        {
+          "id": "via:typescript-eslint",
+          "package": "typescript-eslint",
+          "severity": "moderate",
+          "isDirect": false,
+          "via": [
+            "@typescript-eslint/eslint-plugin",
+            "@typescript-eslint/parser",
+            "@typescript-eslint/typescript-estree",
+            "@typescript-eslint/utils"
+          ],
+          "effects": [],
+          "nodes": [
+            "node_modules/typescript-eslint"
+          ],
+          "path": "typescript-eslint",
+          "range": "<=8.72.2",
+          "fix": "true",
+          "advisory": null
+        }
+      ]
+    }
+  }
+}

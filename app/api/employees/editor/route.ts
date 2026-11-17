@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
+import { closedMessage } from "@/lib/editor-tabs";
 import { noStoreHeaders } from "@/lib/portia-cdn";
 import { loadEmployees } from "@/lib/portia-employees";
 
@@ -13,6 +14,7 @@ export async function GET() {
     const { data } = await supabase.auth.getUser();
     const access = await getEditorAccess(supabase, data.user);
     if (!data.user || !access.canEdit) return Response.json({ error: "Нет доступа к редактору." }, { status: 403, headers: noStoreHeaders });
+    if (!access.openTabs.includes("employees")) return Response.json({ error: closedMessage(["employees"]) }, { status: 403, headers: noStoreHeaders });
 
     const { employees, syncedAt, complete, profilesRead, manualRead } = await loadEmployees(supabase);
     return Response.json({ employees, syncedAt, degraded: !complete, profilesRead, manualRead }, { headers: noStoreHeaders });

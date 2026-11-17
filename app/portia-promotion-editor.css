@@ -1,0 +1,204 @@
+/* Promotion reviewer workspace: keep the window itself scrollable and the
+   request list independently scrollable only when there is room for it. */
+.promotion-editor {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+}
+
+.promotion-editor-workbench {
+  flex: none;
+  min-height: min(460px, 58svh);
+  max-height: none;
+  overflow: visible;
+  align-items: stretch;
+}
+
+.promotion-request-list {
+  max-height: min(620px, 68svh);
+  overflow-y: auto;
+  touch-action: pan-y;
+  scrollbar-gutter: stable;
+}
+
+.promotion-request-detail {
+  overflow: visible;
+  padding: clamp(16px, 2vw, 28px);
+}
+
+.promotion-request-list > button {
+  padding: 10px 14px;
+  gap: 2px;
+}
+
+.promotion-request-list > button:hover,
+.promotion-request-list > button:focus-visible,
+.promotion-bank-list > button:hover,
+.promotion-bank-list > button:focus-visible {
+  background: var(--teal-soft);
+}
+
+.promotion-device-reset {
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+}
+
+/* Keep the reviewer shortcut opposite the request navigation on wide screens. */
+.promotion-requests-toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.promotion-requests-toolbar .promotion-queue-filters { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+.promotion-requests-toolbar .promotion-device-reset { flex: 0 1 360px; margin: 0; }
+.promotion-requests-toolbar .promotion-device-reset label { flex-basis: 150px; }
+.promotion-requests-toolbar .promotion-device-reset button { max-width: 160px; }
+
+.promotion-device-reset label { flex: 0 1 230px; font-size: 10px; }
+.promotion-device-reset button { max-width: 210px; white-space: normal; }
+
+.promotion-editor button:not(:disabled),
+.promotion-bank-workflow button:not(:disabled) { cursor: pointer; }
+.promotion-editor button:disabled,
+.promotion-bank-workflow button:disabled { cursor: not-allowed; opacity: .5; }
+.promotion-editor button[aria-disabled="true"],
+.promotion-bank-workflow button[aria-disabled="true"] { cursor: not-allowed; opacity: .6; }
+.promotion-request-actions > button:not(.primary-control):not(.danger-control),
+.promotion-preview-actions > button:not(.primary-control):not(.danger-control) {
+  border: 1px solid var(--line-bright);
+  border-radius: var(--radius-control);
+  background: rgba(255,255,255,.045);
+  color: inherit;
+}
+.promotion-preview-actions > button { border-radius: var(--radius-control); text-align: center; }
+.promotion-preview-actions > button.primary-control {
+  border: 1px solid var(--line-bright);
+  background: rgba(255,255,255,.045);
+  color: inherit;
+}
+.promotion-request-actions button:not(:disabled):hover,
+.promotion-request-actions button:not(:disabled):focus-visible,
+.promotion-device-reset button:not(:disabled):hover,
+.promotion-device-reset button:not(:disabled):focus-visible,
+.promotion-preview-actions button:not(:disabled):hover,
+.promotion-preview-actions button:not(:disabled):focus-visible {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+.promotion-bank-workflow { display: flex; flex: 1 0 auto; min-width: 0; flex-direction: column; gap: 10px; }
+.promotion-bank-workflow-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+.promotion-bank-workflow-tabs button {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--line-bright);
+  border-radius: var(--radius-tab);
+  background: rgba(255,255,255,.025);
+  color: var(--muted);
+  font: 700 11px/1.3 var(--sans);
+}
+.promotion-bank-workflow-tabs button.active {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+.promotion-bank-workflow-hint, .promotion-bank-capacity {
+  margin: 0;
+  color: var(--muted);
+  font: 400 12px/1.45 var(--doc);
+  overflow-wrap: anywhere;
+}
+.promotion-bank-capacity { align-self: center; }
+.promotion-bank-workflow .promotion-bank-layout {
+  flex: none;
+  min-height: 420px;
+  max-height: none;
+  overflow: visible;
+}
+.promotion-bank-layout[data-mode="create"] .promotion-preview,
+.promotion-bank-layout[data-mode="issue"] .promotion-bank-editor { display: none; }
+.promotion-bank-workflow .promotion-bank-list { max-height: 70svh; overflow-y: auto; }
+.promotion-bank-workflow .promotion-bank-editor,
+.promotion-bank-workflow .promotion-preview { overflow: visible; border-left: 1px solid var(--line); }
+.promotion-bank-layout[data-mode="create"] .promotion-preview-actions { display: none; }
+.promotion-issue-controls { display: grid; gap: 10px; margin: 0 0 16px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-card); }
+.promotion-issue-controls strong { font: 700 14px/1.4 var(--sans); }
+.promotion-issue-controls p { margin: 0; color: var(--muted); font: 400 12px/1.45 var(--doc); }
+.promotion-manual-pool { display: grid; gap: 5px; max-height: 230px; overflow-y: auto; }
+.promotion-manual-pool label { display: flex; align-items: start; gap: 8px; padding: 7px; border: 1px solid var(--line); border-radius: var(--radius-card); font: 400 12px/1.4 var(--doc); }
+.promotion-manual-pool input { flex: none; margin-top: 2px; }
+.promotion-manual-pool span { overflow-wrap: anywhere; }
+.promotion-issue-controls .promotion-preview-actions { display: flex; flex-wrap: wrap; margin: 0; }
+
+.promotion-question-list-heading { display: flex; align-items: end; justify-content: space-between; gap: 10px; margin-top: 16px; }
+.promotion-question-list-heading h3 { margin: 0; font: 700 14px/1.3 var(--sans); }
+.promotion-question-list-heading input { width: min(260px, 100%); min-height: var(--control-height); padding: 8px 16px; border: 1px solid var(--line-bright); border-radius: var(--radius-field); background: rgba(0,0,0,.16); color: inherit; }
+.promotion-bank-editor .promotion-bank-items { margin-top: 8px; }
+.promotion-bank-editor .promotion-bank-items article { display: flex; align-items: center; gap: 10px; padding: 7px 9px; }
+.promotion-bank-editor .promotion-bank-items article > label { flex: 1 1 220px; min-width: 0; align-items: center; }
+.promotion-bank-editor .promotion-bank-items article > label > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.promotion-bank-editor .promotion-bank-items article > div { flex: 0 1 auto; margin-top: 0; justify-content: flex-end; }
+.promotion-bank-editor .promotion-bank-items article > div button { min-height: 34px; padding-inline: 8px; }
+.promotion-bank-editor .promotion-bank-items article.is-inactive { opacity: .65; }
+.promotion-question-form-anchor { scroll-margin-top: 70px; }
+
+/* The root scrollbar must not take or release horizontal space on phones. */
+@media (max-width: 900px) {
+  html { scrollbar-width: none; overscroll-behavior-x: none; }
+  html::-webkit-scrollbar { display: none; }
+  .desktop { overflow-x: clip; }
+}
+
+.swatch.custom { background: var(--teal); }
+
+@media (max-width: 900px) {
+  .desktop, .workspace { width: 100%; max-width: 100%; box-sizing: border-box; }
+  .workspace.mobile-app-open .app-window { width: 100% !important; max-width: 100% !important; box-sizing: border-box; }
+  .promotion-editor { padding: 12px; scrollbar-gutter: auto; }
+  .promotion-editor-workbench, .promotion-bank-workflow .promotion-bank-layout { display: block; min-height: 0; }
+  .promotion-request-list, .promotion-bank-workflow .promotion-bank-list { max-height: none; overflow: visible; border-right: 0; }
+  .promotion-request-detail, .promotion-bank-workflow .promotion-bank-editor, .promotion-bank-workflow .promotion-preview { border-left: 0; }
+  .promotion-device-reset { width: 100%; flex-wrap: wrap; }
+  .promotion-device-reset label { flex: 1 1 180px; }
+  .promotion-device-reset button { max-width: none; }
+  .promotion-requests-toolbar { display: block; }
+  .promotion-requests-toolbar .promotion-queue-filters { margin-bottom: 10px; }
+  .promotion-requests-toolbar .promotion-device-reset { width: 100%; }
+  .promotion-question-list-heading { align-items: stretch; flex-direction: column; }
+  .promotion-question-list-heading input { width: 100%; min-height: var(--tap-target); }
+  .promotion-bank-editor .promotion-bank-items article { align-items: stretch; flex-direction: column; }
+  .promotion-bank-editor .promotion-bank-items article > label { flex-basis: auto; }
+  .promotion-bank-workflow-tabs button { min-height: var(--tap-target); }
+}
+
+/* Phase 26 (UI-06, D-04): развёрнутое окно, только на ПК — список запросов и банков 280px рядом с деталью,
+   карточки банка и сведения заявки сеткой R1 (до 4 колонок по var(--card-min)). Обычное окно и телефон не затронуты. */
+@media (width > 900px) {
+  .app-window.is-maximized .promotion-editor-workbench, .app-window.is-maximized .promotion-bank-workflow .promotion-bank-layout { grid-template-columns: 280px minmax(0, 1fr); }
+  .app-window.is-maximized .promotion-bank-items, .app-window.is-maximized .promotion-request-detail dl { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 24px) / 4)), 1fr)); }
+}
+
+/* Phase 26 (26-08, UI-04, D-12, D-13): «Повышение» в общей раскладке вкладок редактора. Ветки стоят в слоте nav липкой панели
+   (.etab-bar из шва), очередь запросов и банки — «список — деталь» (.etab-body) со списком 280px на ПК; вкладки работы с банком
+   (.promotion-bank-workflow-tabs) — семейство вкладок по ширине подписи. Счётчик ветки — плашка .tab-count, как у «Сводки». */
+.etab-nav > .promotion-editor-branches { margin: 0; }
+.promotion-editor-branches .tab-count { margin-left: 0; border-color: var(--warning); background: transparent; }
+@media (width > 900px) {
+  /* Sticky отсчитывается от внутреннего края прокрутки, поэтому верхнего отступа нет и панель прилегает к краю (как у .content-editor). */
+  .promotion-editor:has(> .etab-bar) { padding-top: 0; }
+  .promotion-editor-workbench.etab-body, .promotion-bank-workflow .promotion-bank-layout.etab-body { grid-template-columns: 280px minmax(0, 1fr); }
+}
+/* quick 261117-bi1 (R2): на ПК «Отзыв привязки по нику» стоит в полосе справа от ЗАПРОСЫ / ЗАДАНИЯ / КВАЛИФИКАЦИЯ — одной строкой, без рамки.
+   Форма — потомок nav веток (тест D-13b закрепляет nav как первый узел слота), узкое окно переносит её на вторую строку полосы. */
+@media (width > 900px) {
+  .promotion-editor-branches:has(> .promotion-device-reset) { flex: 1 1 auto; flex-wrap: wrap; row-gap: 4px; min-width: 0; }
+  /* Подпись — только для экранного диктора, подсказка в самом поле: форма — один ряд по центру кнопок веток (снимок владельца 2026-11-17). */
+  .promotion-editor-branches > .promotion-device-reset { flex: none; align-self: center; margin: 0 0 0 auto; padding: 0; border: 0; background: transparent; width: auto; align-items: center; }
+  .promotion-editor-branches > .promotion-device-reset label { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; font-size: 10px; white-space: nowrap; }
+  .promotion-editor-branches > .promotion-device-reset input { flex: 0 1 180px; width: 180px; min-width: 0; min-height: 40px; }
+  .promotion-editor-branches > .promotion-device-reset button { flex: none; max-width: none; min-height: 40px; white-space: nowrap; box-shadow: none; }
+}
+/* Телефон: прокручивает страница; clip вместо auto, чтобы панель держалась под системной полосой 48px, как у остальных вкладок. */
+@media (max-width: 900px) {
+  .promotion-editor:has(> .etab-bar) { overflow: clip; }
+}

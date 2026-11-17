@@ -1,0 +1,11 @@
+{
+  "runId": "mw1loqa9_c9451c80",
+  "refHash": "01d085e7b9f0",
+  "commit": "92123f3",
+  "teardownAt": "2026-11-04T08:59Z",
+  "before": {"promo":5,"editors":2,"storage":0,"content":0,"authUsers":2,"banks":4,"buckets":2,"attempts":1,"answers":5},
+  "deleted": {"run":{"promo":16,"editors":2,"storage":0,"content":0,"authUsers":2},"banks":4,"buckets":2},
+  "residual": {"promo":0,"editors":0,"storage":0,"content":0,"authUsers":0,"banks":0,"buckets":0,"attempts":0,"answers":0},
+  "errors": [],
+  "legacyWindow": false
+}

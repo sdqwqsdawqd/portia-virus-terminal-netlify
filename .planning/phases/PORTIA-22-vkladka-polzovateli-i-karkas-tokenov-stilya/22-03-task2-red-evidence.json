@@ -1,0 +1,10 @@
+{
+  "command": "$env:NODE_NO_WARNINGS='1'; node --experimental-strip-types --test --test-reporter=tap --test-name-pattern=\"Europe/Moscow formatter is device-independent and adds a different year\" lib/users-view.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: Europe/Moscow formatter is device-independent and adds a different year\nnot ok 1 - Europe/Moscow formatter is device-independent and adds a different year\n  ---\n  duration_ms: 2.36\n  location: 'C:\\\\Users\\\\User\\\\code\\\\portia-site\\\\lib\\\\users-view.test.ts:56:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    formatMoscow must exist\n    + actual - expected\n    \n    + 'undefined'\n    - 'function'\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 'function'\n  actual: 'undefined'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///C:/Users/User/code/portia-site/lib/users-view.test.ts:58:10)\n    async Test.run (node:internal/test_runner/test:932:9)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 125.0531\n",
+  "targetTest": "Europe/Moscow formatter is device-independent and adds a different year",
+  "targetFile": "lib/users-view.test.ts",
+  "expected": "A pure formatMoscow helper formats numeric parts in the fixed Europe/Moscow zone.",
+  "actual": "The helper module does not exist before GREEN.",
+  "semanticAssessment": "The target executed and failed on the intended missing behavior assertion; there was no syntax, import, fixture, setup, or discovery failure."
+}

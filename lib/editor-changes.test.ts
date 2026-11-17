@@ -1,9 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { changedDossierTabs, changedSections, dossierTabs, sectionOfKey } from "./editor-changes.ts";
-import { defaultPortiaContent, type PortiaContent } from "./portia-content.ts";
+import { changedDossierTabs, changedSections, deniedSections, dossierTabs, editorSections, revertSections, sectionOfKey, unclassifiedTextKeys, type EditorSection } from "./editor-changes.ts";
+import { portiaTextKey, type PortiaContent } from "./portia-content.ts";
+import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
+import { normalizePortiaContent } from "./portia-content-normalize.ts";
+import { contentRefusal } from "./editor-tabs.ts";
 
-const fixture = (): PortiaContent => structuredClone(defaultPortiaContent);
+const fixture = (): PortiaContent => structuredClone(portiaContentFixture);
 
 test("identical copies have no changed sections", () => {
   assert.deepEqual(changedSections(fixture(), fixture()), []);
@@ -49,7 +52,7 @@ test("toggling an assistant flag marks the assistant section", () => {
 });
 
 test("every content key except formattedText belongs to a section", () => {
-  for (const key of Object.keys(defaultPortiaContent)) {
+  for (const key of Object.keys(portiaContentFixture)) {
     if (key === "formattedText") continue;
     assert.notEqual(sectionOfKey(key), null, key);
   }
@@ -143,6 +146,341 @@ test("a recycled virus is looked up in recycledViruses and moving it alone chang
   assert.deepEqual(changedDossierTabs(baseline, draft, virus.id), ["text"]);
 });
 
+test("changedDossierTabs treats a missing recycledViruses as empty", () => {
+  const old = (): PortiaContent => {
+    const content = fixture();
+    delete (content as Partial<PortiaContent>).recycledViruses;
+    return content;
+  };
+  const draft = old();
+  draft.viruses[0].physiology = "X";
+  assert.deepEqual(changedDossierTabs(old(), draft, draft.viruses[0].id), ["text"]);
+});
+
 test("a virus id in neither draft list has no changed tabs", () => {
   assert.deepEqual(changedDossierTabs(fixture(), fixture(), "nope"), []);
+});
+
+// PERM-04 (Phase 12): which closed sections a save changes.
+const moveToBin = (content: PortiaContent, index = 0) => {
+  const [virus] = content.viruses.splice(index, 1);
+  content.recycledViruses.push(virus);
+  content.recycleOrder.push(`virus:${virus.id}`);
+  return virus;
+};
+const withBinVirus = (): PortiaContent => {
+  const content = fixture();
+  moveToBin(content);
+  return content;
+};
+
+test("info-block formatting keys count as an info change", () => {
+  const draft = fixture();
+  draft.formattedText["info-block:abc:text"] = richText;
+  assert.deepEqual(changedSections(fixture(), draft), ["info"]);
+  assert.deepEqual(unclassifiedTextKeys(fixture(), draft), []);
+  assert.deepEqual(deniedSections(fixture(), draft, ["info"]), ["info"]);
+});
+
+const guideCard = (title: string) => ({ id: "c1", title, cover: "", blocks: [{ id: "b", type: "text" as const, text: "t" }] });
+const withGuide = (): PortiaContent => {
+  const content = fixture();
+  content.guideSections = [{ id: "g1", title: "Раздел", photo: "", cards: [guideCard("Карточка")] }];
+  content.formattedText[portiaTextKey.guideBlock("b")] = richText;
+  return content;
+};
+
+test("a guide formattedText entry marks the guide section", () => {
+  const draft = fixture();
+  draft.formattedText[portiaTextKey.guideBlock("b")] = richText;
+  assert.deepEqual(changedSections(fixture(), draft), ["guide"]);
+  assert.deepEqual(unclassifiedTextKeys(fixture(), draft), []);
+  assert.deepEqual(deniedSections(fixture(), draft, ["guide"]), ["guide"]);
+  const renamed = withGuide();
+  renamed.guideSections[0].cards[0].title = "Другая";
+  assert.deepEqual(changedSections(withGuide(), renamed), ["guide"]);
+});
+
+test("closing the guide reverts guide sections and guide formatting only", () => {
+  const baseline = fixture();
+  const draft = withGuide();
+  draft.infoSections[0].title = "T";
+  const result = revertSections(baseline, draft, ["guide"]);
+  assert.deepEqual(result.guideSections, []);
+  assert.equal(portiaTextKey.guideBlock("b") in result.formattedText, false);
+  assert.equal(result.infoSections[0].title, "T");
+  assert.deepEqual(deniedSections(baseline, result, ["guide"]), []);
+});
+
+test("every portiaTextKey builder output classifies into a section", () => {
+  const id = fixture().viruses[0].id;
+  const cases: [string, EditorSection][] = [
+    [portiaTextKey.virus(id, "external"), "viruses"],
+    [portiaTextKey.mutation(id, 0), "viruses"],
+    [portiaTextKey.info("s"), "info"],
+    [portiaTextKey.infoBlock("b"), "info"],
+    [portiaTextKey.guideBlock("b"), "guide"],
+    [portiaTextKey.broadcast("n"), "broadcasts"],
+    [portiaTextKey.recycle("f"), "recycle"],
+    [portiaTextKey.searchRecommendations, "search"],
+    [portiaTextKey.assistantAdvice, "assistant"],
+    [portiaTextKey.assistantOffended, "assistant"],
+    [portiaTextKey.assistantIdle, "assistant"],
+    [portiaTextKey.assistantActivity, "assistant"],
+  ];
+  for (const [key, section] of cases) {
+    const draft = fixture();
+    draft.formattedText[key] = richText;
+    assert.deepEqual(changedSections(fixture(), draft), [section], key);
+    assert.deepEqual(unclassifiedTextKeys(fixture(), draft), [], key);
+  }
+});
+
+test("unclassifiedTextKeys lists changed keys that belong to no section", () => {
+  const draft = fixture();
+  draft.formattedText["zzz:1"] = richText;
+  assert.deepEqual(unclassifiedTextKeys(fixture(), draft), ["zzz:1"]);
+  const baseline = fixture();
+  baseline.formattedText["zzz:1"] = richText;
+  assert.deepEqual(unclassifiedTextKeys(baseline, structuredClone(baseline)), []);
+});
+
+test("a broadcast title edit is denied only when broadcasts is closed", () => {
+  const baseline = fixture();
+  baseline.broadcasts.push({ id: "b1", type: "news", title: "a", body: "", published: false, important: false, startsAt: "", endsAt: "", conditions: "" });
+  const draft = structuredClone(baseline);
+  draft.broadcasts[0].title = "b";
+  assert.deepEqual(deniedSections(baseline, draft, ["broadcasts"]), ["broadcasts"]);
+  assert.deepEqual(deniedSections(baseline, draft, ["info"]), []);
+});
+
+test("D-13: moving a live virus to the bin is a viruses edit, not a bin edit", () => {
+  const draft = fixture();
+  moveToBin(draft);
+  assert.deepEqual(deniedSections(fixture(), draft, ["recycle"]), []);
+  assert.deepEqual(deniedSections(fixture(), draft, ["viruses"]), ["viruses"]);
+  assert.deepEqual(deniedSections(fixture(), draft, ["viruses", "recycle"]), ["viruses"]);
+
+  const withText = structuredClone(draft);
+  withText.formattedText[`virus:${withText.recycledViruses[0].id}:external`] = richText;
+  assert.deepEqual(deniedSections(fixture(), withText, ["recycle"]), []);
+});
+
+test("D-13: every other bin change stays a bin edit", () => {
+  const closed: EditorSection[] = ["recycle"];
+  const edits: [string, PortiaContent, (draft: PortiaContent) => void][] = [
+    ["a new record that was never live", fixture(), (draft) => {
+      draft.recycledViruses.push({ ...structuredClone(draft.viruses[0]), id: "vir-new" });
+      draft.recycleOrder.push("virus:vir-new");
+    }],
+    ["editing a bin virus", withBinVirus(), (draft) => { draft.recycledViruses[0].name = "X"; }],
+    ["editing a recycle file", fixture(), (draft) => { draft.recycleFiles[0].name = "X"; }],
+    ["deleting a bin entry", withBinVirus(), (draft) => { draft.recycledViruses = []; draft.recycleOrder.pop(); }],
+    ["reversing recycleOrder", fixture(), (draft) => { draft.recycleOrder.reverse(); }],
+    ["restoring a bin virus", withBinVirus(), (draft) => {
+      draft.viruses.push(draft.recycledViruses.pop()!);
+      draft.recycleOrder.pop();
+    }],
+    ["a move plus a recycle file edit", fixture(), (draft) => { moveToBin(draft); draft.recycleFiles[0].name = "X"; }],
+  ];
+  for (const [name, baseline, edit] of edits) {
+    const draft = structuredClone(baseline);
+    edit(draft);
+    assert.deepEqual(deniedSections(baseline, draft, closed), ["recycle"], name);
+  }
+});
+
+test("a copy without recycledViruses or recycleOrder is treated as empty lists", () => {
+  const old = (): PortiaContent => {
+    const content = fixture();
+    delete (content as Partial<PortiaContent>).recycledViruses;
+    delete (content as Partial<PortiaContent>).recycleOrder;
+    return content;
+  };
+  const draft = old();
+  draft.viruses[0].name = "X";
+  assert.deepEqual(deniedSections(old(), draft, ["recycle"]), []);
+  assert.deepEqual(deniedSections(old(), draft, ["viruses"]), ["viruses"]);
+});
+
+test("normalizePortiaContent is idempotent, so a normalized compare shows no phantom difference", () => {
+  const rich = fixture();
+  rich.infoSections[0].subsections.push({
+    id: "sub-1",
+    title: "T",
+    blocks: [{ id: "blk-photo", type: "photo", url: "/x.png" }, { id: "blk-text", type: "text", text: "hello" }],
+  });
+  rich.formattedText[portiaTextKey.infoBlock("blk-text")] = richText;
+  rich.broadcasts.push({ id: "b1", type: "quest", title: "a", body: "b", published: true, important: false, startsAt: "", endsAt: "", conditions: "" });
+  rich.formattedText[portiaTextKey.broadcast("b1")] = richText;
+  moveToBin(rich);
+  for (const content of [portiaContentFixture, rich]) {
+    const once = normalizePortiaContent(content)!;
+    const twice = normalizePortiaContent(once)!;
+    assert.deepEqual(twice, once);
+    assert.deepEqual(deniedSections(once, twice, editorSections), []);
+  }
+});
+
+// PERM-03 (Phase 12): putting closed sections back to the stored copy.
+const idsIn = (content: PortiaContent, id: string) => [
+  content.viruses.some((virus) => virus.id === id),
+  (content.recycledViruses ?? []).some((virus) => virus.id === id),
+].filter(Boolean).length;
+
+test("revertSections puts the named sections back and leaves the rest, without mutating", () => {
+  const baseline = fixture();
+  baseline.broadcasts.push({ id: "b1", type: "news", title: "a", body: "", published: false, important: false, startsAt: "", endsAt: "", conditions: "" });
+  baseline.formattedText[portiaTextKey.broadcast("b1")] = richText;
+  baseline.formattedText[portiaTextKey.broadcast("gone")] = richText;
+  const draft = structuredClone(baseline);
+  draft.broadcasts[0].title = "b";
+  draft.viruses[0].name = "RENAMED";
+  draft.formattedText[portiaTextKey.broadcast("new")] = richText;
+  delete draft.formattedText[portiaTextKey.broadcast("gone")];
+  const before = [JSON.stringify(baseline), JSON.stringify(draft)];
+
+  const result = revertSections(baseline, draft, ["broadcasts"]);
+  assert.deepEqual(result.broadcasts, baseline.broadcasts);
+  assert.equal(result.formattedText[portiaTextKey.broadcast("new")], undefined);
+  assert.deepEqual(result.formattedText[portiaTextKey.broadcast("gone")], richText);
+  assert.equal(result.viruses[0].name, "RENAMED");
+  assert.deepEqual([JSON.stringify(baseline), JSON.stringify(draft)], before);
+});
+
+test("revertSections with no sections returns an equal copy", () => {
+  const draft = fixture();
+  draft.viruses[0].name = "X";
+  const result = revertSections(fixture(), draft, []);
+  assert.deepEqual(result, draft);
+  assert.notEqual(result, draft);
+});
+
+test("D-13: a closed bin keeps a live to bin move and reverts other bin edits", () => {
+  const baseline = withBinVirus();
+  const draft = structuredClone(baseline);
+  const moved = moveToBin(draft);
+  draft.recycledViruses[0].name = "EDITED BIN ENTRY";
+  const result = revertSections(baseline, draft, ["recycle"]);
+  assert.equal(idsIn(result, moved.id), 1);
+  assert.deepEqual(result.recycledViruses.map((virus) => virus.id), [baseline.recycledViruses[0].id, moved.id]);
+  assert.deepEqual(result.recycledViruses[0], baseline.recycledViruses[0]);
+  assert.ok(result.recycleOrder.includes(`virus:${moved.id}`));
+  assert.deepEqual(deniedSections(baseline, result, ["recycle"]), []);
+});
+
+test("a closed viruses section sends a moved virus back to the live list only", () => {
+  const draft = fixture();
+  const moved = moveToBin(draft);
+  const result = revertSections(fixture(), draft, ["viruses"]);
+  assert.equal(result.viruses.some((virus) => virus.id === moved.id), true);
+  assert.equal(result.recycledViruses.some((virus) => virus.id === moved.id), false);
+  assert.equal(result.recycleOrder.includes(`virus:${moved.id}`), false);
+});
+
+test("a closed viruses section sends a restored virus back to the bin with its order key", () => {
+  const baseline = withBinVirus();
+  const draft = structuredClone(baseline);
+  const restored = draft.recycledViruses.pop()!;
+  draft.viruses.push(restored);
+  draft.recycleOrder = draft.recycleOrder.filter((key) => key !== `virus:${restored.id}`);
+  const result = revertSections(baseline, draft, ["viruses"]);
+  assert.equal(idsIn(result, restored.id), 1);
+  assert.equal(result.recycledViruses.some((virus) => virus.id === restored.id), true);
+  assert.ok(result.recycleOrder.includes(`virus:${restored.id}`));
+});
+
+test("a closed bin leaves a restored virus in the bin only", () => {
+  const baseline = withBinVirus();
+  const draft = structuredClone(baseline);
+  const restored = draft.recycledViruses.pop()!;
+  draft.viruses.push(restored);
+  const result = revertSections(baseline, draft, ["recycle"]);
+  assert.equal(idsIn(result, restored.id), 1);
+  assert.equal(result.recycledViruses.some((virus) => virus.id === restored.id), true);
+});
+
+test("deleting a bin entry in an open bin survives a closed viruses section", () => {
+  const baseline = withBinVirus();
+  const draft = structuredClone(baseline);
+  const gone = draft.recycledViruses.pop()!;
+  draft.recycleOrder = draft.recycleOrder.filter((key) => key !== `virus:${gone.id}`);
+  const result = revertSections(baseline, draft, ["viruses"]);
+  assert.equal(idsIn(result, gone.id), 0);
+});
+
+test("a stored virus id ends up in exactly one list for every closed set, and the result is never denied", () => {
+  const baseline = withBinVirus();
+  baseline.formattedText[portiaTextKey.infoBlock("b")] = richText;
+  const draft = structuredClone(baseline);
+  const [live0, live1] = draft.viruses;
+  const binned = baseline.recycledViruses[0];
+  live0.name = "RENAMED";
+  draft.formattedText[portiaTextKey.virus(live0.id, "external")] = richText;
+  moveToBin(draft, 1);
+  draft.formattedText[portiaTextKey.virus(live1.id, "physiology")] = richText;
+  draft.viruses.push(draft.recycledViruses.splice(0, 1)[0]);
+  draft.recycleOrder = draft.recycleOrder.filter((key) => key !== `virus:${binned.id}`);
+  draft.formattedText[portiaTextKey.virus(binned.id, "external")] = richText;
+  draft.infoSections[0].title = "T";
+  draft.formattedText[portiaTextKey.infoBlock("b")] = { runs: [{ text: "y" }] } as never;
+  draft.guideSections.push({ id: "g9", title: "G", photo: "", cards: [] });
+  draft.broadcasts.push({ id: "b9", type: "news", title: "n", body: "", published: false, important: false, startsAt: "", endsAt: "", conditions: "" });
+  draft.recycleFiles[0].name = "X";
+  draft.recycleOrder.reverse();
+  draft.searchRecommendations.push("ЕЩЁ");
+  draft.assistantIdleEnabled = !draft.assistantIdleEnabled;
+  assert.deepEqual(changedSections(baseline, draft), editorSections);
+
+  const storedIds = [...baseline.viruses, ...baseline.recycledViruses].map((virus) => virus.id);
+  for (let mask = 0; mask < 1 << editorSections.length; mask += 1) {
+    const closed = editorSections.filter((_, index) => mask & (1 << index));
+    const result = revertSections(baseline, draft, closed);
+    for (const id of storedIds) assert.equal(idsIn(result, id), 1, `${id} with closed ${closed.join(",")}`);
+    assert.deepEqual(deniedSections(baseline, result, closed), [], `closed ${closed.join(",")}`);
+    assert.deepEqual(unclassifiedTextKeys(baseline, result), []);
+  }
+});
+
+// Phase 24, O-2: the level of «Устав» is edited in the «Информация» tab, so `appLevels` belongs to the info section.
+test("LVL-03 / O-2 sectionOfKey puts appLevels into the info section", () => {
+  assert.equal(sectionOfKey("appLevels"), "info");
+});
+
+test("LVL-03 / O-2 a change of appLevels marks only the info section", () => {
+  const draft = fixture();
+  draft.appLevels = { charter: 3 };
+  assert.deepEqual(changedSections(fixture(), draft), ["info"]);
+  const same = fixture();
+  same.appLevels = { charter: 3 };
+  assert.deepEqual(changedSections(same, structuredClone(same)), []);
+});
+
+test("LVL-03 / O-2 T-24-08 an editor with «Информация» closed is refused a change of appLevels", () => {
+  const baseline = fixture();
+  baseline.appLevels = { charter: 2 };
+  const draft = structuredClone(baseline);
+  draft.appLevels = { charter: 3 };
+  const closedInfo = editorSections.filter((id) => id !== "info");
+  assert.deepEqual(contentRefusal(baseline, draft, closedInfo), {
+    status: 403, error: "Раздел «Информация» для вас закрыт.", code: "section-closed", sections: ["info"],
+  });
+  assert.equal(contentRefusal(baseline, draft, editorSections), null, "with the tab open the same change is allowed");
+});
+
+test("LVL-03 / O-2 revertSections of info puts the stored appLevels back, and removes it when it was not stored", () => {
+  const baseline = fixture();
+  baseline.appLevels = { charter: 2 };
+  const draft = structuredClone(baseline);
+  draft.appLevels = { charter: 5 };
+  assert.deepEqual(revertSections(baseline, draft, ["info"]).appLevels, { charter: 2 });
+  assert.deepEqual(draft.appLevels, { charter: 5 }, "the draft is not mutated");
+
+  const bare = fixture();
+  const withLevel = structuredClone(bare);
+  withLevel.appLevels = { charter: 4 };
+  const reverted = revertSections(bare, withLevel, ["info"]);
+  assert.equal("appLevels" in reverted, false);
+  assert.deepEqual(changedSections(bare, reverted), []);
+  assert.deepEqual(revertSections(bare, withLevel, ["guide"]).appLevels, { charter: 4 }, "another section leaves it alone");
 });

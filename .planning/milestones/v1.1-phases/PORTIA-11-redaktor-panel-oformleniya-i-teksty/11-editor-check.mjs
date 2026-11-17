@@ -1,0 +1,1278 @@
+// Usage: node 11-editor-check.mjs --check mark|panel|savechip|sections|table|multiselect|phonefit|all [--url http://localhost:3124]
+// `all` runs the seven checks in that order in one Edge session and prints { check: "all", ok, results: { <name>: { ok, reasons } } }.
+// Why: Phase 11 has no DOM test runner, so headless Edge drives the production build. Inside the browser it launches,
+// GET /api/access is answered {canEdit: true} and GET /api/content is served from fixtures; every non-GET request to /api/*
+// is blocked and fails the check (nothing is ever saved, no login is needed). The only exception is the savechip fake-save
+// step: while current.fakeSave is set, a PUT /api/content is answered locally (Fetch.fulfillRequest after 800 ms, revision + 1)
+// and counted in fakeSaves; it is NEVER forwarded to the server (no Fetch.continueRequest for a non-GET anywhere).
+// The stub is a CDP interception only: no app or server code knows about it.
+// Prints one JSON verdict { check, ok, reasons } (booleans, numbers, fixture labels, exception text only).
+// Exit 0 ok, 1 not ok, 2 Edge or server unreachable or unknown check.
+import { spawn, execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+const args = process.argv.slice(2);
+const flag = (name, fallback) => { const i = args.indexOf(`--${name}`); return i >= 0 && args[i + 1] && !args[i + 1].startsWith("--") ? args[i + 1] : fallback; };
+const URL_ = flag("url", "http://localhost:3124");
+const CHECK = flag("check", "");
+const EDGE = process.env.EDGE_PATH || "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
+const PORT = 9335;
+const PROFILE = path.join(os.tmpdir(), "portia-editor-check");
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+class Cdp {
+  constructor(ws) {
+    this.ws = ws; this.id = 0; this.pending = new Map(); this.listeners = new Map();
+    ws.addEventListener("message", (event) => {
+      const message = JSON.parse(event.data);
+      if (message.id && this.pending.has(message.id)) {
+        const { resolve, reject } = this.pending.get(message.id); this.pending.delete(message.id);
+        message.error ? reject(new Error(message.error.message)) : resolve(message.result);
+      } else if (message.method) (this.listeners.get(message.method) || []).forEach((fn) => fn(message.params));
+    });
+  }
+  send(method, params = {}) {
+    const id = ++this.id;
+    return new Promise((resolve, reject) => { this.pending.set(id, { resolve, reject }); this.ws.send(JSON.stringify({ id, method, params })); });
+  }
+  on(method, fn) { this.listeners.set(method, [...(this.listeners.get(method) || []), fn]); }
+  once(method, ms = 30000) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`timeout waiting for ${method}`)), ms);
+      this.on(method, (params) => { clearTimeout(timer); resolve(params); });
+    });
+  }
+  eval(expression) { return this.send("Runtime.evaluate", { expression, returnByValue: true }).then((r) => r.result.value); }
+}
+
+const reasons = [];
+const fixture = (overrides = {}) => ({ viruses: [], infoSections: [], broadcasts: [], searchRecommendations: [], ...overrides });
+let current = { content: fixture(), revision: 1, fakeSave: false };
+let fakeSaves = 0;
+let savedBody = ""; // the body of the last fake save, so a check can see what a save would have sent
+const serve = (content, revision, fakeSave = false) => { current = { content, revision, fakeSave }; };
+
+/** One virus with plain text in both lead fields; the editor opens on it. */
+const editorFixture = (overrides = {}) => fixture({
+  viruses: [{ id: "v1", name: "Альфа", code: "A-1", status: "ИЗУЧЕН", external: "Первое слово второе третье", physiology: "Четвёртое пятое шестое" }],
+  infoSections: [], broadcasts: [], searchRecommendations: [],
+  ...overrides,
+});
+
+/** One virus with two lead fields of six distinct words each, for the Ctrl multi-selection check. */
+const multiFixture = () => fixture({
+  viruses: [{ id: "v1", name: "Альфа", code: "A-1", status: "ИЗУЧЕН", external: "один два три четыре пять шесть", physiology: "семь восемь девять десять одиннадцать двенадцать" }],
+});
+
+const LONG = "Оченьдлинноеназвание".repeat(10); // 200 unbroken characters
+const LONG_VIRUS = "Вирус".repeat(30); // 150 unbroken characters
+/** Info sections 1..count, each with one subsection and one text block; section 3 has the long name. */
+const sectionsFixture = (overrides = {}) => {
+  const count = overrides.sections ?? 6;
+  const infoSections = Array.from({ length: count }, (_, i) => ({
+    id: `s${i + 1}`, title: i === 2 ? LONG : `Раздел ${i + 1}`, body: `Текст раздела ${i + 1}`,
+    subsections: (overrides.noSubsections ? [] : [{ id: `u${i + 1}`, title: `Подраздел ${i + 1}`, blocks: [{ id: `b${i + 1}`, type: "text", text: `Блок ${i + 1}` }] }]),
+  }));
+  const viruses = [
+    { id: "v1", name: "Альфа", code: "A-1", status: "ИЗУЧЕН", external: "", physiology: "" },
+    { id: "v2", name: LONG_VIRUS, code: "A-2", status: "ИЗУЧЕН", external: "", physiology: "" },
+    ...Array.from({ length: (overrides.viruses ?? 6) - 2 }, (_, i) => ({ id: `v${i + 3}`, name: `Вирус ${i + 3}`, code: `A-${i + 3}`, status: "ИЗУЧЕН", external: "", physiology: "" })),
+  ];
+  const broadcasts = Array.from({ length: overrides.news ?? 6 }, (_, i) => ({ id: `n${i + 1}`, type: "news", title: `Новость ${i + 1}`, body: "", published: true, important: false, startsAt: "", endsAt: "", conditions: "" }));
+  const archived = (id, name) => ({ id, name, code: "R", status: "ИЗУЧЕН", external: "", physiology: "" });
+  const file = (id, name) => ({ id, name, location: "", kind: "text", content: "", image: "", virusId: "" });
+  return fixture({
+    ...editorFixture(), viruses, infoSections, broadcasts,
+    recycledViruses: [archived("r1", "Архив 1"), archived("r2", "Архив 2"), archived("r3", "Архив 3")],
+    recycleFiles: [file("f1", "Файл 1"), file("f2", "Файл 2")],
+    recycleOrder: ["virus:r1", "file:f1", "virus:r2", "file:f2", "virus:r3"],
+  });
+};
+
+/** The sections fixture with long text: section 1 has a long unbroken string and long prose in its body, subsection title and text block. */
+const fixtureWithLongText = () => {
+  const f = sectionsFixture();
+  const longText = "Очень длинный абзац без пробелов: " + "Сверхдлинноеслово".repeat(12) + " и обычный текст " + "словослово ".repeat(40);
+  f.infoSections[0] = { ...f.infoSections[0], body: longText, subsections: [{ ...f.infoSections[0].subsections[0], title: "Подраздел " + "длинный".repeat(15), blocks: [{ id: "b1", type: "text", text: longText }] }] };
+  return f;
+};
+
+const json = { "content-type": "application/json", "cache-control": "no-store" };
+function installStub(cdp) {
+  cdp.on("Runtime.exceptionThrown", (p) => reasons.push(`page exception: ${String(p.exceptionDetails?.exception?.description ?? p.exceptionDetails?.text).slice(0, 120)}`));
+  cdp.on("Page.javascriptDialogOpening", () => { cdp.send("Page.handleJavaScriptDialog", { accept: true }).catch(() => {}); });
+  const fulfil = (p, body) => cdp.send("Fetch.fulfillRequest", {
+    requestId: p.requestId, responseCode: 200,
+    responseHeaders: Object.entries(json).map(([name, value]) => ({ name, value })),
+    body: Buffer.from(JSON.stringify(body)).toString("base64"),
+  }).catch(() => {});
+  const block = (p) => cdp.send("Fetch.failRequest", { requestId: p.requestId, errorReason: "BlockedByClient" }).catch(() => {});
+  cdp.on("Fetch.requestPaused", (p) => {
+    const { pathname } = new URL(p.request.url);
+    if (p.request.method === "PUT" && pathname === "/api/content" && current.fakeSave) { fakeSaves += 1; savedBody = p.request.postData ?? Buffer.concat((p.request.postDataEntries ?? []).map((e) => Buffer.from(e.bytes ?? "", "base64"))).toString("utf8"); setTimeout(() => fulfil(p, { revision: current.revision + 1 }), 800); return; }
+    if (p.request.method !== "GET") { reasons.push(`write blocked: ${p.request.method} ${pathname}`); block(p); return; }
+    if (pathname === "/api/access") fulfil(p, { canEdit: true, canManageEditors: false });
+    else if (pathname === "/api/content") fulfil(p, { content: current.content, revision: current.revision, updatedAt: null });
+    else block(p);
+  });
+}
+
+const waitFor = async (cdp, expression, ms = 5000) => {
+  for (let waited = 0; waited <= ms; waited += 100) { if (await cdp.eval(expression)) return true; await sleep(100); }
+  return false;
+};
+const load = async (cdp) => {
+  const loaded = cdp.once("Page.loadEventFired");
+  await cdp.send("Page.navigate", { url: URL_ }); await loaded;
+  await waitFor(cdp, `(() => { const e = document.querySelector(".desktop-icons"); return !!e && e.getBoundingClientRect().width > 0; })()`, 10000);
+};
+const click = (cdp, selector) => cdp.eval(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return false; e.click(); return true; })()`);
+const clickText = (cdp, selector, text) => cdp.eval(`(() => { const e = [...document.querySelectorAll(${JSON.stringify(selector)})].find((n) => n.textContent.trim() === ${JSON.stringify(text)}); if (!e) return false; e.click(); return true; })()`);
+
+async function openEditor(cdp) {
+  if (!(await click(cdp, '[data-shortcut="settings"]'))) { reasons.push("openEditor: settings shortcut missing"); return false; }
+  if (!(await waitFor(cdp, `(() => { const b = document.querySelector(".content-control-actions button"); return !!b && !b.disabled; })()`, 5000))) { reasons.push("openEditor: editor button not enabled"); return false; }
+  await click(cdp, ".content-control-actions button");
+  if (!(await waitFor(cdp, `!!document.querySelector(".content-editor")`, 8000))) { reasons.push("openEditor: .content-editor did not appear"); return false; }
+  return true;
+}
+
+/** Scrolls the index-th match of the selector to the centre and returns the word's left, right and vertical middle (null when absent). */
+const wordBox = (cdp, fieldSelector, index, word) => cdp.eval(`(() => {
+  const field = document.querySelectorAll(${JSON.stringify(fieldSelector)})[${index}];
+  if (!field) return null;
+  field.scrollIntoView({ block: "center" });
+  const walker = document.createTreeWalker(field, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const at = node.data.indexOf(${JSON.stringify(word)});
+    if (at < 0) continue;
+    const range = document.createRange(); range.setStart(node, at); range.setEnd(node, at + ${JSON.stringify(word)}.length);
+    const rect = range.getBoundingClientRect();
+    return { left: rect.left, right: rect.right, y: rect.top + rect.height / 2 };
+  }
+  return null;
+})()`);
+
+/** A real Control key press around fn, as a user holding the key: keyDown first (so the page sees the key event), keyUp after. */
+async function holdCtrl(cdp, modifiers, fn) {
+  if (!(modifiers & 2)) return fn();
+  await cdp.send("Input.dispatchKeyEvent", { type: "rawKeyDown", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17, modifiers: 2 });
+  try { return await fn(); } finally { await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key: "Control", code: "ControlLeft", windowsVirtualKeyCode: 17, modifiers: 0 }); }
+}
+async function mouseSelect(cdp, box, modifiers = 0) {
+  const at = (type, x, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x, y: box.y, button: "left", modifiers, ...extra });
+  await holdCtrl(cdp, modifiers, async () => {
+    await at("mouseMoved", box.left + 1, { button: "none" });
+    await at("mousePressed", box.left + 1, { buttons: 1, clickCount: 1 });
+    await at("mouseMoved", (box.left + box.right) / 2, { buttons: 1 });
+    await at("mouseMoved", box.right - 1, { buttons: 1 });
+    await at("mouseReleased", box.right - 1, { buttons: 0, clickCount: 1 });
+  });
+}
+/** A real mouse click at the middle of the first match: pointer, mouse and focus events fire, unlike element.click(). */
+async function realClick(cdp, selector) {
+  const c = await cdp.eval(`(() => { const e = document.querySelector(${JSON.stringify(selector)}); if (!e) return null; e.scrollIntoView({ block: "nearest" }); const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+  if (!c) return false;
+  const at = (type, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x: c.x, y: c.y, button: "left", ...extra });
+  await at("mouseMoved", { button: "none" }); await at("mousePressed", { buttons: 1, clickCount: 1 }); await at("mouseReleased", { buttons: 0, clickCount: 1 });
+  return true;
+}
+const panelKey = "portia-format-panel-v1";
+const panelRect = (cdp) => cdp.eval(`(() => { const e = document.querySelector(".floating-text-format"); if (!e) return null; const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; })()`);
+/** A point on the panel header (8px below its top edge, so it can still be grabbed when the taskbar covers the rest) away from its buttons: fraction 0 is its left end, 1 its right end; "left"/"right" are the outermost grabbable points. */
+const headerPoint = (cdp, fraction = 0.15) => cdp.eval(`(() => { const e = document.querySelector(".floating-text-format > header"); if (!e) return null; const r = e.getBoundingClientRect(); const f = ${JSON.stringify(fraction)}; const x = f === "left" ? r.left + 5 : f === "right" ? r.right - 46 : r.left + 20 + (r.width - 120) * f; return { x, y: r.top + 8 }; })()`);
+
+const closePanel = async (cdp) => { await click(cdp, '.floating-text-format [aria-label="Закрыть панель оформления"]'); await waitFor(cdp, `!document.querySelector(".floating-text-format")`, 2000); };
+const viewportSize = (cdp) => cdp.eval(`({ w: document.documentElement.clientWidth, h: document.documentElement.clientHeight })`); // the viewport differs a little between loads (scrollbars)
+const forgetPlace = (cdp) => cdp.eval(`localStorage.removeItem(${JSON.stringify(panelKey)})`);
+const key = (cdp, name, code, modifiers = 0) => ["keyDown", "keyUp"].reduce((chain, type) => chain.then(() => cdp.send("Input.dispatchKeyEvent", { type, key: name, code: name, windowsVirtualKeyCode: code, modifiers })), Promise.resolve());
+const ctrlZ = async (cdp) => { for (const type of ["keyDown", "keyUp"]) await cdp.send("Input.dispatchKeyEvent", { type, key: "z", code: "KeyZ", windowsVirtualKeyCode: 90, modifiers: 2 }); await sleep(150); };
+const windowBox = (cdp) => cdp.eval(`(() => { const r = document.querySelector(".editor-window").getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom }; })()`);
+
+/** Describe tab, «второе» selected with the mouse, ✎ clicked, waits for the panel. */
+let opens = 0;
+async function openPanel(cdp) {
+  opens += 1;
+  await clickText(cdp, ".dossier-tabs button", "Описание");
+  const lead = '.formatted-rich-input[data-area="lead"]';
+  if (!(await waitFor(cdp, `!!document.querySelector(${JSON.stringify(lead)})`, 3000))) { reasons.push(`openPanel #${opens}: no lead field`); return false; }
+  await cdp.eval("getSelection().removeAllRanges()"); // a mouse press inside a selected word starts a text drag instead of a new selection
+  await wordBox(cdp, lead, 0, "второе"); await sleep(500); // the scroll into view may be smooth, so measure again once it has settled
+  const box = await wordBox(cdp, lead, 0, "второе");
+  if (!box) { reasons.push(`openPanel #${opens}: word «второе» not found`); return false; }
+  await mouseSelect(cdp, box);
+  await click(cdp, ".global-format-launch > button");
+  if (!(await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000))) { reasons.push(`openPanel #${opens}: the format panel did not open (${await cdp.eval(`(() => { const b = document.querySelector(".global-format-launch > button"); const a = document.elementFromPoint(${box.left + 1}, ${box.y}); return "launch disabled=" + b?.disabled + " expanded=" + b?.getAttribute("aria-expanded") + " selection=" + JSON.stringify(String(getSelection())) + " at word: " + (a?.className || a?.tagName) + " box " + ${Math.round(box.left)} + "," + ${Math.round(box.y)}; })()`)})`); return false; }
+  await sleep(150);
+  return true;
+}
+
+/** Mouse pressed at from, six intermediate moves with the button down, released at to. */
+async function drag(cdp, from, to) {
+  const at = (type, x, y, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x, y, button: "left", ...extra });
+  await at("mouseMoved", from.x, from.y, { button: "none" });
+  await at("mousePressed", from.x, from.y, { buttons: 1, clickCount: 1 });
+  for (let step = 1; step <= 6; step += 1) await at("mouseMoved", from.x + ((to.x - from.x) * step) / 6, from.y + ((to.y - from.y) * step) / 6, { buttons: 1 });
+  await at("mouseReleased", to.x, to.y, { buttons: 0, clickCount: 1 });
+  await sleep(100);
+}
+const phone = async (cdp, width = 390, height = 844) => {
+  await cdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 2, mobile: true });
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: true });
+};
+const desktop = async (cdp) => {
+  await cdp.send("Emulation.clearDeviceMetricsOverride");
+  await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
+};
+
+const checks = {
+  async mark(cdp) {
+    serve(editorFixture(), 1);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    await clickText(cdp, ".dossier-tabs button", "Описание");
+    // (a) a mouse-selected word is painted through the Custom Highlight API with exactly that word
+    const lead = '.formatted-rich-input[data-area="lead"]';
+    if (!(await waitFor(cdp, `!!document.querySelector(${JSON.stringify(lead)})`, 3000))) { reasons.push("(a) no lead field"); return; }
+    const box = await wordBox(cdp, lead, 0, "второе");
+    if (!box) { reasons.push("(a) word «второе» not found in the first lead field"); return; }
+    await mouseSelect(cdp, box);
+    await click(cdp, ".global-format-launch > button");
+    if (!(await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000))) { reasons.push("(a) the format panel did not open"); return; }
+    const painted = await cdp.eval(`(() => { const h = CSS.highlights.get("portia-format"); return h ? [...h].map(String) : null; })()`);
+    if (JSON.stringify(painted) !== JSON.stringify(["второе"])) reasons.push(`(a) painted ${JSON.stringify(painted)}, expected ["второе"]`);
+    // (b) the served stylesheet holds exactly one mark rule, an underline that follows the accent and has no fill
+    const rules = await cdp.eval(`(() => {
+      const found = [];
+      for (const sheet of document.styleSheets) {
+        let list; try { list = sheet.cssRules; } catch { continue; }
+        for (const rule of list) if (rule.selectorText && rule.selectorText.includes("::highlight(portia-format)")) found.push(rule.cssText);
+      }
+      return found;
+    })()`);
+    if (rules.length !== 1) reasons.push(`(b) ${rules.length} ::highlight(portia-format) rules, expected 1`);
+    else {
+      if (!rules[0].includes("underline")) reasons.push("(b) the mark rule has no underline");
+      if (!rules[0].includes("accent-chroma")) reasons.push("(b) the mark rule does not follow --accent-chroma");
+      if (rules[0].includes("background")) reasons.push("(b) the mark rule has a background");
+    }
+    // (c) the field head carries only its label and the hint is neutral (A11Y-03)
+    const heads = await cdp.eval(`document.querySelectorAll(".formatted-text-field-head small").length`);
+    if (heads !== 0) reasons.push(`(c) ${heads} empty <small> in the field heads`);
+    const hint = await cdp.eval(`document.querySelector(".formatted-text-field-hint")?.textContent ?? null`);
+    if (hint !== "Текст и GIF можно использовать вместе. Не добавляйте лишних элементов.") reasons.push(`(c) hint reads ${JSON.stringify(hint)}`);
+  },
+  async savechip(cdp) {
+    serve(editorFixture(), 1);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    const chip = '.editor-save-chip';
+    const chipInfo = () => cdp.eval(`(() => { const w = document.querySelector(".editor-save-chip"); const b = w?.querySelector(":scope > button"); if (!b) return null; const r = b.getBoundingClientRect(); const win = document.querySelector(".editor-window").getBoundingClientRect(); return { text: b.textContent, label: b.getAttribute("aria-label"), expanded: b.getAttribute("aria-expanded"), border: getComputedStyle(b).borderTopColor, blocked: w.hasAttribute("data-blocked"), rect: { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }, win: { left: win.left, right: win.right, top: win.top, bottom: win.bottom } }; })()`);
+    const popover = () => cdp.eval(`(() => { const p = document.querySelector(".editor-save-popover"); if (!p) return null; const r = p.getBoundingClientRect(); return { text: p.textContent, buttons: [...p.querySelectorAll("button")].map((b) => b.textContent.trim() || b.getAttribute("aria-label")), visible: r.width > 0 && r.height > 0 }; })()`);
+    const typeX = async () => { // «Х» into the virus name (first input of the form)
+      await cdp.eval(`(() => { const i = document.querySelector(".virus-editor-form input"); i.scrollIntoView({ block: "center" }); i.focus(); })()`);
+      await cdp.send("Input.insertText", { text: "Х" });
+      await sleep(200);
+    };
+    // (a) a clean draft has no chip and exactly one polite live region
+    if (await cdp.eval(`!!document.querySelector(${JSON.stringify(chip)})`)) reasons.push("(a) a chip is shown for a clean draft");
+    const live = await cdp.eval(`document.querySelectorAll('.content-editor [role="status"][aria-live="polite"]').length`);
+    if (live !== 1) reasons.push(`(a) ${live} polite live regions in the editor, expected 1`);
+    // (b) one edit: the chip counts 1 and is amber
+    await typeX();
+    let info = await chipInfo();
+    if (!info) { reasons.push("(b) no chip after an edit"); return; }
+    if (info.text !== "1") reasons.push(`(b) chip text "${info.text}", expected 1`);
+    if (info.label !== "Не сохранено разделов: 1") reasons.push(`(b) aria-label "${info.label}"`);
+    if (info.border !== "rgb(239, 184, 78)") reasons.push(`(b) chip border ${info.border}, expected rgb(239, 184, 78)`);
+    // (c) it sits inside the editor window and is small
+    const { rect: r, win } = info;
+    if (!(r.left >= win.left && r.right <= win.right && r.top >= win.top && r.bottom <= win.bottom)) reasons.push(`(c) chip ${JSON.stringify(r)} is outside the editor window ${JSON.stringify(win)}`);
+    if (!(r.height <= 44 && r.width <= 64)) reasons.push(`(c) chip is ${r.width}x${r.height}, expected at most 64x44`);
+    // (d) a click opens the list with the three actions
+    const open = async () => { await cdp.eval(`document.querySelector(${JSON.stringify(`${chip} > button`)}).focus()`); if ((await chipInfo()).expanded !== "true") await click(cdp, `${chip} > button`); await sleep(150); }; // a real tap also focuses the button
+    await open();
+    let pop = await popover();
+    if (!pop?.visible) reasons.push("(d) the popover is not visible after a click");
+    else {
+      if (!pop.text.includes("НЕ СОХРАНЕНО")) reasons.push("(d) the popover has no «НЕ СОХРАНЕНО» title");
+      if (!pop.text.includes("База вирусов")) reasons.push("(d) the popover does not list «База вирусов»");
+      for (const name of ["↶", "ОТМЕНИТЬ", "СОХРАНИТЬ"]) if (!pop.buttons.includes(name)) reasons.push(`(d) button ${name} missing: ${JSON.stringify(pop.buttons)}`);
+    }
+    if ((await chipInfo()).expanded !== "true") reasons.push("(d) aria-expanded is not true");
+    // (e) Escape closes it and returns focus to the chip button
+    await key(cdp, "Escape", 27);
+    if (await popover()) reasons.push("(e) the popover is still open after Escape");
+    if (!(await cdp.eval(`document.activeElement === document.querySelector(${JSON.stringify(`${chip} > button`)})`))) reasons.push("(e) focus did not return to the chip button");
+    // (f) ОТМЕНИТЬ asks first; «НЕ ОТМЕНЯТЬ» keeps the draft
+    await open();
+    await clickText(cdp, ".editor-save-popover button", "ОТМЕНИТЬ");
+    if (!(await waitFor(cdp, `!!document.querySelector("dialog.portia-dialog[open]")`, 2000))) reasons.push("(f) no discard dialog after ОТМЕНИТЬ");
+    await clickText(cdp, "dialog.portia-dialog[open] button", "НЕ ОТМЕНЯТЬ");
+    if (!(await waitFor(cdp, `!document.querySelector("dialog.portia-dialog[open]")`, 2000))) reasons.push("(f) the dialog did not close");
+    if ((await chipInfo())?.text !== "1") reasons.push("(f) the chip lost its count after НЕ ОТМЕНЯТЬ");
+    // (g) a pointer press outside closes the popover
+    await cdp.eval(`document.activeElement?.blur()`);
+    await open();
+    if (!(await popover())) reasons.push("(g) the popover did not reopen");
+    await cdp.eval(`document.querySelector(".editor-header").dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }))`);
+    await sleep(150);
+    if (await popover()) reasons.push("(g) the popover is still open after a press on the header");
+    // (h) a save the server would refuse (quest ends before it starts) turns the chip red and the reason jumps to the date
+    serve(editorFixture({ broadcasts: [{ id: "b1", type: "quest", title: "Квест", body: "", published: false, important: false, startsAt: "2026-10-20", endsAt: "2026-10-10", conditions: "" }] }), 2); // a new revision each time: the page caches content by revision
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    await typeX();
+    info = await chipInfo();
+    if (!info) reasons.push("(h) no chip with a blocked quest");
+    else {
+      if (!info.blocked) reasons.push("(h) the chip has no data-blocked");
+      if (!info.text.startsWith("!")) reasons.push(`(h) chip text "${info.text}" does not start with «!»`);
+      if (info.border !== "rgb(213, 84, 73)") reasons.push(`(h) chip border ${info.border}, expected rgb(213, 84, 73)`);
+      await open();
+      if (await cdp.eval(`!![...document.querySelectorAll(".editor-save-popover button")].find((b) => b.textContent.trim() === "СОХРАНИТЬ" && !b.disabled)`)) reasons.push("(h) СОХРАНИТЬ is enabled while the quest dates are wrong");
+      if (!(await click(cdp, ".editor-save-popover .editor-save-fix"))) reasons.push("(h) no .editor-save-fix in the popover");
+      else if (!(await waitFor(cdp, `document.activeElement?.matches("[data-broadcast-ends]")`, 3000))) reasons.push("(h) the date field did not get focus");
+    }
+    // (i) a save shows … then ✓ then no chip; the PUT is answered locally and counted
+    serve(editorFixture(), 3, true);
+    fakeSaves = 0;
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    await typeX();
+    await open();
+    await clickText(cdp, ".editor-save-popover button", "СОХРАНИТЬ");
+    if (!(await waitFor(cdp, `document.querySelector(".editor-save-chip > button")?.textContent === "…"`, 400))) reasons.push(`(i) the chip did not show … within 400 ms (${(await chipInfo())?.text})`);
+    if (!(await waitFor(cdp, `document.querySelector(".editor-save-chip > button")?.textContent === "✓"`, 2000))) reasons.push(`(i) the chip did not show ✓ within 2 s (${(await chipInfo())?.text})`);
+    if (!(await waitFor(cdp, `!document.querySelector(".editor-save-chip")`, 4000))) reasons.push("(i) the chip is still there 4 s after the save");
+    if (fakeSaves !== 1) reasons.push(`(i) fakeSaves is ${fakeSaves}, expected 1`);
+    serve(editorFixture(), 10);
+    // (j)-(l) phone stacking at two sizes: chip, format sheet, bottom nav and the ✎ button never overlap
+    const hit = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    const boxes = () => cdp.eval(`(() => { const box = (e) => { if (!e) return null; const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom, width: r.width, height: r.height }; }; return { chip: box(document.querySelector(".editor-save-chip > button")), sheet: box(document.querySelector(".floating-text-format")), launch: box(document.querySelector(".global-format-launch > button")), w: innerWidth, h: innerHeight }; })()`);
+    const noOverlap = (label, b) => {
+      if (!b.chip) { reasons.push(`${label} no chip`); return; }
+      const nav = { left: 0, right: b.w, top: b.h - 44, bottom: b.h };
+      if (hit(b.chip, nav)) reasons.push(`${label} the chip overlaps the bottom nav`);
+      if (b.sheet && hit(b.chip, b.sheet)) reasons.push(`${label} the chip overlaps the format sheet`);
+      if (b.launch && hit(b.chip, b.launch)) reasons.push(`${label} the chip overlaps the ✎ button`);
+    };
+    for (const [w, h] of [[390, 844], [360, 640]]) {
+      const at = `${w}x${h}`;
+      await phone(cdp, w, h);
+      await load(cdp);
+      if (!(await openEditor(cdp))) { await desktop(cdp); return; }
+      await click(cdp, ".editor-record-row > button:last-child");
+      await sleep(300);
+      await typeX();
+      let b = await boxes();
+      if (!b.chip) { reasons.push(`(j) ${at}: no chip`); continue; }
+      if (Math.abs(b.chip.bottom - (b.h - 52)) > 1) reasons.push(`(j) ${at}: chip bottom ${b.chip.bottom}, expected ${b.h - 52}`);
+      if (Math.abs(b.chip.right - (b.w - 54)) > 1) reasons.push(`(j) ${at}: chip right ${b.chip.right}, expected ${b.w - 54}`);
+      if (b.chip.width < 43.5 || b.chip.height < 43.5) reasons.push(`(j) ${at}: chip is ${b.chip.width}x${b.chip.height}, expected at least 44x44`);
+      noOverlap(`(j) ${at}:`, b);
+      // (k) with the sheet open the chip sits 8px above it
+      await clickText(cdp, ".dossier-tabs button", "Описание");
+      await waitFor(cdp, `!!document.querySelector('.formatted-rich-input[data-area="lead"]')`, 3000);
+      await cdp.eval(`document.querySelector('.formatted-rich-input[data-area="lead"]').focus()`);
+      await click(cdp, ".global-format-launch > button");
+      if (!(await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000))) { reasons.push(`(k) ${at}: the sheet did not open`); continue; }
+      await sleep(250);
+      b = await boxes();
+      if (!b.chip || !b.sheet) { reasons.push(`(k) ${at}: chip or sheet missing`); continue; }
+      if (!(b.chip.bottom <= b.sheet.top - 7)) reasons.push(`(k) ${at}: chip bottom ${b.chip.bottom} is not 7px above the sheet top ${b.sheet.top}`);
+      noOverlap(`(k) ${at}:`, b);
+      // (l) folded, the chip sits 96px above the bottom
+      await click(cdp, "[data-sheet-toggle]"); await sleep(250);
+      b = await boxes();
+      if (!b.chip) { reasons.push(`(l) ${at}: no chip`); continue; }
+      if (Math.abs(b.chip.bottom - (b.h - 96)) > 1) reasons.push(`(l) ${at}: chip bottom ${b.chip.bottom}, expected ${b.h - 96}`);
+      noOverlap(`(l) ${at}:`, b);
+    }
+    await desktop(cdp);
+  },
+  async sections(cdp) {
+    serve(sectionsFixture(), 20);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    const top = '.flat-editor-form > .nested-editor-card';
+    const tocCount = `document.querySelectorAll("nav.editor-toc ol button").length`;
+    const toggle = (n) => `${top}:nth-of-type(${n}) > .nested-editor-head .nested-editor-toggle`;
+    // (a) on entry every top-level card is collapsed to its header
+    await clickText(cdp, ".editor-tabs button", "Информация");
+    if (!(await waitFor(cdp, `document.querySelectorAll(${JSON.stringify(top)}).length === 6`, 3000))) { reasons.push("(a) the info tab did not show 6 section cards"); return; }
+    const a = await cdp.eval(`(() => ({ bodies: [...document.querySelectorAll(${JSON.stringify(top + " > .nested-editor-body")})].map((b) => b.hidden && getComputedStyle(b).display === "none"), toggles: [...document.querySelectorAll(${JSON.stringify(top + " > .nested-editor-head .nested-editor-toggle")})].map((b) => b.getAttribute("aria-expanded")) }))()`);
+    if (a.bodies.length !== 6 || a.bodies.some((hidden) => !hidden)) reasons.push(`(a) bodies hidden: ${JSON.stringify(a.bodies)}`);
+    if (a.toggles.length !== 6 || a.toggles.some((v) => v !== "false")) reasons.push(`(a) aria-expanded: ${JSON.stringify(a.toggles)}`);
+    // (c) the 200-character name is one line with «…», the full name in title, and never reaches «Удалить» or the card edge
+    const c = await cdp.eval(`(() => {
+      const card = document.querySelectorAll(${JSON.stringify(top)})[2];
+      const head = card.querySelector(":scope > .nested-editor-head");
+      const span = head.querySelector(".nested-editor-title");
+      const del = head.querySelector(".nested-editor-actions button");
+      const s = span.getBoundingClientRect(), d = del.getBoundingClientRect(), h = head.getBoundingClientRect(), k = card.getBoundingClientRect();
+      return { over: span.scrollWidth > span.clientWidth, title: span.title, overlap: s.left < d.right && d.left < s.right && s.top < d.bottom && d.top < s.bottom, headRight: h.right, cardRight: k.right, delVisible: d.width > 0 };
+    })()`);
+    if (!c.over) reasons.push("(c) the long name is not cut (scrollWidth <= clientWidth)");
+    if (c.title !== LONG) reasons.push("(c) the title attribute is not the full name");
+    if (c.overlap) reasons.push("(c) the name overlaps «Удалить»");
+    if (!c.delVisible) reasons.push("(c) «Удалить» is not visible");
+    if (c.headRight > c.cardRight + 0.5) reasons.push(`(c) the head (${c.headRight}) sticks out of the card (${c.cardRight})`);
+    // (d) a click opens the section, another closes it
+    const body1 = `document.querySelectorAll(${JSON.stringify(top + " > .nested-editor-body")})[0].hidden`;
+    await click(cdp, toggle(1));
+    if (await cdp.eval(body1)) reasons.push("(d) the first click did not show the body");
+    await click(cdp, toggle(1));
+    if (!(await cdp.eval(body1))) reasons.push("(d) the second click did not hide the body");
+    // (b) the TOC lists sections and subsections; one click expands the section and brings it to the top
+    const tocItems = await cdp.eval(tocCount);
+    if (tocItems !== 12) reasons.push(`(b) ${tocItems} TOC items, expected 12`);
+    await click(cdp, "nav.editor-toc .editor-toc-bar button");
+    await clickText(cdp, "nav.editor-toc ol button", "Раздел 4");
+    const body4 = `document.querySelectorAll(${JSON.stringify(top + " > .nested-editor-body")})[3].hidden`;
+    if (await cdp.eval(body4)) reasons.push("(b) section 4 is still folded after its TOC entry");
+    if ((await cdp.eval(`document.querySelector(${JSON.stringify(toggle(4))}).getAttribute("aria-expanded")`)) !== "true") reasons.push("(b) section 4's toggle is not aria-expanded");
+    const placed = await waitFor(cdp, `(() => { const c = document.querySelectorAll(${JSON.stringify(top)})[3].getBoundingClientRect(); const e = document.querySelector(".content-editor").getBoundingClientRect(); return c.top >= e.top && c.top <= e.top + 120; })()`, 1500);
+    if (!placed) reasons.push(`(b) section 4 did not reach the top of the editor: ${await cdp.eval(`(() => { const c = document.querySelectorAll(${JSON.stringify(top)})[3].getBoundingClientRect(); const e = document.querySelector(".content-editor").getBoundingClientRect(); return Math.round(c.top - e.top); })()`)}px below it`);
+    // (e) РАЗВЕРНУТЬ ВСЕ opens every body, СВЕРНУТЬ ВСЕ folds every body
+    const hiddenCount = () => cdp.eval(`[...document.querySelectorAll(".nested-editor-body")].filter((b) => b.hidden).length`);
+    await clickText(cdp, "nav.editor-toc .editor-toc-bar button", "РАЗВЕРНУТЬ ВСЕ");
+    if ((await hiddenCount()) !== 0) reasons.push(`(e) ${await hiddenCount()} bodies still folded after РАЗВЕРНУТЬ ВСЕ`);
+    await clickText(cdp, "nav.editor-toc .editor-toc-bar button", "СВЕРНУТЬ ВСЕ");
+    const total = await cdp.eval(`document.querySelectorAll(".nested-editor-body").length`);
+    if ((await hiddenCount()) !== total) reasons.push(`(e) ${total - await hiddenCount()} bodies still open after СВЕРНУТЬ ВСЕ`);
+    // (g) an expanded card is shown folded while it is dragged and the drag lands on the right row
+    const titles = () => cdp.eval(`[...document.querySelectorAll(${JSON.stringify(top + " > .nested-editor-head .nested-editor-title")})].map((e) => e.textContent)`);
+    await click(cdp, toggle(2));
+    await cdp.eval(`(() => { const h = document.querySelectorAll(${JSON.stringify(top)})[1].querySelector(":scope > .nested-editor-head .order-drag-handle"); h.scrollIntoView({ block: "center" }); const r = h.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    await sleep(300);
+    const grab = await cdp.eval(`(() => { const h = document.querySelectorAll(${JSON.stringify(top)})[1].querySelector(":scope > .nested-editor-head .order-drag-handle"); const r = h.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    const at = (type, x, y, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x, y, button: "left", ...extra });
+    await at("mouseMoved", grab.x, grab.y, { button: "none" });
+    await at("mousePressed", grab.x, grab.y, { buttons: 1, clickCount: 1 });
+    await sleep(250);
+    const folded = await cdp.eval(`(() => { const c = document.querySelectorAll(${JSON.stringify(top)})[1]; return { display: getComputedStyle(c.querySelector(":scope > .nested-editor-body")).display, dragging: !!c.querySelector(':scope > .nested-editor-head .order-drag-handle[data-dragging="true"]') }; })()`);
+    if (!folded.dragging) reasons.push("(g) the drag did not start");
+    if (folded.display !== "none") reasons.push(`(g) the dragged card body is "${folded.display}" during the drag, expected none`);
+    const third = await cdp.eval(`(() => { const r = document.querySelectorAll(${JSON.stringify(top)})[2].getBoundingClientRect(); return { top: r.top, height: r.height }; })()`);
+    const to = { x: grab.x, y: third.top + third.height * 0.8 };
+    for (let step = 1; step <= 6; step += 1) await at("mouseMoved", grab.x, grab.y + ((to.y - grab.y) * step) / 6, { buttons: 1 });
+    await at("mouseReleased", to.x, to.y, { buttons: 0, clickCount: 1 });
+    await sleep(300);
+    const order = await titles();
+    if (order[2] !== "Раздел 2") reasons.push(`(g) the dragged section is not third: ${JSON.stringify(order.map((t) => t?.slice(0, 12)))}`);
+    // (f) a section made with the add button opens expanded with its title field in view
+    await clickText(cdp, ".flat-editor-form > button", "+ ДОБАВИТЬ РАЗДЕЛ");
+    await waitFor(cdp, `document.querySelectorAll(${JSON.stringify(top)}).length === 7`, 2000);
+    const added = await cdp.eval(`(() => { const cards = document.querySelectorAll(${JSON.stringify(top)}); const c = cards[cards.length - 1]; const input = c?.querySelector(":scope > .nested-editor-body input"); const r = input?.getBoundingClientRect(); return { count: cards.length, expanded: c?.querySelector(":scope > .nested-editor-head .nested-editor-toggle")?.getAttribute("aria-expanded"), visible: !!r && r.width > 0 && r.height > 0 }; })()`);
+    if (added.count !== 7) reasons.push(`(f) ${added.count} section cards after the add, expected 7`);
+    if (added.expanded !== "true") reasons.push(`(f) the new section is aria-expanded ${added.expanded}`);
+    if (!added.visible) reasons.push("(f) the new section's title input is not visible");
+    // (i) a 150-character virus name stays inside the aside as one line with «…»
+    serve(sectionsFixture(), 21);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    await waitFor(cdp, `document.querySelectorAll(".editor-record-row").length === 6`, 3000);
+    const v = await cdp.eval(`(() => { const s = [...document.querySelectorAll(".editor-record-list strong")].find((e) => e.textContent === ${JSON.stringify(LONG_VIRUS)}); if (!s) return null; const a = document.querySelector(".editor-record-list").getBoundingClientRect(); return { over: s.scrollWidth > s.clientWidth, title: s.title, right: s.getBoundingClientRect().right, asideRight: a.right }; })()`);
+    if (!v) reasons.push("(i) the long virus is not listed");
+    else {
+      if (!v.over) reasons.push("(i) the long virus name is not cut");
+      if (v.title !== LONG_VIRUS) reasons.push("(i) the virus name has no full-name title");
+      if (v.right > v.asideRight + 0.5) reasons.push(`(i) the name (${v.right}) sticks out of the aside (${v.asideRight})`);
+    }
+    // (o) the virus list gets the same TOC (no fold buttons); an entry opens that record and the rows stay one line
+    const virusToc = await cdp.eval(`(() => ({ items: document.querySelectorAll(".editor-record-list nav.editor-toc ol button").length, fold: [...document.querySelectorAll(".editor-record-list nav.editor-toc button")].some((b) => /ВСЕ/.test(b.textContent)) }))()`);
+    if (virusToc.items !== 6) reasons.push(`(o) ${virusToc.items} virus TOC items, expected 6`);
+    if (virusToc.fold) reasons.push("(o) the virus TOC has fold buttons");
+    await click(cdp, ".editor-record-list nav.editor-toc .editor-toc-bar button");
+    await clickText(cdp, ".editor-record-list nav.editor-toc ol button", "Вирус 5");
+    const fifth = await cdp.eval(`(() => { const row = document.querySelectorAll(".editor-record-row")[4]; return { active: row.querySelector(":scope > button:last-child").classList.contains("active"), white: getComputedStyle(row.querySelector("strong")).whiteSpace }; })()`);
+    if (!fifth.active) reasons.push("(o) the 5th virus row is not active after its TOC entry");
+    if (fifth.white !== "nowrap") reasons.push(`(o) the row name wraps (white-space ${fifth.white})`);
+    // (p) Корзина: 5 entries, the 4th entry opens the 4th row
+    await clickText(cdp, ".editor-tabs button", "Корзина");
+    await waitFor(cdp, `document.querySelectorAll(".editor-record-row").length === 5`, 3000);
+    const recycleItems = await cdp.eval(tocCount);
+    if (recycleItems !== 5) reasons.push(`(p) ${recycleItems} Корзина TOC items, expected 5`);
+    await click(cdp, ".editor-record-list nav.editor-toc .editor-toc-bar button");
+    await clickText(cdp, ".editor-record-list nav.editor-toc ol button", "Файл 2");
+    const fourth = await cdp.eval(`document.getElementById("card-file:f2")?.querySelector(":scope > button:last-child")?.classList.contains("active") ?? null`);
+    if (fourth !== true) reasons.push(`(p) the 4th Корзина row is not active after its TOC entry (${fourth})`);
+    // (m) Сводка cards are folded and keep «Удалить» in sight
+    await clickText(cdp, ".editor-tabs button", "Сводка");
+    await waitFor(cdp, `document.querySelectorAll("[data-broadcast-id]").length === 6`, 3000);
+    const m = await cdp.eval(`(() => { const cards = [...document.querySelectorAll("[data-broadcast-id]")]; const del = cards[0]?.querySelector(":scope > .nested-editor-head .nested-editor-actions button")?.getBoundingClientRect(); return { count: cards.length, folded: cards.every((c) => c.querySelector(":scope > .nested-editor-body").hidden), delVisible: !!del && del.width > 0 }; })()`);
+    if (m.count !== 6 || !m.folded) reasons.push(`(m) Сводка cards: ${m.count}, all folded ${m.folded}`);
+    if (!m.delVisible) reasons.push("(m) «Удалить» of the first card is not visible");
+    // (h) Сводка: a TOC with 6 items; the 5th entry opens that card
+    const newsToc = await cdp.eval(tocCount);
+    if (newsToc !== 6) reasons.push(`(h) ${newsToc} Сводка TOC items, expected 6`);
+    await click(cdp, "nav.editor-toc .editor-toc-bar button");
+    await clickText(cdp, "nav.editor-toc ol button", "Новость 5");
+    if (await cdp.eval(`document.querySelector('[data-broadcast-id="n5"] > .nested-editor-body').hidden`)) reasons.push("(h) news card 5 is still folded after its TOC entry");
+    // (k) no sections: the empty line names the real button
+    serve(sectionsFixture({ sections: 0 }), 22);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    await clickText(cdp, ".editor-tabs button", "Информация");
+    const empty = await cdp.eval(`(() => { const e = document.querySelector(".flat-editor-form .editor-empty"); return e ? e.textContent : null; })()`);
+    if (!empty || !empty.includes("Разделов пока нет") || !empty.includes("+ ДОБАВИТЬ РАЗДЕЛ")) reasons.push(`(k) empty line: ${JSON.stringify(empty)}`);
+    if (await cdp.eval(`!!document.querySelector("nav.editor-toc")`)) reasons.push("(k) a TOC is shown for an empty list");
+    // (l) 4 sections and 4 viruses: no TOC anywhere; one section: its ≡ is there and dragging it changes nothing
+    serve(sectionsFixture({ sections: 4, noSubsections: true, viruses: 4 }), 23);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    if (await cdp.eval(`!!document.querySelector("nav.editor-toc")`)) reasons.push("(l) a TOC is shown for 4 viruses");
+    await clickText(cdp, ".editor-tabs button", "Информация");
+    await waitFor(cdp, `document.querySelectorAll(${JSON.stringify(top)}).length === 4`, 3000);
+    if (await cdp.eval(`!!document.querySelector("nav.editor-toc")`)) reasons.push("(l) a TOC is shown for 4 sections");
+    serve(sectionsFixture({ sections: 1, noSubsections: true }), 24);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    await clickText(cdp, ".editor-tabs button", "Информация");
+    await waitFor(cdp, `document.querySelectorAll(${JSON.stringify(top)}).length === 1`, 3000);
+    const lone = await cdp.eval(`(() => { const h = document.querySelector(${JSON.stringify(top + " > .nested-editor-head .order-drag-handle")}); if (!h) return null; h.scrollIntoView({ block: "center" }); return true; })()`);
+    if (!lone) reasons.push("(l) the only section has no ≡ handle");
+    else {
+      await sleep(300);
+      const grab1 = await cdp.eval(`(() => { const r = document.querySelector(${JSON.stringify(top + " > .nested-editor-head .order-drag-handle")}).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+      const at1 = (type, y, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x: grab1.x, y, button: "left", ...extra });
+      await at1("mouseMoved", grab1.y, { button: "none" });
+      await at1("mousePressed", grab1.y, { buttons: 1, clickCount: 1 });
+      await sleep(250);
+      for (let step = 1; step <= 4; step += 1) await at1("mouseMoved", grab1.y + step * 15, { buttons: 1 });
+      await at1("mouseReleased", grab1.y + 60, { buttons: 0, clickCount: 1 });
+      await sleep(300);
+      if (await cdp.eval(`!!document.querySelector(".editor-save-chip")`)) reasons.push("(l) dragging the only section marked the draft changed");
+    }
+    // (n) on a phone the TOC sticks 44px down, under the system bar
+    serve(sectionsFixture(), 25);
+    await phone(cdp);
+    await load(cdp);
+    if (!(await openEditor(cdp))) { await desktop(cdp); return; }
+    await clickText(cdp, ".editor-tabs button", "Информация");
+    await waitFor(cdp, `!!document.querySelector("nav.editor-toc")`, 3000);
+    await cdp.eval("window.scrollBy(0, 400)");
+    await sleep(200);
+    const phoneToc = await cdp.eval(`(() => { const t = document.querySelector("nav.editor-toc"); if (!t) return null; return { top: getComputedStyle(t).top, small: [...t.querySelectorAll("button")].filter((b) => b.getBoundingClientRect().height > 0 && b.getBoundingClientRect().height < 43).length }; })()`);
+    if (!phoneToc) reasons.push("(n) no TOC on the phone");
+    else {
+      if (phoneToc.top !== "44px") reasons.push(`(n) the phone TOC top is ${phoneToc.top}, expected 44px`);
+      if (phoneToc.small) reasons.push(`(n) ${phoneToc.small} TOC buttons under 44px tall on the phone`);
+    }
+    await desktop(cdp);
+  },
+  async panel(cdp) {
+    serve(editorFixture(), 1);
+    await load(cdp);
+    await cdp.eval(`localStorage.removeItem(${JSON.stringify(panelKey)})`);
+    if (!(await openEditor(cdp))) return;
+    if (!(await openPanel(cdp))) return;
+    // (a) the panel is a layer of the desktop above the windows
+    const layer = await cdp.eval(`(() => { const e = document.querySelector(".floating-text-format"); return { parent: e.parentElement.id, z: getComputedStyle(e).zIndex }; })()`);
+    if (layer.parent !== "desktop") reasons.push(`(a) panel parent is "${layer.parent}", expected "desktop"`);
+    if (layer.z !== "950") reasons.push(`(a) panel z-index is ${layer.z}, expected 950`);
+    // (b) dragged by its header out of the editor window
+    const windowLeft = await cdp.eval(`document.querySelector(".editor-window").getBoundingClientRect().left`);
+    await drag(cdp, await headerPoint(cdp), { x: 40, y: 80 });
+    let rect = await panelRect(cdp);
+    if (!(rect.left < windowLeft)) reasons.push(`(b) panel left ${rect.left} is not left of the editor window ${windowLeft}`);
+    const top = await cdp.eval(`(() => { const h = document.querySelector(".floating-text-format > header").getBoundingClientRect(); const e = document.elementFromPoint(h.left + h.width / 2, h.top + h.height / 2); return !!e?.closest(".floating-text-format"); })()`);
+    if (!top) reasons.push("(b) the panel header is not topmost at its centre");
+    // (c) the clamp keeps 64px and the top edge on screen
+    await drag(cdp, await headerPoint(cdp, "right"), { x: 1, y: 1 });
+    rect = await panelRect(cdp);
+    if (!(rect.right >= 63.5)) reasons.push(`(c) up-left: right ${rect.right} < 64`);
+    if (!(rect.top >= 0)) reasons.push(`(c) up-left: top ${rect.top} < 0`);
+    // the drag must have reached the limit, else the bounds above were never tested
+    if (Math.abs(rect.right - 64) > 1 || Math.abs(rect.top) > 1) reasons.push(`(c) up-left: the drag stopped short of the clamp (right ${rect.right}, top ${rect.top})`);
+    const edge = await cdp.eval(`({ w: document.documentElement.clientWidth, h: document.documentElement.clientHeight })`);
+    // the header's left end is off screen after the first drag, so the panel is first walked right by its visible end
+    await drag(cdp, await headerPoint(cdp, "right"), { x: edge.w - 1, y: edge.h / 2 });
+    await drag(cdp, await headerPoint(cdp, "left"), { x: edge.w - 1, y: edge.h - 1 });
+    rect = await panelRect(cdp);
+    let size = edge;
+    if (!(rect.left <= size.w - 63.5)) reasons.push(`(c) down-right: left ${rect.left} > ${size.w - 64}`);
+    if (!(rect.top <= size.h - 63.5)) reasons.push(`(c) down-right: top ${rect.top} > ${size.h - 64}`);
+    if (Math.abs(rect.left - (size.w - 64)) > 1 || Math.abs(rect.top - (size.h - 64)) > 1) reasons.push(`(c) down-right: the drag stopped short of the clamp (left ${rect.left}, top ${rect.top})`);
+    // (d) the place is stored and survives a reload
+    await drag(cdp, await headerPoint(cdp, 0), { x: 400, y: 300 });
+    const before = await panelRect(cdp);
+    const stored = await cdp.eval(`(() => { try { const v = JSON.parse(localStorage.getItem(${JSON.stringify(panelKey)})); return Number.isFinite(v?.right) && Number.isFinite(v?.bottom); } catch { return false; } })()`);
+    if (!stored) reasons.push("(d) portia-format-panel-v1 does not hold finite right/bottom");
+    await load(cdp);
+    if (!(await openEditor(cdp)) || !(await openPanel(cdp))) return;
+    const after = await panelRect(cdp);
+    if (["left", "top", "right", "bottom"].some((k) => Math.abs(after[k] - before[k]) > 1)) reasons.push(`(d) after reload the panel moved: ${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
+    // (e) windows clicked again and again never rise over the panel
+    await cdp.eval(`(() => { const w = document.querySelector(".editor-window"); for (let i = 0; i < 150; i += 1) w.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); })()`);
+    const still = await cdp.eval(`(() => { const h = document.querySelector(".floating-text-format > header").getBoundingClientRect(); const e = document.elementFromPoint(h.left + h.width / 2, h.top + h.height / 2); return !!e?.closest(".floating-text-format"); })()`);
+    if (!still) reasons.push(`(e) after 150 window clicks the panel is no longer topmost: ${await cdp.eval(`(() => { const h = document.querySelector(".floating-text-format > header").getBoundingClientRect(); const e = document.elementFromPoint(h.left + h.width / 2, h.top + h.height / 2); return (e?.className || e?.tagName) + " win z=" + document.querySelector(".editor-window").style.zIndex + " rect " + Math.round(h.left) + "," + Math.round(h.top); })()`)}`);
+    // (f) the first place is 16px right of the editor window once the window has moved aside
+    const title = await cdp.eval(`(() => { const r = document.querySelector(".editor-window .window-titlebar").getBoundingClientRect(); return { x: r.left + 120, y: r.top + r.height / 2 }; })()`);
+    await drag(cdp, title, { x: title.x - 400, y: title.y });
+    await closePanel(cdp); await forgetPlace(cdp);
+    if (!(await openPanel(cdp))) return;
+    let win = await windowBox(cdp); rect = await panelRect(cdp);
+    if (Math.abs(rect.left - (win.right + 16)) > 2) reasons.push(`(f) panel left ${rect.left}, expected ${win.right + 16} (window right + 16)`);
+    // (g) a maximized editor leaves no room beside it: the default corner, 16px from the right and 60px from the bottom
+    await click(cdp, '.editor-window [data-window-action="maximize"]'); await sleep(600);
+    await closePanel(cdp); await forgetPlace(cdp);
+    if (!(await openPanel(cdp))) return;
+    rect = await panelRect(cdp);
+    size = await viewportSize(cdp);
+    if (Math.abs(rect.right - (size.w - 16)) > 2 || Math.abs(rect.bottom - (size.h - 60)) > 2) reasons.push(`(g) maximized: right ${rect.right}, bottom ${rect.bottom}, expected ${size.w - 16}, ${size.h - 60}`);
+    await click(cdp, '.editor-window [data-window-action="maximize"]'); await sleep(600);
+    // (h) storage that throws still gives a usable panel
+    const blocker = await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `(() => { const bad = ${JSON.stringify(panelKey)}; for (const m of ["getItem", "setItem"]) { const orig = Storage.prototype[m]; Storage.prototype[m] = function (k, ...rest) { if (k === bad) throw new Error("storage blocked"); return orig.call(this, k, ...rest); }; } })()` });
+    await load(cdp);
+    if (!(await openEditor(cdp)) || !(await openPanel(cdp))) return;
+    rect = await panelRect(cdp);
+    size = await viewportSize(cdp);
+    if (!(rect.width > 0 && rect.right > 64 && rect.left < size.w - 64 && rect.top >= 0 && rect.top < size.h - 64)) reasons.push(`(h) blocked storage: the panel is not usable ${JSON.stringify(rect)}`);
+    await cdp.send("Page.removeScriptToEvaluateOnNewDocument", { identifier: blocker.identifier });
+    // (i) a legacy value is read as a viewport place
+    await load(cdp); // the page still carries the throwing storage of (h) until it is reloaded
+    await cdp.eval(`localStorage.setItem(${JSON.stringify(panelKey)}, ${JSON.stringify(JSON.stringify({ right: 14, bottom: 72 }))})`);
+    await load(cdp);
+    if (!(await openEditor(cdp)) || !(await openPanel(cdp))) return;
+    rect = await panelRect(cdp);
+    size = await viewportSize(cdp);
+    if (Math.abs(rect.right - (size.w - 14)) > 1 || Math.abs(rect.bottom - (size.h - 72)) > 1) reasons.push(`(i) legacy value: right ${rect.right}, bottom ${rect.bottom}, expected ${size.w - 14}, ${size.h - 72}`);
+    // (j) arrow keys move the focused header 8px, Shift 32px
+    await cdp.eval(`document.querySelector(".floating-text-format > header").focus()`);
+    const left0 = (await panelRect(cdp)).left;
+    await key(cdp, "ArrowLeft", 37);
+    const left1 = (await panelRect(cdp)).left;
+    if (Math.abs(left0 - left1 - 8) > 0.5) reasons.push(`(j) ArrowLeft moved ${left0 - left1}px, expected 8`);
+    await key(cdp, "ArrowLeft", 37, 8);
+    const left2 = (await panelRect(cdp)).left;
+    if (Math.abs(left1 - left2 - 32) > 0.5) reasons.push(`(j) Shift+ArrowLeft moved ${left1 - left2}px, expected 32`);
+    // (k) Esc from the header returns to the first lead field
+    await key(cdp, "Escape", 27);
+    const back = await cdp.eval(`document.activeElement === document.querySelector('.formatted-rich-input[data-area="lead"]')`);
+    if (!back) reasons.push("(k) Esc did not return focus to the lead field");
+    // (l) the panel hides with a minimized editor and comes back on restore
+    await click(cdp, '.editor-window [data-window-action="minimize"]');
+    if (!(await waitFor(cdp, `!document.querySelector(".floating-text-format")`, 3000))) reasons.push("(l) the panel is still shown while the editor is minimized");
+    await click(cdp, '[data-taskbar-app="editor"]');
+    if (!(await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000))) reasons.push("(l) the panel did not come back after restoring the editor");
+    // (m) more clicks never raise a window that is already on top
+    await sleep(500);
+    const z0 = await cdp.eval(`document.querySelector(".editor-window").style.zIndex`);
+    await cdp.eval(`(() => { const w = document.querySelector(".editor-window"); for (let i = 0; i < 50; i += 1) w.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })); })()`);
+    const z1 = await cdp.eval(`document.querySelector(".editor-window").style.zIndex`);
+    if (z0 !== z1) reasons.push(`(m) editor window z went ${z0} -> ${z1} on repeated clicks`);
+    // (n) on a phone the panel is a bottom sheet above the 44px nav, with no stored place
+    await phone(cdp);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    await click(cdp, ".editor-record-row > button:last-child");
+    await sleep(300);
+    await clickText(cdp, ".dossier-tabs button", "Описание");
+    await waitFor(cdp, `!!document.querySelector('.formatted-rich-input[data-area="lead"]')`, 3000);
+    await cdp.eval(`document.querySelector('.formatted-rich-input[data-area="lead"]').focus()`);
+    await click(cdp, ".global-format-launch > button");
+    if (!(await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000))) { reasons.push("(n) the phone panel did not open"); await desktop(cdp); return; }
+    await sleep(200);
+    const sheet = await cdp.eval(`(() => { const e = document.querySelector(".floating-text-format"); const r = e.getBoundingClientRect(); return { left: r.left, right: r.right, bottom: r.bottom, height: r.height, w: innerWidth, h: innerHeight, styleRight: e.style.right, styleBottom: e.style.bottom }; })()`);
+    if (Math.abs(sheet.bottom - (sheet.h - 44)) > 1) reasons.push(`(n) sheet bottom ${sheet.bottom}, expected ${sheet.h - 44}`);
+    if (sheet.left !== 0 || Math.abs(sheet.right - sheet.w) > 1) reasons.push(`(n) sheet spans ${sheet.left}..${sheet.right}, expected 0..${sheet.w}`);
+    if (sheet.height > Math.min(0.34 * sheet.h, 270) + 1) reasons.push(`(n) sheet height ${sheet.height} exceeds min(34svh, 270)`);
+    if (sheet.styleRight !== "" || sheet.styleBottom !== "") reasons.push(`(n) inline place on a phone: right "${sheet.styleRight}", bottom "${sheet.styleBottom}"`);
+    // (o) one tap folds it to a 44px strip, another unfolds it
+    const toggleText = () => cdp.eval(`document.querySelector("[data-sheet-toggle]").textContent`);
+    const fold = () => cdp.eval(`(() => { const e = document.querySelector(".floating-text-format"); const r = e.getBoundingClientRect(); return { collapsed: e.hasAttribute("data-collapsed"), height: r.height, bottom: r.bottom, h: innerHeight }; })()`);
+    await click(cdp, "[data-sheet-toggle]"); await sleep(250);
+    let folded = await fold();
+    if (!folded.collapsed || Math.abs(folded.height - 44) > 1) reasons.push(`(o) after the tap: collapsed ${folded.collapsed}, height ${folded.height}`);
+    if (!(await toggleText()).includes("ОФОРМЛЕНИЕ")) reasons.push("(o) the folded toggle does not read ОФОРМЛЕНИЕ");
+    if (Math.abs(folded.bottom - (folded.h - 44)) > 1) reasons.push(`(o) the folded strip bottom ${folded.bottom}, expected ${folded.h - 44}`);
+    await click(cdp, "[data-sheet-toggle]"); await sleep(250);
+    folded = await fold();
+    if (folded.collapsed || folded.height < 100) reasons.push(`(o) the second tap did not unfold: collapsed ${folded.collapsed}, height ${folded.height}`);
+    // (p) no free drag
+    const phoneBefore = await panelRect(cdp);
+    const grab = await headerPoint(cdp, 0.3);
+    await drag(cdp, grab, { x: grab.x - 100, y: grab.y - 200 });
+    const phoneAfter = await panelRect(cdp);
+    if (["left", "top", "right", "bottom"].some((k) => Math.abs(phoneAfter[k] - phoneBefore[k]) > 0.5)) reasons.push(`(p) the phone sheet moved: ${JSON.stringify(phoneBefore)} -> ${JSON.stringify(phoneAfter)}`);
+    await desktop(cdp);
+  },
+  async table(cdp) {
+    const row = (id, key, value) => ({ id, key, value });
+    serve(fixture({
+      ...editorFixture(),
+      infoSections: [{ id: "s1", title: "Раздел 1", body: "", subsections: [{ id: "u1", title: "Подраздел 1", blocks: [
+        { id: "t1", type: "table", rows: [row("r1", "A", "1"), row("r2", "B", "2"), row("r3", "C", "3")] },
+        { id: "t2", type: "table", rows: [] },
+      ] }] }],
+    }), 30);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    await clickText(cdp, ".editor-tabs button", "Информация");
+    const openAll = async () => { for (let pass = 0; pass < 4; pass += 1) await cdp.eval(`document.querySelectorAll('.nested-editor-toggle[aria-expanded="false"]').forEach((b) => b.click())`); };
+    // Every card starts collapsed: open them all, nested ones last.
+    await openAll();
+    if (!(await waitFor(cdp, `document.querySelectorAll(".info-table-row").length === 3`, 3000))) { reasons.push("table: the three rows did not appear"); return; }
+    const values = (field) => cdp.eval(`[...document.querySelectorAll(".info-table-row")].map((r) => r.querySelectorAll("input")[${field}].value).join("")`);
+    const both = async () => `${await values(0)}|${await values(1)}`;
+    const center = (selector, index = 0) => cdp.eval(`(() => { const e = document.querySelectorAll(${JSON.stringify(selector)})[${index}]; e.scrollIntoView({ block: "center" }); const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, top: r.top, height: r.height, width: r.width }; })()`);
+    const ctrlZ = (type) => cdp.send("Input.dispatchKeyEvent", { type, key: "z", code: "KeyZ", windowsVirtualKeyCode: 90, modifiers: 2 });
+    const undo = async () => { await ctrlZ("keyDown"); await ctrlZ("keyUp"); await sleep(150); };
+    const at = (type, x, y, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x, y, button: "left", ...extra });
+    const START = "ABC|123";
+    // (a) the values are A, B, C and each row has a ≡ (34px on a PC)
+    if ((await both()) !== START) reasons.push(`(a) rows read ${await both()}, expected ${START}`);
+    const handles = await cdp.eval(`[...document.querySelectorAll(".info-table-row")].map((r) => !!r.querySelector(":scope > .order-drag-handle"))`);
+    if (handles.length !== 3 || handles.some((h) => !h)) reasons.push(`(a) row handles: ${JSON.stringify(handles)}`);
+    const size = await center(".info-table-row .order-drag-handle");
+    if (Math.abs(size.width - 34) > 1) reasons.push(`(a) the row handle is ${size.width}px wide, expected 34`);
+    // (b) hold row 3's ≡ 250 ms, move above row 1's middle: C, A, B
+    const grab = await center(".info-table-row .order-drag-handle", 2);
+    await at("mouseMoved", grab.x, grab.y, { button: "none" });
+    await at("mousePressed", grab.x, grab.y, { buttons: 1, clickCount: 1 });
+    await sleep(250);
+    const rect1 = await cdp.eval(`(() => { const r = document.querySelectorAll(".info-table-row")[0].getBoundingClientRect(); return { top: r.top, height: r.height }; })()`);
+    const to = { x: grab.x, y: rect1.top + rect1.height * 0.3 };
+    for (let step = 1; step <= 14; step += 1) { await at("mouseMoved", grab.x, grab.y + ((to.y - grab.y) * step) / 14, { buttons: 1 }); await sleep(30); }
+    await at("mouseReleased", to.x, to.y, { buttons: 0, clickCount: 1 });
+    await sleep(300);
+    if ((await both()) !== "CAB|312") reasons.push(`(b) after the drag rows read ${await both()}, expected CAB|312`);
+    // (c) one Ctrl+Z puts it back
+    await undo();
+    if ((await both()) !== START) reasons.push(`(c) after Ctrl+Z rows read ${await both()}, expected ${START}`);
+    // (d) ArrowDown on row 1's ≡: B, A, C, focus on the handle of the row that holds A
+    await cdp.eval(`document.querySelectorAll(".info-table-row .order-drag-handle")[0].focus()`);
+    await key(cdp, "ArrowDown", 40);
+    await sleep(200);
+    if ((await both()) !== "BAC|213") reasons.push(`(d) after ArrowDown rows read ${await both()}, expected BAC|213`);
+    const focused = await cdp.eval(`[...document.querySelectorAll(".info-table-row")].findIndex((r) => r.querySelector(":scope > .order-drag-handle") === document.activeElement)`);
+    if (focused !== 1) reasons.push(`(d) focus is on row index ${focused}, expected 1 (the row holding A)`);
+    await undo();
+    if ((await both()) !== START) reasons.push(`(d) after Ctrl+Z rows read ${await both()}, expected ${START}`);
+    // (e) drag the «Признак» ≡ onto the «Значение» header: columns swap in every row, one undo restores
+    const from = await center(".info-table-head [data-column='key'] .column-swap-handle");
+    const target = await center(".info-table-head [data-column='value']");
+    await at("mouseMoved", from.x, from.y, { button: "none" });
+    await at("mousePressed", from.x, from.y, { buttons: 1, clickCount: 1 });
+    for (let step = 1; step <= 6; step += 1) await at("mouseMoved", from.x + ((target.x - from.x) * step) / 6, from.y, { buttons: 1 });
+    if (!(await cdp.eval(`!!document.querySelector(".info-table-head [data-column='value'][data-drop-target]")`))) reasons.push("(e) the target header has no drop indicator during the drag");
+    await at("mouseReleased", target.x, target.y, { buttons: 0, clickCount: 1 });
+    await sleep(200);
+    if ((await both()) !== "123|ABC") reasons.push(`(e) after the column drag rows read ${await both()}, expected 123|ABC`);
+    if (await cdp.eval(`!!document.querySelector("[data-drop-target], .column-swap-handle[data-dragging]")`)) reasons.push("(e) a drop marker is left after the release");
+    await undo();
+    if ((await both()) !== START) reasons.push(`(e) after Ctrl+Z rows read ${await both()}, expected ${START}`);
+    // (f) ArrowLeft on the «Значение» ≡ swaps, again restores exactly
+    await cdp.eval(`document.querySelector(".info-table-head [data-column='value'] .column-swap-handle").focus()`);
+    await key(cdp, "ArrowLeft", 37); await sleep(150);
+    if ((await both()) !== "123|ABC") reasons.push(`(f) after ArrowLeft rows read ${await both()}, expected 123|ABC`);
+    await key(cdp, "ArrowLeft", 37); await sleep(150);
+    if ((await both()) !== START) reasons.push(`(f) after the second ArrowLeft rows read ${await both()}, expected ${START}`);
+    // (g) the empty table says how to begin and has no column handles
+    const empty = await cdp.eval(`(() => { const body = [...document.querySelectorAll(".nested-editor-body")].find((b) => !b.querySelector(".nested-editor-body") && b.textContent.includes("Строк пока нет")); return body ? { text: body.querySelector(".editor-empty")?.textContent ?? "", handles: body.querySelectorAll(".column-swap-handle").length } : null; })()`);
+    if (!empty) reasons.push("(g) the empty table block was not found");
+    else {
+      if (empty.text !== "Строк пока нет. Добавьте первую кнопкой «+ СТРОКА».") reasons.push(`(g) empty text: ${empty.text}`);
+      if (empty.handles !== 0) reasons.push(`(g) the empty table has ${empty.handles} column handles`);
+    }
+    // (h) nothing was saved: the stub blocks every non-GET request to /api/* and records it as "write blocked", which already fails the check
+    // (i) on a phone both kinds of ≡ are 44px
+    await phone(cdp);
+    await load(cdp);
+    if (await openEditor(cdp)) {
+      await clickText(cdp, ".editor-tabs button", "Информация");
+      await openAll();
+      await sleep(300);
+      const small = await cdp.eval(`(() => { const h = document.querySelector(".info-table-row > .order-drag-handle"); const k = document.querySelector(".column-swap-handle"); return h && k ? { row: h.getBoundingClientRect().width, col: k.getBoundingClientRect().width } : null; })()`);
+      if (!small) reasons.push("(i) no handles on the phone");
+      else if (Math.abs(small.row - 44) > 1 || Math.abs(small.col - 44) > 1) reasons.push(`(i) phone handles ${small.row} and ${small.col}px, expected 44`);
+    }
+    await desktop(cdp);
+  },
+  /** Owner UAT 11-07: on a phone nothing is wider than the screen. A long name stays one line with «…» and never covers the buttons, an expanded card fits, the ОГЛАВЛЕНИЕ list moves only up and down. */
+  async phonefit(cdp) {
+    for (const [w, h] of [[360, 640], [390, 844]]) {
+      const where = `${w}x${h}`;
+      serve(fixtureWithLongText(), 60);
+      await phone(cdp, w, h);
+      await load(cdp);
+      if (!(await openEditor(cdp))) { await desktop(cdp); return; }
+      await clickText(cdp, ".editor-tabs button", "Информация");
+      const top = ".flat-editor-form > .nested-editor-card";
+      if (!(await waitFor(cdp, `document.querySelectorAll(${JSON.stringify(top)}).length === 6`, 3000))) { reasons.push(`${where}: the info tab did not show 6 section cards`); continue; }
+      // a page wider than the screen shows as scrollWidth > clientWidth, or as an element whose right edge is past the screen
+      const expectFit = async (label) => {
+        await sleep(300);
+        const m = await cdp.eval(`(() => {
+          const wide = (e) => (e ? e.scrollWidth - e.clientWidth : 0);
+          const vw = document.documentElement.clientWidth, out = [];
+          for (const e of document.querySelectorAll(".content-editor *")) {
+            const r = e.getBoundingClientRect();
+            if (r.width > 0 && r.height > 0 && r.right > vw + 1 && !e.closest(".editor-tabs, .global-format-launch")) { out.push((typeof e.className === "string" && e.className ? "." + e.className.split(" ")[0] : e.tagName) + ":" + Math.round(r.right)); if (out.length >= 4) break; }
+          }
+          return { doc: wide(document.documentElement), editor: wide(document.querySelector(".content-editor")), win: wide(document.querySelector(".editor-window")), inner: window.innerWidth, out };
+        })()`);
+        for (const part of ["doc", "editor", "win"]) if (m[part] > 0) reasons.push(`${where} ${label}: ${part} is ${m[part]}px wider than the screen`);
+        if (m.out.length) reasons.push(`${where} ${label}: sticks out of the screen: ${m.out.join(", ")}`);
+        if (m.inner > w + 1) reasons.push(`${where} ${label}: the layout viewport grew to ${m.inner}px`);
+      };
+      await expectFit("collapsed");
+      // (a) the long name keeps one line with «…» and ends before the buttons at its right
+      const clear = await cdp.eval(`(() => {
+        const head = document.querySelectorAll(${JSON.stringify(top)})[2].querySelector(":scope > .nested-editor-head");
+        const span = head.querySelector(".nested-editor-title"), toggle = head.querySelector(".nested-editor-toggle");
+        const s = span.getBoundingClientRect(), t = toggle.getBoundingClientRect(), hd = head.getBoundingClientRect();
+        const others = [...head.children].slice([...head.children].indexOf(toggle) + 1).map((c) => c.getBoundingClientRect()).filter((r) => r.width > 0);
+        return { cut: span.scrollWidth > span.clientWidth, spanRight: s.right, toggleRight: t.right, headRight: hd.right, nextLeft: others.length ? Math.min(...others.map((r) => r.left)) : null };
+      })()`);
+      if (!clear.cut) reasons.push(`${where} (a): the long name is not cut`);
+      if (clear.spanRight > clear.toggleRight + 0.5) reasons.push(`${where} (a): the name (${clear.spanRight}) runs past its button (${clear.toggleRight})`);
+      if (clear.nextLeft !== null && clear.toggleRight > clear.nextLeft + 0.5) reasons.push(`${where} (a): the name button (${clear.toggleRight}) covers the next button (${clear.nextLeft})`);
+      if (clear.toggleRight > clear.headRight + 0.5) reasons.push(`${where} (a): the name button sticks out of the head`);
+      // (b) expanded cards (the long-named section, then the one with long text, with everything inside it open) fit the screen
+      for (const n of [3, 1]) {
+        await realClick(cdp, `${top}:nth-of-type(${n}) > .nested-editor-head .nested-editor-toggle`);
+        await waitFor(cdp, `!document.querySelectorAll(${JSON.stringify(top)})[${n - 1}].querySelector(":scope > .nested-editor-body").hidden`, 2000);
+        await cdp.eval(`document.querySelectorAll(${JSON.stringify(top)})[${n - 1}].querySelectorAll(".nested-editor-card .nested-editor-toggle[aria-expanded=false]").forEach((b) => b.click())`);
+        await expectFit(`section ${n} expanded`);
+        const card = await cdp.eval(`(() => { const c = document.querySelectorAll(${JSON.stringify(top)})[${n - 1}]; return { over: c.scrollWidth - c.clientWidth, right: c.getBoundingClientRect().right }; })()`);
+        if (card.over > 0 || card.right > w + 1) reasons.push(`${where} section ${n} expanded: the card is ${card.over}px wider than itself, right edge ${card.right}`);
+      }
+      // (c) the ОГЛАВЛЕНИЕ list: it fits, scrolls only vertically, and a sideways swipe on it moves nothing
+      await cdp.eval("window.scrollTo(0, 0)");
+      await realClick(cdp, "nav.editor-toc .editor-toc-bar button");
+      await waitFor(cdp, `!document.querySelector("nav.editor-toc ol").hidden`, 2000);
+      await sleep(300);
+      const toc = await cdp.eval(`(() => {
+        const nav = document.querySelector("nav.editor-toc"), ol = nav.querySelector("ol"), s = getComputedStyle(ol), r = nav.getBoundingClientRect();
+        return { olWide: ol.scrollWidth - ol.clientWidth, navWide: nav.scrollWidth - nav.clientWidth, overflowX: s.overflowX, touch: s.touchAction, right: r.right, left: r.left, x: r.left + r.width / 2, y: r.top + 80 };
+      })()`);
+      if (toc.olWide > 0) reasons.push(`${where} (c): the TOC list is ${toc.olWide}px wider than itself`);
+      if (toc.navWide > 0) reasons.push(`${where} (c): the TOC is ${toc.navWide}px wider than itself`);
+      if (toc.right > w + 1 || toc.left < -1) reasons.push(`${where} (c): the TOC (${toc.left}..${toc.right}) is not inside the screen`);
+      if (toc.overflowX === "auto" || toc.overflowX === "scroll") reasons.push(`${where} (c): the TOC list has overflow-x ${toc.overflowX}, expected hidden`);
+      if (!/pan-y/.test(toc.touch)) reasons.push(`${where} (c): the TOC list has touch-action ${toc.touch}, expected pan-y`);
+      const state = () => cdp.eval(`({ x: window.scrollX, left: document.querySelector("nav.editor-toc ol").scrollLeft, navLeft: document.querySelector("nav.editor-toc").getBoundingClientRect().left })`);
+      const before = await state();
+      const touch = (type, x, y) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x, y }] });
+      await touch("touchStart", toc.x, toc.y);
+      for (let i = 1; i <= 8; i += 1) await touch("touchMove", toc.x - (140 * i) / 8, toc.y);
+      await touch("touchEnd", 0, 0);
+      await sleep(400);
+      const after = await state();
+      if (after.x !== before.x || after.left !== before.left || Math.abs(after.navLeft - before.navLeft) > 0.5) reasons.push(`${where} (c): a sideways swipe on the TOC moved it (${JSON.stringify(before)} -> ${JSON.stringify(after)})`);
+      // (d) the other long lists: nothing wider than the screen, and in every row or card head no element runs into its neighbour or past the row
+      for (const tab of ["База вирусов", "Сводка", "Корзина"]) {
+        await clickText(cdp, ".editor-tabs button", tab);
+        await sleep(500);
+        await expectFit(tab);
+        const rows = await cdp.eval(`(() => {
+          const bad = [];
+          for (const row of document.querySelectorAll(".editor-record-row, .nested-editor-head")) {
+            const box = row.getBoundingClientRect();
+            if (!box.width) continue;
+            const kids = [...row.children].map((c) => ({ c, r: c.getBoundingClientRect() })).filter((k) => k.r.width > 0).sort((a, b) => a.r.left - b.r.left);
+            kids.forEach((k, i) => {
+              if (k.r.right > box.right + 0.5) bad.push("past the row: " + (k.c.className || k.c.tagName));
+              if (i > 0 && k.r.left < kids[i - 1].r.right - 0.5) bad.push("overlap: " + (kids[i - 1].c.className || kids[i - 1].c.tagName) + " / " + (k.c.className || k.c.tagName));
+              const name = k.c.querySelector("strong, .nested-editor-title");
+              if (name && name.getBoundingClientRect().right > k.r.right + 0.5) bad.push("label past its button: " + (name.className || name.tagName));
+            });
+          }
+          return bad.slice(0, 4);
+        })()`);
+        if (rows.length) reasons.push(`${where} (d) ${tab}: ${rows.join("; ")}`);
+      }
+    }
+    await desktop(cdp);
+  },
+  async multiselect(cdp) {
+    // This check uses real mouse clicks for every button (they move focus and fire pointerdown/mousedown, as a user's do), real Control key presses around Ctrl picks.
+    const click = (c, selector) => realClick(c, selector);
+    serve(multiFixture(), 40);
+    await load(cdp);
+    if (!(await openEditor(cdp))) return;
+    const lead = '.formatted-rich-input[data-area="lead"]';
+    await clickText(cdp, ".dossier-tabs button", "Описание");
+    if (!(await waitFor(cdp, `document.querySelectorAll(${JSON.stringify(lead)}).length === 2`, 3000))) { reasons.push("multiselect: the two lead fields did not appear"); return; }
+    const painted = () => cdp.eval(`(() => { const h = CSS.highlights.get("portia-format"); return h ? [...h].map(String) : null; })()`);
+    // No removeAllRanges between picks: it would null the stored selection that a Ctrl press turns into a fragment.
+    const pick = async (index, word, modifiers = 0) => {
+      await wordBox(cdp, lead, index, word); await sleep(400); // the scroll into view may be smooth, so measure again once it has settled
+      const box = await wordBox(cdp, lead, index, word);
+      if (!box) { reasons.push(`multiselect: word «${word}» not found in lead field ${index}`); return false; }
+      await mouseSelect(cdp, box, modifiers);
+      await sleep(100);
+      return true;
+    };
+    const wordColor = (word) => cdp.eval(`(() => { for (const f of document.querySelectorAll(${JSON.stringify(lead)})) { const w = document.createTreeWalker(f, NodeFilter.SHOW_TEXT); for (let n = w.nextNode(); n; n = w.nextNode()) if (n.data.includes(${JSON.stringify(word)})) return getComputedStyle(n.parentElement).color; } return null; })()`);
+    const fieldTexts = () => cdp.eval(`[...document.querySelectorAll(${JSON.stringify(lead)})].map((f) => f.textContent)`);
+    const TEXTS = ["один два три четыре пять шесть", "семь восемь девять десять одиннадцать двенадцать"];
+    // (a) a plain pick in field 0, (b) a Ctrl pick in field 1, (c) both are painted
+    if (!(await pick(0, "два")) || !(await pick(1, "восемь", 2))) return;
+    await click(cdp, ".global-format-launch > button");
+    if (!(await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000))) { reasons.push("(c) the format panel did not open"); return; }
+    await sleep(150);
+    const both = await painted();
+    if (JSON.stringify(both) !== JSON.stringify(["два", "восемь"])) reasons.push(`(c) painted ${JSON.stringify(both)}, expected ["два","восемь"]`);
+    // (d) one colour click styles both words and nothing else; the text is untouched
+    await click(cdp, '.format-swatches button[aria-label="Красный"]');
+    await sleep(200);
+    const red = "rgb(180, 54, 50)";
+    for (const word of ["два", "восемь"]) { const c = await wordColor(word); if (c !== red) reasons.push(`(d) «${word}» colour ${c}, expected ${red}`); }
+    for (const word of ["три", "семь"]) { const c = await wordColor(word); if (c === red) reasons.push(`(d) «${word}» was coloured`); }
+    if (JSON.stringify(await fieldTexts()) !== JSON.stringify(TEXTS)) reasons.push(`(d) the text changed: ${JSON.stringify(await fieldTexts())}`);
+    // (e) one Ctrl+Z takes the colour back from both fields
+    await ctrlZ(cdp);
+    for (const word of ["два", "восемь"]) { const c = await wordColor(word); if (c === red) reasons.push(`(e) «${word}» is still coloured after one Ctrl+Z`); }
+    // ---- plan 11-06 task 2: every control, counts, removal and clearing, 10 fragments, the phone ----
+    const fresh = async (revision) => {
+      serve(multiFixture(), revision);
+      await load(cdp);
+      if (!(await openEditor(cdp))) return false;
+      await clickText(cdp, ".dossier-tabs button", "Описание");
+      if (!(await waitFor(cdp, `document.querySelectorAll(${JSON.stringify(lead)}).length === 2`, 3000))) { reasons.push("multiselect: the two lead fields did not appear after a reload"); return false; }
+      return true;
+    };
+    const panelOpen = () => cdp.eval(`!!document.querySelector(".floating-text-format")`);
+    const ensurePanel = async () => { if (!(await panelOpen())) await click(cdp, ".global-format-launch > button"); await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000); await sleep(150); };
+    const headerText = () => cdp.eval(`document.querySelector(".floating-text-format > header")?.textContent ?? ""`);
+    const styleOf = (word, property) => cdp.eval(`(() => { for (const f of document.querySelectorAll(${JSON.stringify(lead)})) { const w = document.createTreeWalker(f, NodeFilter.SHOW_TEXT); for (let n = w.nextNode(); n; n = w.nextNode()) if (n.data.includes(${JSON.stringify(word)})) return getComputedStyle(n.parentElement)[${JSON.stringify(property)}]; } return null; })()`);
+    const pickRange = async (index, first, last, modifiers = 0) => { // from the start of `first` to the end of `last`, both in one field
+      await wordBox(cdp, lead, index, first); await sleep(400);
+      const a = await wordBox(cdp, lead, index, first), b = await wordBox(cdp, lead, index, last);
+      if (!a || !b) { reasons.push(`multiselect: «${first}»..«${last}» not found in lead field ${index}`); return false; }
+      await mouseSelect(cdp, { left: a.left, right: b.right, y: a.y }, modifiers);
+      await sleep(100);
+      return true;
+    };
+    const ctrlClick = async (index, word) => { // press and release in the middle of the word with Ctrl
+      await wordBox(cdp, lead, index, word); await sleep(400);
+      const box = await wordBox(cdp, lead, index, word);
+      if (!box) { reasons.push(`multiselect: «${word}» not found in lead field ${index}`); return false; }
+      const x = (box.left + box.right) / 2;
+      const at = (type, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x, y: box.y, button: "left", modifiers: 2, ...extra });
+      await holdCtrl(cdp, 2, async () => { await at("mouseMoved", { button: "none" }); await at("mousePressed", { buttons: 1, clickCount: 1 }); await at("mouseReleased", { buttons: 0, clickCount: 1 }); });
+      await sleep(100);
+      return true;
+    };
+    const twoFragments = async () => (await pick(0, "два")) && (await pick(1, "восемь", 2));
+    // (f) three picks make «ВЫБРАНО: 3»; a Ctrl pick over «два три» swallows two of them, so the count is 2 and the highlights are the merged text
+    if (!(await fresh(41))) return;
+    if (!(await pick(0, "два")) || !(await pick(1, "восемь", 2)) || !(await pick(0, "три", 2))) return;
+    await ensurePanel();
+    let head = await headerText();
+    if (!head.includes("ВЫБРАНО: 3")) reasons.push(`(f) header reads ${JSON.stringify(head)}, expected «ВЫБРАНО: 3»`);
+    if (!(await pickRange(0, "два", "три", 2))) return;
+    head = await headerText();
+    if (!head.includes("ВЫБРАНО: 2")) reasons.push(`(f) after the Ctrl pick over «два три» the header reads ${JSON.stringify(head)}, expected «ВЫБРАНО: 2»`);
+    const merged = await painted();
+    if (JSON.stringify(merged) !== JSON.stringify(["два три", "восемь"])) reasons.push(`(f) painted ${JSON.stringify(merged)}, expected ["два три","восемь"]`);
+    // (g) a Ctrl+click inside «восемь» removes only that fragment
+    if (!(await ctrlClick(1, "восемь"))) return;
+    head = await headerText();
+    if (head.includes("ВЫБРАНО")) reasons.push(`(g) the header still reads ${JSON.stringify(head)} after the Ctrl+click`);
+    if (!head.includes("7 ЗНАК.")) reasons.push(`(g) header ${JSON.stringify(head)} does not show «7 ЗНАК.»`);
+    const left = await painted();
+    if (left?.length !== 1) reasons.push(`(g) ${left?.length} highlight ranges after the removal, expected 1`);
+    // (h) «Заголовок» styles both fragments, a second click takes it away from both, one Ctrl+Z puts it back on both
+    if (!(await pick(1, "восемь", 2))) return;
+    await ensurePanel();
+    if (!(await clickText(cdp, ".format-presets button", "Заголовок"))) { reasons.push("(h) no «Заголовок» button"); return; }
+    await sleep(200);
+    for (const word of ["два", "восемь"]) { const size = await styleOf(word, "fontSize"); if (size !== "22px") reasons.push(`(h) «${word}» font size ${size}, expected 22px`); }
+    const pressed = await cdp.eval(`[...document.querySelectorAll(".format-presets button")].find((b) => b.textContent.trim() === "Заголовок")?.getAttribute("aria-pressed")`);
+    if (pressed !== "true") reasons.push(`(h) «Заголовок» aria-pressed ${pressed}, expected true`);
+    await sleep(900); // the same control within the typing pause is one undo step by design
+    await clickText(cdp, ".format-presets button", "Заголовок");
+    await sleep(200);
+    for (const word of ["два", "восемь"]) { const size = await styleOf(word, "fontSize"); if (size === "22px") reasons.push(`(h) «${word}» is still 22px after the second click`); }
+    await ctrlZ(cdp);
+    for (const word of ["два", "восемь"]) { const size = await styleOf(word, "fontSize"); if (size !== "22px") reasons.push(`(h) «${word}» font size ${size} after Ctrl+Z, expected 22px`); }
+    // (i) a swatch and then a density drag are two steps; one Ctrl+Z takes back only the drag, in both fields
+    if (!(await fresh(42))) return;
+    if (!(await twoFragments())) return;
+    await ensurePanel();
+    if (!(await click(cdp, `[data-tab-group="background"].format-control .format-swatches button[title]:not(.custom-color)`))) { reasons.push("(i) no background swatch"); return; }
+    await sleep(300);
+    for (const word of ["два", "восемь"]) { const bg = await styleOf(word, "backgroundColor"); if (!String(bg).endsWith(", 0.45)")) reasons.push(`(i) «${word}» background ${bg} after the swatch, expected alpha 0.45`); }
+    for (const value of [0.5, 0.6, 0.7, 0.8, 0.9]) {
+      await cdp.eval(`(() => { const i = document.querySelector(".opacity-control input[type=range]"); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(i, ${value}); i.dispatchEvent(new Event("input", { bubbles: true })); })()`);
+      await sleep(50);
+    }
+    await sleep(200);
+    for (const word of ["два", "восемь"]) { const bg = await styleOf(word, "backgroundColor"); if (!String(bg).endsWith(", 0.9)")) reasons.push(`(i) «${word}» background ${bg} after the drag, expected alpha 0.9`); }
+    await ctrlZ(cdp);
+    for (const word of ["два", "восемь"]) { const bg = await styleOf(word, "backgroundColor"); if (!String(bg).endsWith(", 0.45)")) reasons.push(`(i) «${word}» background ${bg} after one Ctrl+Z, expected alpha 0.45`); }
+    // (j) Esc from the panel header clears every fragment
+    if (!(await twoFragments())) return;
+    await ensurePanel();
+    await cdp.eval(`document.querySelector(".floating-text-format > header").focus()`);
+    await key(cdp, "Escape", 27);
+    await sleep(150);
+    if ((await headerText()).includes("ВЫБРАНО")) reasons.push("(j) «ВЫБРАНО» is still shown after Esc in the panel");
+    if (((await painted()) ?? []).length > 1) reasons.push(`(j) ${(await painted()).length} highlight ranges after Esc, expected at most 1`);
+    // (k) СБРОСИТЬ clears every fragment
+    if (!(await twoFragments())) return;
+    await ensurePanel();
+    if (!(await headerText()).includes("ВЫБРАНО: 2")) reasons.push("(k) two fragments did not show «ВЫБРАНО: 2» before СБРОСИТЬ");
+    if (await cdp.eval(`document.querySelector(".format-reset-fragments")?.getAttribute("aria-label")`) !== "Снять все выделенные фрагменты") reasons.push("(k) СБРОСИТЬ has no aria-label «Снять все выделенные фрагменты»");
+    await click(cdp, ".format-reset-fragments");
+    await sleep(150);
+    if ((await headerText()).includes("ВЫБРАНО")) reasons.push("(k) «ВЫБРАНО» is still shown after СБРОСИТЬ");
+    // (l) a plain click in a field clears every fragment
+    if (!(await twoFragments())) return;
+    await ensurePanel();
+    const spot = await wordBox(cdp, lead, 0, "четыре");
+    await mouseSelect(cdp, { left: spot.left + 3, right: spot.left + 3, y: spot.y }); // press and release on one point: a caret
+    await sleep(150);
+    await ensurePanel();
+    if ((await headerText()).includes("ВЫБРАНО")) reasons.push("(l) «ВЫБРАНО» is still shown after a plain click");
+    // (m) ten fragments across both fields
+    if (!(await fresh(43))) return;
+    const ten = [[0, "один"], [1, "семь", 2], [0, "два", 2], [1, "восемь", 2], [0, "три", 2], [1, "девять", 2], [0, "четыре", 2], [1, "десять", 2], [0, "пять", 2], [1, "одиннадцать", 2]];
+    for (const [index, word, modifiers] of ten) if (!(await pick(index, word, modifiers ?? 0))) return;
+    await ensurePanel();
+    head = await headerText();
+    if (!head.includes("ВЫБРАНО: 10")) reasons.push(`(m) header reads ${JSON.stringify(head)}, expected «ВЫБРАНО: 10»`);
+    const tenRanges = await painted();
+    if (tenRanges?.length !== 10) reasons.push(`(m) ${tenRanges?.length} highlight ranges, expected 10`);
+    await click(cdp, '.format-swatches button[aria-label="Красный"]');
+    await sleep(300);
+    for (const [, word] of ten) { const c = await styleOf(word, "color"); if (c !== red) reasons.push(`(m) «${word}» colour ${c}, expected ${red}`); }
+    // (n) on a phone a Ctrl press adds nothing: one selection, no count, no hint
+    await phone(cdp);
+    serve(multiFixture(), 44);
+    await load(cdp);
+    if (!(await openEditor(cdp))) { await desktop(cdp); return; }
+    await click(cdp, ".editor-record-row > button:last-child");
+    await sleep(300);
+    await clickText(cdp, ".dossier-tabs button", "Описание");
+    await waitFor(cdp, `document.querySelectorAll(${JSON.stringify(lead)}).length === 2`, 3000);
+    const phoneSelect = (index, word, ctrl) => cdp.eval(`(() => {
+      const f = document.querySelectorAll(${JSON.stringify(lead)})[${index}];
+      if (${ctrl}) f.dispatchEvent(new PointerEvent("pointerdown", { ctrlKey: true, isPrimary: true, bubbles: true }));
+      f.focus();
+      const w = document.createTreeWalker(f, NodeFilter.SHOW_TEXT);
+      for (let n = w.nextNode(); n; n = w.nextNode()) {
+        const at = n.data.indexOf(${JSON.stringify(word)}); if (at < 0) continue;
+        const r = document.createRange(); r.setStart(n, at); r.setEnd(n, at + ${JSON.stringify(word)}.length);
+        const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+        f.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+        return true;
+      }
+      return false;
+    })()`);
+    if (!(await phoneSelect(0, "два", false)) || !(await phoneSelect(1, "восемь", true))) reasons.push("(n) the phone selections could not be made");
+    await sleep(150);
+    await click(cdp, ".global-format-launch > button");
+    if (!(await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000))) reasons.push("(n) the phone panel did not open");
+    else {
+      head = await headerText();
+      if (head.includes("ВЫБРАНО")) reasons.push(`(n) the phone header reads ${JSON.stringify(head)}`);
+      const hintDisplay = await cdp.eval(`(() => { const e = document.querySelector(".format-multi-hint"); return e ? getComputedStyle(e).display : "missing"; })()`);
+      if (hintDisplay !== "none") reasons.push(`(n) the phone multi-select hint has display ${hintDisplay}, expected none`);
+    }
+    await desktop(cdp);
+    // (o) on the desktop the hint is shown
+    if (!(await fresh(45))) return;
+    if (!(await pick(0, "два"))) return;
+    await ensurePanel();
+    const hint = await cdp.eval(`(() => { const e = document.querySelector(".format-multi-hint"); return e ? { text: e.textContent, display: getComputedStyle(e).display } : null; })()`);
+    if (!hint) reasons.push("(o) no .format-multi-hint on the desktop");
+    else {
+      if (hint.text !== "Ctrl (Cmd на Mac) + выделение добавляет фрагмент. Esc снимает все.") reasons.push(`(o) hint reads ${JSON.stringify(hint.text)}`);
+      if (hint.display === "none") reasons.push("(o) the desktop hint is not displayed");
+    }
+    // (p) the way users really pick words: a double-click, the later ones with a real Ctrl held; three fragments, one colour click styles all three
+    if (!(await fresh(46))) return;
+    const dblPick = async (index, word, modifiers = 0) => {
+      await wordBox(cdp, lead, index, word); await sleep(400);
+      const box = await wordBox(cdp, lead, index, word);
+      if (!box) { reasons.push(`(p) «${word}» not found in lead field ${index}`); return false; }
+      const at = (type, extra = {}) => cdp.send("Input.dispatchMouseEvent", { type, x: (box.left + box.right) / 2, y: box.y, button: "left", modifiers, ...extra });
+      await holdCtrl(cdp, modifiers, async () => {
+        await at("mouseMoved", { button: "none" });
+        for (const n of [1, 2]) { await at("mousePressed", { buttons: 1, clickCount: n }); await at("mouseReleased", { buttons: 0, clickCount: n }); }
+      });
+      await sleep(100);
+      return true;
+    };
+    if (!(await dblPick(0, "два")) || !(await dblPick(1, "восемь", 2)) || !(await dblPick(0, "четыре", 2))) return;
+    await ensurePanel();
+    head = await headerText();
+    if (!head.includes("ВЫБРАНО: 3")) reasons.push(`(p) header reads ${JSON.stringify(head)}, expected «ВЫБРАНО: 3»`);
+    await click(cdp, '.format-swatches button[aria-label="Красный"]');
+    await sleep(300);
+    for (const word of ["два", "восемь", "четыре"]) { const c = await styleOf(word, "color"); if (c !== red) reasons.push(`(p) «${word}» colour ${c}, expected ${red}`); }
+    const untouched = await styleOf("три", "color");
+    if (untouched === red) reasons.push("(p) «три» was coloured");
+  },
+  async peers(cdp) {
+    // Real clicks and a real Control press, as in multiselect. The fake save keeps its body, so an orphan formattedText entry of a deleted item shows in it.
+    const click = (c, selector) => realClick(c, selector);
+    const red = "rgb(180, 54, 50)";
+    const card1 = ".flat-editor-form > .nested-editor-card:nth-of-type(1)";
+    const sel = (formatKey) => `[data-format-key="${formatKey}"]`;
+    const painted = () => cdp.eval(`(() => { const h = CSS.highlights.get("portia-format"); return h ? [...h].map(String) : null; })()`);
+    const headerText = () => cdp.eval(`document.querySelector(".floating-text-format > header")?.textContent ?? ""`);
+    const panelOpen = () => cdp.eval(`!!document.querySelector(".floating-text-format")`);
+    const ensurePanel = async () => { if (!(await panelOpen())) await click(cdp, ".global-format-launch > button"); await waitFor(cdp, `!!document.querySelector(".floating-text-format")`, 3000); await sleep(150); };
+    // Revisions 47-50 stay above multiselect (40-46) and below phonefit (60): the page keeps the highest revision it has read, so a higher one here would hide phonefit's content in --check all.
+    const fresh = async (revision) => {
+      serve(sectionsFixture({ sections: 2 }), revision, true);
+      await load(cdp);
+      if (!(await openEditor(cdp))) return false;
+      await clickText(cdp, ".editor-tabs button", "Информация");
+      if (!(await waitFor(cdp, `document.querySelectorAll(".flat-editor-form > .nested-editor-card").length === 2`, 3000))) { reasons.push("peers: the info tab did not show 2 section cards"); return false; }
+      for (let pass = 0; pass < 4; pass += 1) await cdp.eval(`document.querySelectorAll('.nested-editor-toggle[aria-expanded="false"]').forEach((b) => b.click())`);
+      if (!(await waitFor(cdp, `!!document.querySelector(${JSON.stringify(sel("info:s1:body"))})`, 3000))) { reasons.push("peers: the section body field did not appear"); return false; }
+      return true;
+    };
+    const pickIn = async (formatKey, word, modifiers = 0) => {
+      await wordBox(cdp, sel(formatKey), 0, word); await sleep(400); // the scroll into view may be smooth, so measure again once it has settled
+      const box = await wordBox(cdp, sel(formatKey), 0, word);
+      if (!box) { reasons.push(`peers: word «${word}» not found in ${formatKey}`); return false; }
+      await mouseSelect(cdp, box, modifiers); // no removeAllRanges between picks: it would null the stored selection a Ctrl press turns into a fragment
+      await sleep(100);
+      return true;
+    };
+    const colorIn = (formatKey, word) => cdp.eval(`(() => { const f = document.querySelector(${JSON.stringify(sel(formatKey))}); if (!f) return null; const w = document.createTreeWalker(f, NodeFilter.SHOW_TEXT); for (let n = w.nextNode(); n; n = w.nextNode()) if (n.data.includes(${JSON.stringify(word)})) return getComputedStyle(n.parentElement).color; return null; })()`);
+    const save = async () => {
+      const before = fakeSaves; savedBody = "";
+      // The chip may sit under the floating panel, so open it as the savechip check does: focus, then a programmatic click.
+      await waitFor(cdp, `!!document.querySelector(".editor-save-chip > button")`, 3000);
+      await cdp.eval(`(() => { const b = document.querySelector(".editor-save-chip > button"); b.focus(); if (b.getAttribute("aria-expanded") !== "true") b.click(); })()`); await sleep(200);
+      await clickText(cdp, ".editor-save-popover button", "СОХРАНИТЬ");
+      for (let waited = 0; waited < 3000 && fakeSaves === before; waited += 100) await sleep(100);
+      await sleep(100);
+      return savedBody;
+    };
+    // (a) a section whose body is held only as a peer is deleted: it leaves the selection, and the next style click writes nothing for it (CR-01)
+    if (!(await fresh(47))) return;
+    if (!(await pickIn("info:s1:body", "Текст")) || !(await pickIn("info:s2:body", "раздела", 2))) return;
+    await ensurePanel();
+    let head = await headerText();
+    if (!head.includes("ВЫБРАНО: 2")) { reasons.push(`(a) header reads ${JSON.stringify(head)} before the delete, expected «ВЫБРАНО: 2»`); return; }
+    await click(cdp, `${card1} > .nested-editor-head .nested-editor-actions button`);
+    await sleep(200);
+    head = await headerText();
+    if (head.includes("ВЫБРАНО")) reasons.push(`(a) the header still reads ${JSON.stringify(head)} after the delete`);
+    const left = await painted();
+    if (JSON.stringify(left) !== JSON.stringify(["раздела"])) reasons.push(`(a) painted ${JSON.stringify(left)} after the delete, expected ["раздела"]`);
+    if (!(await panelOpen())) reasons.push("(a) the panel closed after the delete");
+    await click(cdp, '.format-swatches button[aria-label="Красный"]');
+    await sleep(200);
+    if ((await colorIn("info:s2:body", "раздела")) !== red) reasons.push(`(a) «раздела» colour ${await colorIn("info:s2:body", "раздела")}, expected ${red}`);
+    const saved = await save();
+    if (!saved.includes('"info:s2:body"')) reasons.push("(a) the saved body has no formatting for section 2");
+    if (saved.includes('"info:s1:body"')) reasons.push("(a) the saved body still holds formatting for the deleted section 1");
+    // The first pick is plain, the panel opens, and the second is a Ctrl pick in section 2: two fragments, focus left in section 2's field.
+    const pair = async (step, revision, firstKey, firstWord) => {
+      if (!(await fresh(revision)) || !(await pickIn(firstKey, firstWord))) return false;
+      await ensurePanel();
+      if (!(await pickIn("info:s2:body", "раздела", 2))) return false;
+      await sleep(150);
+      const text = await headerText();
+      if (!text.includes("ВЫБРАНО: 2")) { reasons.push(`(${step}) header reads ${JSON.stringify(text)} before the action, expected «ВЫБРАНО: 2»`); return false; }
+      return true;
+    };
+    const red2 = async () => { // one colour click, then what ended up coloured in section 2
+      await ensurePanel();
+      await click(cdp, '.format-swatches button[aria-label="Красный"]');
+      await sleep(200);
+    };
+    // (b) deleting a section also releases the fragments in its blocks (CR-01)
+    if (await pair("b", 48, "info-block:b1:text", "Блок")) {
+      await click(cdp, `${card1} > .nested-editor-head .nested-editor-actions button`);
+      await sleep(200);
+      const afterB = await headerText();
+      if (afterB.includes("ВЫБРАНО")) reasons.push(`(b) the header still reads ${JSON.stringify(afterB)} after the section delete`);
+      const paintedB = await painted();
+      if (JSON.stringify(paintedB) !== JSON.stringify(["раздела"])) reasons.push(`(b) painted ${JSON.stringify(paintedB)} after the section delete, expected ["раздела"]`);
+      await red2();
+      const savedB = await save();
+      if (!savedB.includes('"info:s2:body"')) reasons.push("(b) the saved body has no formatting for section 2");
+      if (savedB.includes('"info-block:b1:text"')) reasons.push("(b) the saved body still holds formatting for the deleted section's block");
+    }
+    // (c) a text change with Ctrl held (here Ctrl+Backspace) ends the gesture: the fragments go, so a colour click leaves section 1 alone (WR-01)
+    if (await pair("c", 49, "info:s1:body", "Текст")) {
+      await holdCtrl(cdp, 2, async () => {
+        for (const type of ["keyDown", "keyUp"]) await cdp.send("Input.dispatchKeyEvent", { type, key: "Backspace", code: "Backspace", windowsVirtualKeyCode: 8, modifiers: 2, ...(type === "keyDown" ? { commands: ["deleteWordBackward"] } : {}) });
+      });
+      await sleep(300);
+      const fieldText = await cdp.eval(`document.querySelector(${JSON.stringify(sel("info:s2:body"))})?.textContent ?? null`);
+      if (fieldText === null || fieldText.includes("раздела")) reasons.push(`(c) section 2 reads ${JSON.stringify(fieldText)} after Ctrl+Backspace, expected «раздела» gone`);
+      await red2();
+      if ((await colorIn("info:s1:body", "Текст")) === red) reasons.push("(c) «Текст» in section 1 was coloured after a Ctrl edit in section 2");
+    }
+    // (d) folding a card releases the fragments inside it, so a colour click does not style hidden text (WR-02)
+    if (await pair("d", 50, "info:s1:body", "Текст")) {
+      await click(cdp, `${card1} > .nested-editor-head .nested-editor-toggle`);
+      await sleep(200);
+      const afterD = await headerText();
+      if (afterD.includes("ВЫБРАНО")) reasons.push(`(d) the header still reads ${JSON.stringify(afterD)} after the fold`);
+      const paintedD = await painted();
+      if (JSON.stringify(paintedD) !== JSON.stringify(["раздела"])) reasons.push(`(d) painted ${JSON.stringify(paintedD)} after the fold, expected ["раздела"]`);
+      await red2();
+      if ((await colorIn("info:s2:body", "раздела")) !== red) reasons.push(`(d) «раздела» colour ${await colorIn("info:s2:body", "раздела")} after the fold, expected ${red}`);
+      await click(cdp, `${card1} > .nested-editor-head .nested-editor-toggle`);
+      await sleep(200);
+      if ((await colorIn("info:s1:body", "Текст")) === red) reasons.push("(d) «Текст» in the folded section 1 was coloured");
+    }
+  },
+};
+
+let edge;
+const cleanup = () => {
+  if (edge?.pid) { try { execFileSync("taskkill", ["/pid", String(edge.pid), "/T", "/F"], { stdio: "ignore" }); } catch { /* already gone */ } }
+};
+let code = 2;
+try {
+  const ALL = ["mark", "panel", "savechip", "sections", "table", "multiselect", "peers", "phonefit"];
+  if (CHECK !== "all" && !checks[CHECK]) throw new Error(`unknown check "${CHECK}" (known: ${Object.keys(checks).join(", ")}, all)`);
+  edge = spawn(EDGE, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${PROFILE}`, "--window-size=1920,1080", "--no-first-run", "--disable-extensions", "about:blank"], { stdio: "ignore" });
+  let up = false;
+  for (let i = 0; i < 50 && !up; i += 1) { up = await fetch(`http://127.0.0.1:${PORT}/json/version`).then((r) => r.ok, () => false); if (!up) await sleep(200); }
+  if (!up) throw new Error("Edge debugging port did not open");
+  if (!(await fetch(URL_).then((r) => r.ok, () => false))) throw new Error("server not reachable");
+  const target = await (await fetch(`http://127.0.0.1:${PORT}/json/new?about:blank`, { method: "PUT" })).json();
+  const ws = new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise((resolve, reject) => { ws.addEventListener("open", resolve); ws.addEventListener("error", reject); });
+  const cdp = new Cdp(ws);
+  await cdp.send("Page.enable"); await cdp.send("Runtime.enable");
+  installStub(cdp);
+  await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `sessionStorage.setItem("portia-boot-seen-v1", "1")` });
+  await cdp.send("Fetch.enable", { patterns: [{ urlPattern: "*/api/*", requestStage: "Request" }] });
+  if (CHECK === "all") {
+    const results = {};
+    for (const name of ALL) {
+      reasons.length = 0; fakeSaves = 0; serve(fixture(), 1); // each check starts from a clean verdict, fixture and desktop viewport
+      await desktop(cdp);
+      try { await checks[name](cdp); } catch (error) { reasons.push(`check threw: ${error.message}`); }
+      results[name] = { ok: reasons.length === 0, reasons: [...reasons] };
+    }
+    ws.close();
+    const ok = ALL.every((name) => results[name].ok);
+    console.log(JSON.stringify({ check: "all", ok, results }, null, 2));
+    code = ok ? 0 : 1;
+  } else {
+    await checks[CHECK](cdp);
+    ws.close();
+    const ok = reasons.length === 0;
+    console.log(JSON.stringify({ check: CHECK, ok, reasons }, null, 2));
+    code = ok ? 0 : 1;
+  }
+} catch (error) {
+  console.error(`editor check failed: ${error.message}`);
+  code = 2;
+} finally {
+  cleanup();
+  await sleep(800);
+  try { fs.rmSync(PROFILE, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 }); } catch { /* temp dir, harmless */ }
+}
+process.exit(code);

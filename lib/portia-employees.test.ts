@@ -4,8 +4,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   acceptsEditorList, acceptsRoster, addManualEmployee, changedDetails, changedFields, employeeId, employeeRatings, mergeEmployeesAnswer, mergeManualEmployees, parseCsv, profileChanged, profileFromRow, profileOf, settleDraft,
   readEmployeeProfiles, readManualEmployees, removeManualEmployee, rosterFromRows, sanitizeEmployeeUpdate, sanitizeManualDetails, sanitizeManualEmployee, updateManualEmployee,
-  saveEmployeeProfile, saveEmployeePatch, loadEmployees, withProfile, type EmployeeProfile, type EmployeeUpdate, type PortiaEmployee, type RosterEmployee,
+  saveEmployeeProfile, saveEmployeePatch, loadEmployees, loadEmployeesFromRows, manualRowsFromRows, profileIndexFromRows, withProfile, type EmployeeProfile, type EmployeeUpdate, type PortiaEmployee, type RosterEmployee,
 } from "./portia-employees.ts";
+import { resetEmployeesSnapshot } from "./employees-snapshot-cache.ts";
 
 const noRatings = { pawsRating: null, bioRating: null, sRating: null, activityRating: null, testsRating: null, overallRating: null };
 const header = '"Номер","Никнейм сотрудника","Позывной","Звание","Ранг"';
@@ -343,6 +344,17 @@ test("profiles-unavailable: a newcomer is not written when the stored profiles c
   assert.equal(db.profiles.upserts.length, 0);
 });
 
+test("the staff sheet is read only in its own rows, so the rank column is not typed by the promotion dates below (owner UAT 19-14)", async (t) => {
+  // Column E holds text ranks in rows 2-35 and promotion dates in rows 61-85. A whole-sheet gviz export types E as a
+  // date column and silently blanks every text rank, so the staff read must carry its own range.
+  const calls = stubSheet(t, ['"1","Fox","Лис","Доктор","Профессор"']);
+  const db = fakeDb(fakeTable(true, []), manualTable());
+  const loaded = await loadEmployees(db.client);
+  const sheetCall = calls.find((url) => url.includes("docs.google.com"));
+  assert.match(sheetCall ?? "", /[?&]range=A1:Z35(&|$)/);
+  assert.equal(loaded.employees[0].rank, "Профессор");
+});
+
 test("loadEmployees still reads the sheet, profiles and manual rows, and throws on a non-OK sheet", async (t) => {
   stubSheet(t, ['"1","Fox","Лис","Доктор","2"']);
   const db = fakeDb(fakeTable(true, [{ employee_id: "nick-fox", nickname: "Fox", biography: "old", photo_url: "", knowledge_rating: 1 }]), manualTable({ rows: [manualRow(50, "Gamma_x")] }));
@@ -361,6 +373,75 @@ test("loadEmployees says whether the manual rows were read, so a delete can refu
   assert.equal((await loadEmployees(failed.client)).manualRead, false);
   const healthy = fakeDb(fakeTable(true), manualTable({ rows: [manualRow(50, "Gamma_x")] }));
   assert.equal((await loadEmployees(healthy.client)).manualRead, true);
+});
+
+const profileRowOf = (extra: Record<string, unknown> = {}) => ({ employee_id: "nick-fox", nickname: "Fox", biography: "old", photo_url: "", knowledge_rating: 1, ...extra });
+
+test("profileIndexFromRows and manualRowsFromRows: pure row mapping, junk rows skipped, only the named manual columns kept", () => {
+  const index = profileIndexFromRows([profileRowOf(), profileRowOf({ employee_id: "roblox-7", nickname: "Hawk", biography: "h" }), null, 5, { nickname: "x" }]);
+  assert.deepEqual([...index.byId.keys()], ["nick-fox", "roblox-7"]);
+  assert.equal(index.byId.get("roblox-7")?.biography, "h");
+  assert.deepEqual([...index.robloxIdByNickname], [["hawk", 7]]);
+  const manual = manualRowsFromRows([{ employee_id: "roblox-9", nickname: "Gamma_x", title: "T", rank: "R", callsign: "C", created_by: "u" }, { employee_id: "x" }, null, "s"]);
+  assert.deepEqual(manual, [{ employee_id: "roblox-9", nickname: "Gamma_x", title: "T", rank: "R", callsign: "C" }]);
+  assert.deepEqual(profileIndexFromRows([]).byId.size, 0);
+  assert.deepEqual(manualRowsFromRows([]), []);
+});
+
+test("loadEmployeesFromRows gives the same employees as loadEmployees fed with the same stored rows", async (t) => {
+  // The server snapshot is shared by the whole module, so each case starts from an empty one.
+  resetEmployeesSnapshot();
+  t.after(() => resetEmployeesSnapshot());
+  const stored = [profileRowOf({ photo_url: "" })];
+  const manualStored = [manualRow(50, "Gamma_x")];
+  stubSheet(t, ['"1","Fox","Лис","Доктор","2"']);
+  const direct = await loadEmployees(fakeDb(fakeTable(true, stored), manualTable({ rows: manualStored })).client);
+  const fromRows = await loadEmployeesFromRows({ profiles: stored, manual: manualStored });
+  assert.deepEqual(fromRows.employees, direct.employees);
+  assert.deepEqual([fromRows.complete, fromRows.profilesRead, fromRows.manualRead], [direct.complete, direct.profilesRead, direct.manualRead]);
+  assert.equal(fromRows.employees[0].biography, "old");
+  assert.deepEqual(fromRows.employees.map((employee) => employee.source), ["sheet", "manual"]);
+});
+
+test("loadEmployeesFromRows: empty lists of the database are a healthy read, not a failure (EDGE SEC-01/empty)", async (t) => {
+  // The server snapshot is shared by the whole module, so each case starts from an empty one.
+  resetEmployeesSnapshot();
+  t.after(() => resetEmployeesSnapshot());
+  stubSheet(t, ['"1","Fox","","",""']);
+  const loaded = await loadEmployeesFromRows({ profiles: [], manual: [] });
+  assert.deepEqual([loaded.profilesRead, loaded.manualRead, loaded.complete], [true, true, true]);
+  assert.deepEqual(loaded.employees.map((employee) => employee.nickname), ["Fox"]);
+  assert.equal(loaded.employees[0].biography, "");
+});
+
+test("loadEmployeesFromRows(null): a signed read that did not happen is the old degradation, the list comes from the sheet alone", async (t) => {
+  // The server snapshot is shared by the whole module, so each case starts from an empty one.
+  resetEmployeesSnapshot();
+  t.after(() => resetEmployeesSnapshot());
+  stubSheet(t, ['"1","Fox","Лис","Доктор","2"']);
+  const loaded = await loadEmployeesFromRows(null);
+  assert.deepEqual([loaded.profilesRead, loaded.manualRead, loaded.complete], [false, false, false]);
+  assert.deepEqual(loaded.employees.map((employee) => [employee.nickname, employee.source]), [["Fox", "sheet"]]);
+  assert.equal(loaded.employees[0].biography, "");
+});
+
+test("loadEmployeesFromRows throws on a non-OK sheet, like loadEmployees", async (t) => {
+  // The server snapshot is shared by the whole module, so each case starts from an empty one.
+  resetEmployeesSnapshot();
+  t.after(() => resetEmployeesSnapshot());
+  stubSheet(t, "down");
+  await assert.rejects(loadEmployeesFromRows({ profiles: [], manual: [] }), /Google Sheets returned 500/);
+});
+
+test("employee photos follow the shared local-path rule (CONT-09)", () => {
+  assert.equal(sanitizeEmployeeUpdate({ photoUrl: "//host/x.png" }), null);
+  assert.equal(sanitizeEmployeeUpdate({ photoUrl: "/\\host/x.png" }), null);
+  assert.deepEqual(sanitizeEmployeeUpdate({ photoUrl: "/photos/a.png" }), { photoUrl: "/photos/a.png" });
+  assert.deepEqual(sanitizeEmployeeUpdate({ photoUrl: "https://x/a.png" }), { photoUrl: "https://x/a.png" });
+  assert.deepEqual(sanitizeEmployeeUpdate({ photoUrl: "" }), { photoUrl: "" });
+  const base = { biography: "b", knowledge_rating: 3 };
+  assert.equal(profileFromRow({ ...base, photo_url: "//host/x.png" }).photoUrl, "");
+  assert.equal(profileFromRow({ ...base, photo_url: "https://x/a.png" }).photoUrl, "https://x/a.png");
 });
 
 test("stored rows without rating columns, or with junk, map to empty ratings", () => {

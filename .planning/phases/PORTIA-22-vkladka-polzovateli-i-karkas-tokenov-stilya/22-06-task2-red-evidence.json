@@ -1,0 +1,10 @@
+{
+  "command": "node --experimental-strip-types --test --test-reporter=tap --test-name-pattern='D-10 list marks stay unknown when the roster is degraded and failures are not cached' lib/users-api.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: D-10 list marks stay unknown when the roster is degraded and failures are not cached\nnot ok 1 - D-10 list marks stay unknown when the roster is degraded and failures are not cached\n  ---\n  duration_ms: 2.3536\n  location: 'C:\\\\Users\\\\User\\\\code\\\\portia-site\\\\lib\\\\users-api.test.ts:337:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    + actual - expected\n    \n    + undefined\n    - 'degraded'\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 'degraded'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///C:/Users/User/code/portia-site/lib/users-api.test.ts:346:10)\n    async Test.run (node:internal/test_runner/test:932:9)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 148.2023\n",
+  "targetTest": "D-10 list marks stay unknown when the roster is degraded and failures are not cached",
+  "targetFile": "lib/users-api.test.ts",
+  "expected": "A degraded staff roster is represented as roster=degraded and every row receives the unknown table mark.",
+  "actual": "The named assertion executed and found no roster status in the list reply.",
+  "semanticAssessment": "VALID RED: the target executed and failed on the planned missing roster-status behavior; there was no syntax, import, fixture, setup, load or discovery failure."
+}

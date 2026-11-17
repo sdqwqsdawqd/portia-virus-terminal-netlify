@@ -1,12 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import { accentBootScript, accentIds, bootSeenStorageKey, motionModes } from "./accent-boot.ts";
+import { accentBootScript, accentIds, bootSeenStorageKey, desktopSettingsStorageKey, motionModes, spiderModes } from "./accent-boot.ts";
+import { accentTokenNames, deriveAccentTokens } from "./accent-custom.ts";
+import { componentFamily } from "./component-source.ts";
 
 type Rgb = [number, number, number];
 
 const css = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-const desktopSource = readFileSync(new URL("../components/portia-desktop.tsx", import.meta.url), "utf8");
+const cssRaw = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
+const layoutSource = readFileSync(new URL("../app/layout.tsx", import.meta.url), "utf8");
+const desktopSource = componentFamily("portia-desktop").map((part) => part.text).join("\n");
+const spiderSource = readFileSync(new URL("../components/portia-wallpaper-spider.tsx", import.meta.url), "utf8");
 
 // Median opaque (alpha >= 200) pixels with RGB chroma >= 40; the assistant split at its median OKLCH lightness.
 const LOGO_TEAL = "#00b396";
@@ -43,6 +48,8 @@ function oklchToRgb(L: number, C: number, hue: number): Rgb {
 }
 const hueDistance = (a: number, b: number) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
 const hueOf = (value: string) => oklch(hex(value))[2];
+const luminance = (rgb: Rgb) => 0.2126 * toLinear(rgb[0]) + 0.7152 * toLinear(rgb[1]) + 0.0722 * toLinear(rgb[2]);
+const contrast = (a: Rgb, b: Rgb) => { const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x); return (hi + 0.05) / (lo + 0.05); };
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 const applyMatrix = (m: number[][], rgb: Rgb) => m.map((row) => clamp01((row[0] * rgb[0] + row[1] * rgb[1] + row[2] * rgb[2]) / 255) * 255) as Rgb;
@@ -109,6 +116,7 @@ test("every theme defines the accent tokens and both PNG filters", () => {
     }
   }
   assert.ok(root.has("--accent-hue"));
+  assert.equal(root.get("--accent-chroma"), "1");
   assert.equal(root.get("--mark-filter"), "hue-rotate(0deg)");
   assert.equal(root.get("--assistant-filter"), "hue-rotate(0deg)");
 });
@@ -175,7 +183,7 @@ test("no turquoise literal in the components", () => {
   for (const file of [...components, ...sources(new URL("../app/", import.meta.url))]) {
     readFileSync(file, "utf8").split("\n").forEach((line, i) => {
       // Text colour presets in the editor are stored content colours, not interface.
-      if (file.pathname.endsWith("portia-editor.tsx") && /value: "#[0-9a-f]{6}", label:/i.test(line)) return;
+      if (/\/portia-editor(-[a-z0-9-]+)?\.tsx$/.test(file.pathname) && /value: "#[0-9a-f]{6}", label:/i.test(line)) return;
       // Components keep the saturated threshold: near-neutral greys in TSX are content colours, not tints.
       for (const literal of turquoiseLiterals(line, 20)) left.push(`${file.pathname.split("/").slice(-2).join("/")}:${i + 1}: ${literal}`);
     });
@@ -184,7 +192,7 @@ test("no turquoise literal in the components", () => {
 });
 
 test("Portia tints stay in gamut and in the teal family", () => {
-  for (const [whole, l, c] of css.matchAll(/oklch\(([\d.]+) ([\d.]+) var\(--accent-hue\)/g)) {
+  for (const [whole, l, c] of css.matchAll(/oklch\(([\d.]+) calc\(([\d.]+) \* var\(--accent-chroma\)\) var\(--accent-hue\)/g)) {
     const rgb = oklchToRgb(Number(l), Number(c), 180.4);
     assert.ok(rgb.every((v) => v >= -1 && v <= 256), `${whole} leaves sRGB at the Portia hue`);
     if (Number(c) >= 0.02) {
@@ -194,16 +202,46 @@ test("Portia tints stay in gamut and in the teal family", () => {
   }
 });
 
+test("every accent tint follows --accent-chroma", () => {
+  const sources = (dir: URL): URL[] => readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? sources(new URL(`${e.name}/`, dir)) : /\.tsx?$/.test(e.name) ? [new URL(e.name, dir)] : []);
+  const components = readdirSync(new URL("../components/", import.meta.url)).filter((f) => f.endsWith(".tsx")).map((f) => new URL(`../components/${f}`, import.meta.url));
+  const files: [string, string][] = [["app/portia.css", css]];
+  for (const file of [...components, ...sources(new URL("../app/", import.meta.url))]) files.push([file.pathname.split("/").slice(-2).join("/"), readFileSync(file, "utf8")]);
+  for (const [name, text] of files) {
+    const all = (text.match(/var\(--accent-hue\)/g) ?? []).length;
+    const scaled = (text.match(/calc\([\d.]+ \* var\(--accent-chroma\)\) var\(--accent-hue\)/g) ?? []).length;
+    assert.equal(scaled, all, `${name}: ${all - scaled} var(--accent-hue) tint(s) are not scaled by --accent-chroma`);
+  }
+});
+
 test("no relative colour syntax", () => {
   assert.doesNotMatch(css, /oklch\(\s*from\b/);
 });
 
-const runBoot = (getItem: () => string | null, systemReduce = false, sessionGetItem: (key: string) => string | null = () => null) => {
-  const dataset: { accent?: string; motion?: string; boot?: string } = {};
+const runBoot = (getItem: (key: string) => string | null, systemReduce = false, sessionGetItem: (key: string) => string | null = () => null) => {
+  const dataset: { accent?: string; motion?: string; spider?: string; boot?: string } = {};
+  const props: Record<string, string> = {};
+  const style = { setProperty: (name: string, value: string) => { props[name] = value; } };
   const matchMedia = (query: string) => ({ matches: systemReduce && query === "(prefers-reduced-motion: reduce)" });
-  new Function("localStorage", "sessionStorage", "document", "matchMedia", accentBootScript)({ getItem }, { getItem: sessionGetItem }, { documentElement: { dataset } }, matchMedia);
-  return dataset;
+  new Function("localStorage", "sessionStorage", "document", "matchMedia", accentBootScript)({ getItem }, { getItem: sessionGetItem }, { documentElement: { dataset, style } }, matchMedia);
+  return { ...dataset, props };
 };
+
+test("the boot script applies a saved custom accent exactly as deriveAccentTokens computes it", () => {
+  const out = runBoot(() => JSON.stringify({ accent: "custom", customAccent: "#ff3366" }));
+  const expected = deriveAccentTokens("#ff3366");
+  assert.ok(expected);
+  assert.deepEqual(Object.keys(expected).sort(), [...accentTokenNames].sort());
+  assert.equal(out.accent, "custom");
+  assert.deepEqual(out.props, expected);
+});
+
+test("a preset stays a preset when a custom colour is remembered", () => {
+  const out = runBoot(() => JSON.stringify({ accent: "ice", customAccent: "#ff3366" }));
+  assert.equal(out.accent, "ice");
+  assert.deepEqual(out.props, {});
+});
 
 test("the boot animation plays once per browser session", () => {
   const saved = () => JSON.stringify({ accent: "ice", motion: "off" });
@@ -212,10 +250,32 @@ test("the boot animation plays once per browser session", () => {
   assert.equal(runBoot(saved, false, () => null).boot, undefined);
   const blocked = runBoot(saved, false, () => { throw new Error("storage blocked"); });
   assert.equal(blocked.boot, undefined);
-  assert.equal(blocked.motion, "reduce");
+  assert.equal(blocked.motion, "off");
   assert.equal(blocked.accent, "ice");
   assert.ok(/(^|,)\s*html\[data-boot="seen"\] \.boot-screen\s*(,[^{]*)?\{[^}]*display:\s*none/m.test(css), "no html[data-boot=\"seen\"] .boot-screen { display: none }");
   assert.match(desktopSource, /sessionStorage\.setItem\(bootSeenStorageKey,/);
+});
+
+test("no source file reads the system reduced-motion preference (D-10)", () => {
+  const root = new URL("../", import.meta.url);
+  const files = ["components", "lib", "app"].flatMap((dir) => readdirSync(new URL(`${dir}/`, root), { recursive: true, encoding: "utf8" })
+    .map((name) => name.replaceAll("\\", "/"))
+    .filter((name) => /\.(tsx?|css)$/.test(name) && !name.endsWith(".test.ts"))
+    .map((name) => `${dir}/${name}`));
+  assert.ok(files.length > 20 && files.includes("app/portia.css") && files.includes("components/portia-wallpaper-spider.tsx"));
+  const needle = ["prefers", "reduced", "motion"].join("-");
+  for (const file of files) assert.ok(!readFileSync(new URL(file, root), "utf8").includes(needle), `${file} reads the system motion preference`);
+});
+
+test("the boot screen plays only in full mode; reduced and off skip it, the failsafe stays (D-12, D-13, T-18-03)", () => {
+  assert.match(desktopSource, /const bootSkipped = bootSeen \|\| document\.documentElement\.dataset\.motion !== "full";/);
+  assert.match(desktopSource, /bootSkipped \? 0 : 1650/);
+  assert.match(desktopSource, /if \(!bootSkipped\) try \{ window\.sessionStorage\.setItem\(bootSeenStorageKey,/);
+  assert.match(css, /html:is\(\[data-motion="reduced"\], \[data-motion="off"\]\) \.boot-screen\s*\{\s*display:\s*none/);
+  assert.match(css, /boot-screen-failsafe 220ms ease 2\.2s/);
+  // The hint (18-MOTION-APPROVAL item 4) sits under the group and wraps inside the window. D-56 (20-37): it is one short phrase now.
+  assert.match(desktopSource, /<p className="setting-hint">Системная настройка движения не учитывается\.<\/p>/);
+  assert.match(css, /\.setting-hint\s*\{[^}]*font:\s*500 11px[^}]*overflow-wrap:\s*anywhere/);
 });
 
 test("the boot script applies only a whitelisted saved accent", () => {
@@ -233,22 +293,426 @@ test("the boot script applies only a whitelisted saved accent", () => {
   for (const id of ["ice", "amber", "red"]) assert.ok(themes[id].size > 0, `no html[data-accent="${id}"] block`);
 });
 
-test("animations are on by default and off only by the setting, whatever the system says", () => {
-  const saved = (motion?: string) => () => JSON.stringify({ accent: "teal", motion });
+test("animations are full by default; reduced and off only by the saved setting, whatever the system says (D-10, D-11)", () => {
+  const saved = (motion?: unknown) => () => JSON.stringify({ accent: "teal", motion });
   assert.equal(runBoot(saved(), true).motion, "full");
   assert.equal(runBoot(saved(), false).motion, "full");
-  assert.equal(runBoot(saved("system"), true).motion, "full");
   assert.equal(runBoot(saved("on"), true).motion, "full");
-  assert.equal(runBoot(saved("off"), false).motion, "reduce");
-  assert.equal(runBoot(() => { throw new Error("storage blocked"); }, true).motion, "full");
-  // The attribute is the switch. The media query may only hold the fallback for a page where the head
-  // script never ran, so every selector inside it must be scoped to html:not([data-motion]).
-  for (const [, body] of css.matchAll(/@media\s*\(prefers-reduced-motion[^)]*\)\s*\{((?:[^{}]*\{[^{}]*\})*[^{}]*)\}/g)) {
-    for (const [, selectors] of body.matchAll(/([^{}]+)\{[^{}]*\}/g)) {
-      for (const selector of selectors.split(",")) assert.match(selector.trim(), /^html:not\(\[data-motion\]\)/, `unscoped motion rule: ${selector.trim()}`);
-    }
-  }
+  assert.equal(runBoot(saved("reduced"), false).motion, "reduced");
+  assert.equal(runBoot(saved("reduced"), true).motion, "reduced");
+  assert.equal(runBoot(saved("off"), false).motion, "off");
+  assert.equal(runBoot(saved("off"), true).motion, "off");
+  // Unknown, legacy and corrupted values fall back to full; only the two literals switch anything.
+  for (const bad of ["system", "reduce", 123, null, "", "OFF", ["off"]]) assert.equal(runBoot(saved(bad), true).motion, "full", `value ${JSON.stringify(bad)}`);
+  assert.equal(runBoot(() => null).motion, "full");
+  assert.equal(runBoot(() => "{not json").motion, "full");
+  // E1: unreadable storage renders the defaults (motion full, spider on, no accent).
+  const blocked = runBoot(() => { throw new Error("storage blocked"); }, true);
+  assert.equal(blocked.motion, "full");
+  assert.equal(blocked.spider, "on");
+  assert.equal(blocked.accent, undefined);
+  // E1 partial: a corrupted field resets only itself.
+  const partial = runBoot(() => JSON.stringify({ motion: "invalid", spider: "off", accent: "ice" }));
+  assert.equal(partial.motion, "full");
+  assert.equal(partial.spider, "off");
+  assert.equal(partial.accent, "ice");
+  // The system preference is not read by the head script (D-10).
+  assert.doesNotMatch(accentBootScript, /matchMedia|prefers-reduced/);
+  // The motion switch block must not carry any system-preference media query (D-10).
+  const switchStart = cssRaw.indexOf("/* Motion switch");
+  const switchBlock = cssRaw.slice(switchStart, cssRaw.indexOf(".document-window", switchStart));
+  assert.ok(switchStart > -1 && switchBlock.includes("html[data-motion="), "Motion switch block not found");
+  assert.doesNotMatch(switchBlock, /prefers-reduced-motion/);
+  // «Выключены» zeroes durations and delays globally so every animation lands on its last frame.
+  assert.match(switchBlock, /html\[data-motion="off"\] \*[^{]*\{[^}]*animation-duration:\s*0s !important;[^}]*animation-delay:\s*0s !important;[^}]*transition-duration:\s*0s !important;[^}]*transition-delay:\s*0s !important;/);
+  assert.match(switchBlock, /html\[data-motion="reduced"\] \*/);
+  // Without the head script the SSR attribute is the safe state.
+  assert.match(layoutSource, /<html[^>]*data-motion="full"/);
+  // No legacy mode value and no system-preference media block remain anywhere in the stylesheet (STAB-MOTION-01, D-10).
+  assert.doesNotMatch(css, /data-motion="reduce"/);
+  assert.doesNotMatch(css, /prefers-reduced-motion/);
+  // Windows under «Уменьшены»: fade only, no scale, at the fast duration; Vivian's idle offended pose is static in every mode.
+  assert.match(css, /html\[data-motion="reduced"\] \.app-window:not\(.is-closing, .is-minimizing\) \{ animation: fade-in var\(--motion-fast\) ease-out !important; \}/);
+  assert.match(css, /html\[data-motion="reduced"\] \.assistant-button img \{ transition-duration: var\(--motion-fast\); \}/);
+  assert.match(css, /(^|\n)\.desktop-assistant\.is-offended \.assistant-button img \{[^}]*rotate:[^}]*grayscale\([^}]*opacity:/);
   const group = desktopSource.match(/title="Анимации" values=\{(\[\[.*?\]\])\}/)?.[1];
   assert.ok(group, "«Анимации» SettingGroup not found");
+  assert.deepEqual([...motionModes], ["on", "reduced", "off"]);
   assert.deepEqual([...motionModes], [...group.matchAll(/\['(\w+)',/g)].map((m) => m[1]));
+  assert.deepEqual([...group.matchAll(/'([^']+)'\]/g)].map((m) => m[1]), ["Включены", "Уменьшены", "Выключены"]);
+});
+
+// quick 261117-bi1 (R4): Vivian under «Уменьшены» answers with a small translate-only bounce (no opacity dip, no fade from zero);
+// under «Выключены» she does not move at all (no keyframes, no hover/focus/press lean). The static sulking pose still shows the state.
+type MotionRule = { selectors: string[]; body: string };
+const motionRules = (mode: "reduced" | "off"): MotionRule[] => [...css.matchAll(new RegExp(`(?:^|\\n)(html\\[data-motion="${mode}"\\][^{}]*)\\{([^{}]*)\\}`, "g"))]
+  .map((match) => ({ selectors: match[1].split(",").map((selector) => selector.trim()), body: match[2] }));
+const keyframeBody = (name: string) => css.match(new RegExp(`@keyframes ${name}\\s*\\{((?:[^{}]*\\{[^{}]*\\})*)\\s*\\}`))?.[1];
+const keyframeProperties = (body: string) => new Set([...body.matchAll(/([a-z-]+)\s*:/g)].map((match) => match[1]).filter((property) => property !== "animation-timing-function"));
+
+test("quick 261117-bi1 R4a: under «Уменьшены» Vivian bounces by translate only, within 240ms, with no opacity change and no fade-in", () => {
+  assert.match(css, /--motion-fast:\s*160ms;/);
+  assert.match(css, /--motion-base:\s*240ms;/);
+  const figure = motionRules("reduced").filter((rule) => rule.selectors.some((selector) => selector.endsWith(".assistant-button img")) && /(^|;|\s)animation:/.test(rule.body));
+  assert.ok(figure.length >= 5, "click a, click b, phrase, sulk and recovery all have a rule");
+  const names = new Map<string, string>();
+  for (const rule of figure) {
+    const animation = /animation:\s*([^;]+?)\s*(?:!important)?\s*(?:;|$)/.exec(rule.body)?.[1] ?? "";
+    const [name, duration] = animation.split(/\s+/);
+    assert.notEqual(name, "fade-in", `${rule.selectors[0]}: no fade from zero`);
+    assert.match(duration, /^var\(--motion-(?:fast|base)\)$/, `${rule.selectors[0]}: at most 240ms`);
+    assert.match(rule.body, /!important/, `${rule.selectors[0]}: beats the global .01ms rule`);
+    const frames = keyframeBody(name);
+    assert.ok(frames, `${name} is defined`);
+    assert.deepEqual([...keyframeProperties(frames)], ["translate"], `${name} animates translate only (no opacity, scale or rotate)`);
+    for (const selector of rule.selectors) names.set(selector, name);
+  }
+  const rule = (needle: string) => [...names].find(([selector]) => selector.includes(needle));
+  const clickA = rule('[data-squish="a"]');
+  const clickB = rule('[data-squish="b"]');
+  assert.ok(clickA && clickB && clickA[1] !== clickB[1], "a click alternates two keyframe names, so it restarts without remounting");
+  assert.equal(keyframeBody(clickA[1])?.replace(/\s+/g, " "), keyframeBody(clickB[1])?.replace(/\s+/g, " "), "the two are identical");
+  assert.ok(rule(".is-speaking[data-auto]"), "the automatic phrase bounces");
+  assert.ok(rule(".is-recovering"), "recovery bounces");
+  const sulk = figure.find((candidate) => candidate.selectors.some((selector) => selector.includes(".is-offended .assistant-button img")));
+  assert.ok(sulk, "sulking has its own rule");
+  assert.match(sulk.body, /\bboth\b/, "sulking keeps its last frame");
+  const sink = keyframeBody(/animation:\s*(\S+)/.exec(sulk.body)?.[1] ?? "") ?? "";
+  assert.match(sink, /(?:100%|to)\s*\{\s*translate:\s*0 4px;?\s*\}/, "it ends on the pose offset of the static sulking pose");
+  // The old dips and fades are gone, and nothing else still names them.
+  assert.doesNotMatch(css, /vivian-soft/, "the opacity-dip keyframes are removed");
+  assert.match(css, /html\[data-motion="reduced"\] \.assistant-button img \{ transition-duration: var\(--motion-fast\); \}/, "the hover transition pin stays");
+});
+
+test("quick 261117-bi1 R4b: under «Выключены» Vivian has no keyframe animation and no hover, focus or press lean", () => {
+  const rules = motionRules("off");
+  const stillAnimation = rules.find((rule) => rule.selectors.includes('html[data-motion="off"] .desktop-assistant .assistant-button img') && rule.selectors.includes('html[data-motion="off"] .assistant-bubble'));
+  assert.ok(stillAnimation, "the image and the bubble are named together");
+  assert.match(stillAnimation.body, /animation:\s*none !important/);
+  for (const state of [":hover", ":focus-visible", ":active"]) {
+    const lean = rules.find((rule) => rule.selectors.includes(`html[data-motion="off"] .assistant-button${state} img`));
+    assert.ok(lean, `${state} is overridden`);
+    assert.match(lean.body, /transform:\s*none/, `${state}: no lean or press`);
+  }
+  // The static sulking pose and the hover glow stay: they show state, they do not move.
+  assert.match(css, /(^|\n)\.desktop-assistant\.is-offended \.assistant-button img \{[^}]*rotate:[^}]*grayscale\([^}]*opacity:/);
+});
+
+const rgbToHex = (rgb: Rgb) => "#" + rgb.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, "0")).join("");
+
+test("custom accents derive every preset token in the preset formats", () => {
+  for (const pick of ["#ff3366", "#3366ff", "#808080"]) {
+    const t = deriveAccentTokens(pick)!;
+    assert.deepEqual(Object.keys(t).sort(), [...accentTokenNames].sort());
+    for (const name of ["--teal", "--teal-dim", "--desktop-base", "--desktop-deep"]) assert.match(t[name], /^#[0-9a-f]{6}$/, `${pick} ${name}`);
+    assert.match(t["--teal-soft"], /^rgba\(\d{1,3},\d{1,3},\d{1,3},\.13\)$/);
+    for (const name of ["--desktop-glow", "--desktop-grid"]) assert.match(t[name], /^\d{1,3}, \d{1,3}, \d{1,3}$/, `${pick} ${name}`);
+    assert.match(t["--accent-hue"], /^\d{1,3}(\.\d)?$/);
+    assert.match(t["--accent-chroma"], /^(0|1|0\.\d{1,2})$/, `${pick} --accent-chroma`);
+    parseFilter(t["--mark-filter"]);
+    parseFilter(t["--assistant-filter"]);
+  }
+});
+
+test("every custom hue stays readable and keeps the spider and Vivian on the accent", () => {
+  const picks = [
+    ...Array.from({ length: 36 }, (_, i) => rgbToHex(oklchToRgb(0.7, 0.15, i * 10))),
+    "#000000", "#ffffff", "#808080", "#0a0a0a", "#fafafa", "#ff0000", "#00ff00", "#0000ff", "#ffff00",
+  ];
+  for (const pick of picks) {
+    const t = deriveAccentTokens(pick)!;
+    const teal = hex(t["--teal"]);
+    const scale = Number(t["--accent-chroma"]);
+    const tealChroma = oklch(teal)[1];
+    const bg = oklchToRgb(0.163, 0.014 * scale, Number(t["--accent-hue"])).map((v) => Math.min(255, Math.max(0, v))) as Rgb;
+    assert.ok(contrast(teal, bg) >= 4.5, `${pick}: contrast ${contrast(teal, bg).toFixed(2)}`);
+    const mark = parseFilter(t["--mark-filter"]);
+    const assistant = parseFilter(t["--assistant-filter"]);
+    for (const [label, rgb] of [["logo", mark(hex(LOGO_TEAL))], ["assistant light", assistant(hex(ASSISTANT_TEAL_LIGHT))], ["assistant dark", assistant(hex(ASSISTANT_TEAL_DARK))]] as const) {
+      if (scale === 0) assert.ok(oklch(rgb)[1] <= 0.005, `${pick} ${label} keeps chroma ${oklch(rgb)[1].toFixed(4)}`);
+      else if (tealChroma >= 0.02) assert.ok(hueDistance(oklch(rgb)[2], hueOf(t["--teal"])) <= 10, `${pick} ${label} ends ${hueDistance(oklch(rgb)[2], hueOf(t["--teal"])).toFixed(1)} deg from the accent`);
+    }
+    // Below chroma 0.02 the 8-bit rounded --teal has no usable hue.
+    if (tealChroma >= 0.02) assert.ok(hueDistance(Number(t["--accent-hue"]), hueOf(t["--teal"])) <= 0.5, `${pick}: --accent-hue off its --teal`);
+    const tealL = oklch(teal)[0];
+    assert.ok(tealL >= 0.6 && tealL <= 0.82, `${pick}: --teal L ${tealL.toFixed(3)}`);
+    assert.ok(oklch(hex(t["--teal-dim"]))[0] < tealL, `${pick}: --teal-dim is not darker`);
+    assert.ok(oklch(hex(t["--desktop-base"]))[0] <= 0.17, `${pick}: --desktop-base too light`);
+    for (const name of ["--mark-filter", "--assistant-filter"]) {
+      for (const grey of ["#000000", "#ffffff", "#808080"]) {
+        const out = parseFilter(t[name])(hex(grey));
+        hex(grey).forEach((channel, i) => assert.ok(Math.abs(out[i] - channel) <= 1, `${pick} ${name} moves ${grey}`));
+      }
+    }
+  }
+});
+
+test("an achromatic pick gives a neutral grey theme", () => {
+  const equal3 = (parts: string[]) => parts.length === 3 && parts.every((p) => Number(p) === Number(parts[0]));
+  for (const pick of ["#000000", "#0d0d0d", "#808080", "#ffffff"]) {
+    const t = deriveAccentTokens(pick)!;
+    assert.equal(t["--accent-chroma"], "0", pick);
+    assert.equal(t["--accent-hue"], "0", pick);
+    for (const name of ["--teal", "--teal-dim", "--desktop-base", "--desktop-deep"]) {
+      assert.match(t[name], /^#([0-9a-f]{2})\1\1$/, `${pick} ${name} ${t[name]}`);
+    }
+    assert.ok(equal3(t["--teal-soft"].match(/\d+/g)!.slice(0, 3)), `${pick} --teal-soft ${t["--teal-soft"]}`);
+    for (const name of ["--desktop-glow", "--desktop-grid"]) assert.ok(equal3(t[name].split(", ")), `${pick} ${name} ${t[name]}`);
+    assert.equal(t["--mark-filter"], "hue-rotate(0deg) saturate(0)");
+    assert.equal(t["--assistant-filter"], "hue-rotate(0deg) saturate(0)");
+  }
+  const t = deriveAccentTokens("#0d0d0d")!;
+  assert.equal(t["--teal"], "#868686");
+  for (const surface of [oklchToRgb(0.163, 0, 0), oklchToRgb(0.229, 0, 0)]) {
+    const bg = surface.map((v) => Math.min(255, Math.max(0, v))) as Rgb;
+    assert.ok(contrast(hex(t["--teal"]), bg) >= 4.5, `contrast ${contrast(hex(t["--teal"]), bg).toFixed(2)}`);
+  }
+});
+
+const hsvToHex = (h: number, s: number, v: number) => {
+  const channel = (n: number) => { const k = (n + h / 60) % 6; return (v - v * s * Math.max(0, Math.min(k, 4 - k, 1))) * 255; };
+  return rgbToHex([channel(5), channel(3), channel(1)]);
+};
+
+test("a dark or muted pick keeps its hue and strength", () => {
+  const derive = (pick: string) => { const t = deriveAccentTokens(pick)!; return { t, lch: oklch(hex(t["--teal"])) }; };
+  const portiaHue = Number(root.get("--accent-hue"));
+  const dusky = ["#180d0d", "#1c0d0d"].map((pick) => ({ pick, ...derive(pick) }));
+  for (const { pick, lch } of dusky) {
+    assert.ok(hueDistance(lch[2], oklch(hex(pick))[2]) <= 5, `${pick}: hue ${lch[2].toFixed(1)}`);
+    assert.ok(hueDistance(lch[2], portiaHue) > 90, `${pick}: jumped to the Portia hue`);
+  }
+  assert.ok(Math.abs(dusky[0].lch[1] - dusky[1].lch[1]) <= 0.012, "no cliff between #180d0d and #1c0d0d");
+
+  const bluish = derive("#3a3a42");
+  assert.ok(hueDistance(Number(bluish.t["--accent-hue"]), 286) <= 3, `#3a3a42 hue ${bluish.t["--accent-hue"]}`);
+  assert.ok(Number(bluish.t["--accent-chroma"]) >= 0.1 && Number(bluish.t["--accent-chroma"]) <= 0.3, `#3a3a42 chroma scale ${bluish.t["--accent-chroma"]}`);
+  assert.ok(oklch(parseFilter(bluish.t["--mark-filter"])(hex(LOGO_TEAL)))[1] <= 0.03, "#3a3a42 spider is as faint as the accent");
+
+  const muted = derive("#6b4a4a");
+  assert.ok(muted.lch[1] <= 0.05, `#6b4a4a chroma ${muted.lch[1].toFixed(3)}`);
+  assert.ok(hueDistance(muted.lch[2], 19) <= 5, `#6b4a4a hue ${muted.lch[2].toFixed(1)}`);
+
+  let checked = 0;
+  for (let h = 0; h <= 330; h += 30) {
+    for (let s = 0; s <= 1.0001; s += 0.2) {
+      for (let v = 0; v <= 1.0001; v += 0.2) {
+        const pick = hsvToHex(h, s, v), pickLch = oklch(hex(pick)), { t, lch } = derive(pick);
+        const note = `${pick} (h${h} s${s.toFixed(1)} v${v.toFixed(1)})`;
+        assert.ok(lch[1] <= Math.min(pickLch[1], 0.17) + 0.003, `${note}: teal chroma ${lch[1].toFixed(4)} above the pick's ${pickLch[1].toFixed(4)}`);
+        const scale = Number(t["--accent-chroma"]);
+        const bg = oklchToRgb(0.163, 0.014 * scale, Number(t["--accent-hue"])).map((x) => Math.min(255, Math.max(0, x))) as Rgb;
+        assert.ok(contrast(hex(t["--teal"]), bg) >= 4.5, `${note}: contrast ${contrast(hex(t["--teal"]), bg).toFixed(2)}`);
+        for (const name of ["--mark-filter", "--assistant-filter"]) {
+          for (const grey of ["#000000", "#ffffff", "#808080"]) {
+            const out = parseFilter(t[name])(hex(grey));
+            hex(grey).forEach((channel, i) => assert.ok(Math.abs(out[i] - channel) <= 1, `${note} ${name} moves ${grey}`));
+          }
+        }
+        if (lch[1] >= 0.02) {
+          assert.ok(hueDistance(lch[2], pickLch[2]) <= 5, `${note}: teal hue ${lch[2].toFixed(1)} vs pick ${pickLch[2].toFixed(1)}`);
+          const mark = parseFilter(t["--mark-filter"]), assistant = parseFilter(t["--assistant-filter"]);
+          for (const [label, rgb] of [["logo", mark(hex(LOGO_TEAL))], ["assistant light", assistant(hex(ASSISTANT_TEAL_LIGHT))], ["assistant dark", assistant(hex(ASSISTANT_TEAL_DARK))]] as const) {
+            assert.ok(hueDistance(oklch(rgb)[2], lch[2]) <= 10, `${note} ${label} ends ${hueDistance(oklch(rgb)[2], lch[2]).toFixed(1)} deg from the accent`);
+          }
+        }
+        checked++;
+      }
+    }
+  }
+  assert.equal(checked, 432);
+  assert.equal(deriveAccentTokens("#ff3366")!["--accent-chroma"], "1");
+});
+
+test("tampered custom colours never reach the page", () => {
+  const hostile: unknown[] = ["\"><script>alert(1)</script>", "#12345", "#1234567", "#gggggg", "ff3366", 123, null, ["#ff3366"], {}];
+  for (const customAccent of hostile) {
+    assert.equal(deriveAccentTokens(customAccent), null);
+    const out = runBoot(() => JSON.stringify({ accent: "custom", customAccent }));
+    assert.deepEqual(out.props, {});
+    assert.equal(out.accent, undefined);
+  }
+  const bare = runBoot(() => JSON.stringify({ accent: "custom" }));
+  assert.deepEqual(bare.props, {});
+  assert.equal(bare.accent, undefined);
+});
+
+test("the boot script passes the stored colour only as an argument", () => {
+  assert.match(accentBootScript, /\)\(s\.customAccent\)/);
+  assert.doesNotMatch(accentBootScript, /eval\(|new Function|innerHTML|document\.write/);
+});
+
+test("the boot script reads the one settings key", () => {
+  const asked: string[] = [];
+  runBoot((key) => { asked.push(key); return null; });
+  assert.deepEqual(asked, [desktopSettingsStorageKey]);
+  assert.equal(desktopSettingsStorageKey, "portia-desktop-settings-v1");
+});
+
+test("the desktop reads and writes settings through the one key constant", () => {
+  assert.doesNotMatch(desktopSource, /portia-desktop-settings-v1/);
+  assert.match(desktopSource, /localStorage\.getItem\(desktopSettingsStorageKey\)/);
+  assert.match(desktopSource, /localStorage\.setItem\(desktopSettingsStorageKey,/);
+});
+
+test("the format mark is an underline with no fill and keeps 3:1 on every preview field", () => {
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selector: m[1].trim(), body: m[2] }));
+  const marks = rules.filter((r) => r.selector.includes("::highlight(portia-format)"));
+  assert.equal(marks.length, 1, "exactly one ::highlight(portia-format) rule");
+  const body = marks[0].body;
+  assert.match(body, /underline/);
+  assert.doesNotMatch(body, /background/i);
+  const m = body.match(/oklch\(([\d.]+) calc\(([\d.]+) \* var\(--accent-chroma\)\) var\(--accent-hue\) \/ ([\d.]+)\)/);
+  assert.ok(m, "the mark colour is an accent-following oklch with alpha");
+  const [markL, markC, alpha] = [Number(m[1]), Number(m[2]), Number(m[3])];
+
+  const paper = css.match(/--paper:\s*(#[0-9a-fA-F]{3,6})/)?.[1];
+  assert.ok(paper, "--paper is declared");
+  const lights = new Set<string>();
+  for (const r of rules.filter((x) => x.selector.includes("preview-light"))) {
+    const v = r.body.match(/--field-bg:\s*([^;]+);/)?.[1].trim();
+    if (v) lights.add(v === "var(--paper)" ? paper : v);
+  }
+  assert.ok(lights.size >= 5, `at least 5 light fields, found ${lights.size}`);
+  const darks: Array<[number, number]> = [];
+  for (const r of rules.filter((x) => x.selector.includes("formatted-rich-input"))) {
+    const d = r.body.match(/--field-bg:\s*oklch\(([\d.]+) calc\(([\d.]+) \* var\(--accent-chroma\)\) var\(--accent-hue\)\)/);
+    if (d) darks.push([Number(d[1]), Number(d[2])]);
+  }
+  assert.ok(darks.length >= 2, `at least 2 dark fields, found ${darks.length}`);
+
+  const clamp = (rgb: Rgb) => rgb.map((c) => Math.min(255, Math.max(0, c))) as Rgb;
+  const over = (mark: Rgb, field: Rgb) => mark.map((c, i) => alpha * c + (1 - alpha) * field[i]) as Rgb;
+  for (let h = 0; h < 360; h += 15) {
+    for (const k of [0, 0.5, 1]) {
+      const mark = clamp(oklchToRgb(markL, markC * k, h));
+      for (const light of lights) {
+        const field = hex(light);
+        assert.ok(contrast(over(mark, field), field) >= 3, `mark over ${light} at hue ${h}, strength ${k}`);
+      }
+      for (const [L, C] of darks) {
+        const field = clamp(oklchToRgb(L, C * k, h));
+        assert.ok(contrast(over(mark, field), field) >= 3, `mark over dark L${L} at hue ${h}, strength ${k}`);
+      }
+    }
+  }
+});
+
+test("the background spider uses the same readable interface accent instead of the raw picked colour", () => {
+  for (const pick of ["#101820", "#ff3366", "#3366ff"]) {
+    const tokens = deriveAccentTokens(pick)!;
+    assert.equal(tokens["--spider-accent"], undefined);
+    assert.match(tokens["--teal"], /^#[0-9a-f]{6}$/);
+  }
+});
+
+test("the spider has an independent saved switch and stays visible and still when animations are reduced or off", () => {
+  assert.equal(runBoot(() => null).spider, "on");
+  assert.equal(runBoot(() => JSON.stringify({ spider: "on" })).spider, "on");
+  assert.equal(runBoot(() => JSON.stringify({ spider: "off" })).spider, "off");
+  assert.equal(runBoot(() => JSON.stringify({ spider: "invalid" })).spider, "on");
+  const group = desktopSource.match(/title="Паук" values=\{(\[\[.*?\]\])\}/)?.[1];
+  assert.ok(group, "«Паук» SettingGroup not found");
+  assert.deepEqual([...spiderModes], [...group.matchAll(/\['(\w+)',/g)].map((m) => m[1]));
+  // The switch hides the spider; a motion mode never does: it sits still and visible in «Уменьшены» and «Выключены» (UI-SPEC matrix).
+  assert.match(css, /html\[data-spider="off"\] \.wallpaper-spider\s*\{\s*display:\s*none;/);
+  assert.doesNotMatch(css, /data-motion="(reduced|off)"\][^{]*\.wallpaper-spider\s*(,[^{]*)?\{[^}]*display:\s*none/);
+  assert.match(css, /\.wallpaper-spider\s*\{[^}]*opacity:\s*1;/);
+  assert.match(spiderSource, /attributeFilter:\s*\["data-motion", "data-spider"\]/);
+});
+
+// D-53 (20-37) отменяет S1-А из D-50: без канта, без ободка, без токена канта (уточнение владельца 2026-11-07).
+// Остаётся окраска D-50: белое тело, чёрные части, вторая нить ног цвета акцента. Полная проверка рисунка — в lib/wallpaper-web.test.ts.
+test("D-53 (20-37) the spider has no rim token and no rim layer; the strand follows the accent", () => {
+  assert.doesNotMatch(css, /--spider-rim/);
+  assert.doesNotMatch(css, /wallpaper-spider-kant/);
+  assert.ok(!(accentTokenNames as readonly string[]).includes("--spider-rim"), "accentTokenNames has no rim token");
+  assert.match(css, /\.wallpaper-spider-dark\s*\{[^}]*#070707/);
+  assert.match(css, /\.wallpaper-spider-limb\s*\{[^}]*var\(--teal\)/);
+  assert.match(css, /\.wallpaper-spider-pale\s*\{[^}]*#fdfdfd/);
+  assert.doesNotMatch(css, /wallpaper-spider-teal/);
+  assert.doesNotMatch(css, /wallpaper-spider-accent/);
+});
+
+// D-53 (20-37); уточнение владельца 2026-11-07: канта нет ни на каком акценте, на очень тёмном «Своём» ноги читаются хуже (владелец это
+// принимает), различимость на тёмном столе даёт белое тело: контраст #fdfdfd к столу не ниже 3:1 на пресетах и на шести «Своих».
+// Вторая нить ног — это --teal производного токена, то есть цвет акцента.
+test("D-53 (20-37): no rim token for any pick; the white body keeps 3:1 against the desktop and the strand is the derived accent", () => {
+  const body = hex("#fdfdfd");
+  for (const [id, tokens] of [["root", root], ...Object.entries(themes)] as const) {
+    assert.ok(contrast(body, hex((tokens.get("--desktop-base") ?? root.get("--desktop-base"))!)) >= 3, `${id}: white body on its desktop base`);
+  }
+  for (const pick of ["#1a1a1a", "#0d0d0d", "#101820", "#f2f2f2", "#a0a0a0", "#ffffff"]) {
+    const tokens = deriveAccentTokens(pick)!;
+    assert.equal(tokens["--spider-rim"], undefined, `${pick}: D-53 — no rim token`);
+    assert.match(tokens["--teal"], /^#[0-9a-f]{6}$/, `${pick}: the strand colour is the derived accent`);
+    assert.ok(contrast(body, hex(tokens["--desktop-base"])) >= 3, `${pick}: white body on the derived desktop base`);
+  }
+});
+
+test("G3 / D-10 small window labels keep at least 4.5:1 across accents", () => {
+  const bodyOf = (selector: string) => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const body = css.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`))?.[1];
+    assert.ok(body, `missing CSS rule ${selector}`);
+    return body;
+  };
+  const property = (selector: string, name: string) => {
+    const value = bodyOf(selector).match(new RegExp(`(?:^|;)\\s*${name}:\\s*([^;]+)`))?.[1]?.trim();
+    assert.ok(value, `${selector} missing ${name}`);
+    return value;
+  };
+  const selectors = [".browser-labels", ".row-index", ".row-main small", ".browser-footer", ".global-result-mark", ".trash-list-head"];
+  const accents = [
+    ["default", root], ["ice", themes.ice], ["amber", themes.amber], ["red", themes.red],
+    ["custom-dark", new Map(Object.entries(deriveAccentTokens("#1a1a1a")!))],
+    ["custom-light", new Map(Object.entries(deriveAccentTokens("#f2f2f2")!))],
+  ] as const;
+  const findings: string[] = [];
+  const report: string[] = [];
+  for (const [accent, overrides] of accents) {
+    const token = (name: string): string => overrides.get(name) ?? root.get(name) ?? "";
+    const rgb = (value: string): Rgb => {
+      const resolved = value.startsWith("var(") ? token(value.slice(4, -1)) : value;
+      if (resolved.startsWith("#")) return hex(resolved);
+      const match = /^oklch\(([\d.]+) calc\(([\d.]+) \* var\(--accent-chroma\)\) var\(--accent-hue\)\)$/.exec(resolved);
+      assert.ok(match, `unsupported CSS colour ${resolved}`);
+      return oklchToRgb(Number(match[1]), Number(match[2]) * Number(token("--accent-chroma")), Number(token("--accent-hue"))).map((v) => Math.min(255, Math.max(0, v))) as Rgb;
+    };
+    const archive = rgb(property(".archive-browser", "background"));
+    const trash = rgb(property(".trash-layout", "background"));
+    const overlay = token("--teal-soft").match(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/);
+    assert.ok(overlay, `invalid --teal-soft on ${accent}`);
+    const active = archive.map((channel, index) => channel * (1 - Number(overlay[4])) + Number(overlay[index + 1]) * Number(overlay[4])) as Rgb;
+    for (const selector of selectors) {
+      const foreground = rgb(property(selector, "color"));
+      const backgrounds = selector === ".global-result-mark" ? [rgb(property(selector, "background"))]
+        : selector === ".trash-list-head" ? [trash]
+          : selector === ".row-index" || selector === ".row-main small" ? [archive, active] : [archive];
+      const ratio = Math.min(...backgrounds.map((background) => contrast(foreground, background)));
+      report.push(`${selector} ${accent} ${ratio.toFixed(2)}`);
+      if (ratio < 4.55) findings.push(`${selector} ${accent} ${ratio.toFixed(2)}`);
+    }
+  }
+  if (process.env.PORTIA_CONTRAST_REPORT === "1") console.log(report.join("\n"));
+  assert.deepEqual(findings, [], `labels below 4.55:1: ${findings.join(", ")}`);
+});
+
+test("a window appears smoothly under «Включены» and «Уменьшены» and at once under «Выключены» (quick 261102-d7r)", () => {
+  const msOf = (token: string) => Number(new RegExp(`${token}:\\s*(\\d+)ms`).exec(css)?.[1]);
+  const closeMs = Number(/WINDOW_CLOSE_MS = (\d+)/.exec(desktopSource)?.[1]), fadeOutMs = Number(/WINDOW_FADE_OUT_MS = (\d+)/.exec(desktopSource)?.[1]);
+  // «Включены»: the opening mirrors the close (same two frames, opacity 0 and scale .97 about the centre), longer than it and on a plain ease-out.
+  assert.match(css, /(^|\n)\.app-window \{ animation: window-open var\(--motion-base\) ease-out; \}/);
+  const opening = /@keyframes window-open \{ from \{([^}]*)\} \}/.exec(css)?.[1]?.trim(), closing = /@keyframes window-close \{ to \{([^}]*)\} \}/.exec(css)?.[1]?.trim();
+  assert.ok(opening && opening === closing, `window-open from (${opening}) mirrors window-close to (${closing})`);
+  assert.doesNotMatch(opening!, /translate|transform/, "no lift: the nod (18-04) owns translate");
+  assert.ok(msOf("--motion-base") > closeMs, "opening is longer than closing");
+  // «Уменьшены»: the selector outranks the blanket rule (0,2,2), otherwise the fade is cut to .01ms and the window just pops in.
+  assert.match(css, /html\[data-motion="reduced"\] \.app-window:not\(\.is-closing, \.is-minimizing\) \{ animation: fade-in var\(--motion-fast\) ease-out !important; \}/);
+  assert.doesNotMatch(css, /html\[data-motion="reduced"\] \.app-window \{/);
+  assert.match(css, /html\[data-motion="reduced"\] \.app-window:is\(\.is-closing, \.is-minimizing\) \{ animation: fade-out 120ms var\(--ease-in\) forwards !important; \}/);
+  assert.ok(msOf("--motion-fast") > fadeOutMs, "fade-in is longer than fade-out");
+  // «Выключены»: no window rule of its own; the blanket zero-duration rule makes it instant.
+  assert.doesNotMatch(css, /html\[data-motion="off"\][^{\n]*\.app-window[^{\n]*\{[^}]*animation/);
+  assert.doesNotMatch(css, /prefers-reduced-motion|matchMedia/);
 });

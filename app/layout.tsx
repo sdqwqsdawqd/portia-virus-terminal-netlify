@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Golos_Text, IBM_Plex_Mono, IBM_Plex_Serif } from "next/font/google";
 import { accentBootScript } from "@/lib/accent-boot";
 import "./globals.css";
 import "./portia.css";
+import "./portia-promotion-editor.css";
 
 // Self-hosted at build time; every loaded face carries Cyrillic for the Russian-only audience.
 const golos = Golos_Text({ subsets: ["latin", "cyrillic"], variable: "--font-golos", display: "swap" });
@@ -27,12 +29,13 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // SSR default for data-motion is full: without the head script (extension, CSP) the interface stays in «Включены» (D-10).
   return (
-    <html lang="ru" className={`${golos.variable} ${plexSerif.variable} ${plexMono.variable}`} suppressHydrationWarning>
+    <html lang="ru" data-motion="full" className={`${golos.variable} ${plexSerif.variable} ${plexMono.variable}`} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: accentBootScript }} />
+        <Script id="portia-accent-boot" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: accentBootScript }} />
       </head>
-      <body>{children}</body>
+      <body suppressHydrationWarning>{children}</body>
     </html>
   );
 }

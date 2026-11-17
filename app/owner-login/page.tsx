@@ -28,7 +28,7 @@ export default async function OwnerLoginPage({
       <section className="owner-login-card">
         <span className="eyebrow">PORTIA // РЕДАКТОР</span>
         <h1>Вход</h1>
-        <p>Каждый редактор входит под своим email. Доступ выдаёт владелец сайта.</p>
+        <p>Доступ выдаёт владелец сайта.</p>
 
         {!configured ? (
           <div className="owner-login-alert">Подключение к Supabase ещё не настроено.</div>
@@ -47,11 +47,12 @@ export default async function OwnerLoginPage({
               <span>Пароль</span>
               <input name="password" type="password" autoComplete="current-password" minLength={8} required />
             </label>
-            {success && <div className="owner-login-success">Аккаунт создан. Если Supabase просит подтвердить email, откройте письмо, затем войдите.</div>}
+            {success && <div className="owner-login-success">Аккаунт создан. Подтвердите email и войдите.</div>}
             {error === "denied" && <div className="owner-login-alert">Этот аккаунт существует, но владелец не выдал ему доступ.</div>}
             {error === "not-approved" && <div className="owner-login-alert">Владелец ещё не добавил этот email в список редакторов.</div>}
+            {error === "unconfirmed" && <div className="owner-login-alert">Почта не подтверждена. Откройте письмо от Supabase и войдите снова.</div>}
             {error === "setup" && <div className="owner-login-alert">Управление аккаунтами ещё не настроено в Supabase.</div>}
-            {error && !["denied", "not-approved", "setup"].includes(error) && <div className="owner-login-alert">Не удалось выполнить действие. Проверьте email, пароль и подтверждение почты.</div>}
+            {error && !["denied", "not-approved", "setup", "unconfirmed"].includes(error) && <div className="owner-login-alert">Не удалось выполнить действие. Проверьте email, пароль и подтверждение почты.</div>}
             <div className="owner-login-actions">
               <button type="submit">ВОЙТИ</button>
               <button type="submit" formAction={editorSignUp}>СОЗДАТЬ АККАУНТ</button>

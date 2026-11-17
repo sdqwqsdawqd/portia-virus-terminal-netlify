@@ -1,48 +1,48 @@
 {
   "contract": "1.0.0",
   "flavor": "core",
-  "milestone": "v1.1 — Закрытие замечаний",
+  "milestone": "v1.4 — Доступ и единый стиль",
   "phases": [
     {
-      "number": "6",
-      "name": "Учёт замечаний и страховка данных",
-      "status": "complete"
+      "number": "21",
+      "name": "Фундамент доступа: люди, заявки, правила и журнал",
+      "status": "in_progress"
     },
     {
-      "number": "7",
-      "name": "Сервер: сохранение сотрудников и безопасный JSON",
-      "status": "complete"
+      "number": "22",
+      "name": "Вкладка «Пользователи» и каркас токенов стиля",
+      "status": "in_progress"
     },
     {
-      "number": "8",
-      "name": "Сотрудники без потерь на экране",
-      "status": "complete"
+      "number": "23",
+      "name": "Вход по нику, «Повышение» и его регрессии",
+      "status": "in_progress"
     },
     {
-      "number": "9",
-      "name": "Целостность контента",
+      "number": "24",
+      "name": "Уровни допуска и закрытие содержимого",
       "status": "pending"
     },
     {
-      "number": "10",
-      "name": "Рабочий стол: устойчивость, встроенные документы, доступность",
+      "number": "25",
+      "name": "Переключение закрытия: база, кэш, сборка, хранилище",
       "status": "pending"
     },
     {
-      "number": "11",
-      "name": "Редактор: панель оформления и тексты",
+      "number": "26",
+      "name": "Единый стиль сайта",
       "status": "pending"
     },
     {
-      "number": "12",
-      "name": "Права редакторов и безопасность доступа",
+      "number": "27",
+      "name": "Приёмка владельцем",
       "status": "pending"
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step (plan phase 9)",
-    "reason": "Phase 9 of 7 — needs a plan"
+    "command": "/gsd-verify-work",
+    "label": "Re-verify work",
+    "reason": "Recent verification failed — re-verify or debug"
   },
-  "updated_at": "2026-10-20T16:04:49.240Z"
+  "updated_at": "2026-11-14T17:32:00.910Z"
 }

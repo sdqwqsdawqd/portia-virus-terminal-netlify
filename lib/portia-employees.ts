@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { employeesSnapshot } from "./employees-snapshot-cache.ts";
+import { isAllowedMediaUrl } from "./media-url.ts";
 
 export type PortiaEmployee = {
   id: string;
@@ -141,14 +143,16 @@ export function mergeEmployeesAnswer(
   return { employees, cacheable: false, profilesRead: answer.profilesRead === true || (previousProfilesRead && previous.length > 0) };
 }
 
-// The roster comes live from Google Sheets + Roblox (the CDN caches the API response).
-// Editor-written fields live in Supabase (portia_employee_profiles).
+// The roster comes from Google Sheets + Roblox. The answer is built for each viewer and no CDN keeps it, so a server-side
+// snapshot (lib/employees-snapshot-cache.ts) protects the external calls. Editor-written fields live in Supabase (portia_employee_profiles).
 type ProfileColumns = { biography: string; photo_url: string; knowledge_rating: number; [column: string]: unknown };
 type ProfileRow = ProfileColumns & { employee_id: string; nickname: string };
 type RobloxProfile = { id: number; name: string; avatarUrl: string; fullAvatarUrl: string };
 export type ProfileIndex = { byId: Map<string, EmployeeProfile>; robloxIdByNickname: Map<string, number> };
 
-const sheetCsvUrl = "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/gviz/tq?tqx=out:csv&sheet=Portia";
+// Staff rows only (header + rows 2-35, matching staffRowsEnd). gviz types each column from the whole requested range:
+// column E also holds the promotion dates in rows 61-85, and a whole-sheet export blanks every text rank (owner UAT 19-14).
+const sheetCsvUrl = "https://docs.google.com/spreadsheets/d/1IHAdgvHB27iW4s9aJe4L0GIpYrhS_R2EonUwugZIJww/gviz/tq?tqx=out:csv&sheet=Portia&range=A1:Z35";
 // The sheet has exactly 34 numbered staff places (rows 2-35); row 36 onwards holds totals and notes.
 // The owner confirmed (2026-10-20) rows after the 34th are never filled, so the limit is not raised and nothing warns.
 // If the sheet ever grows, change this constant and this comment together.
@@ -284,7 +288,7 @@ const storedRating = (value: unknown) => (typeof value === "number" && Number.is
 export function profileFromRow(row: ProfileColumns): EmployeeProfile {
   return {
     biography: row.biography,
-    photoUrl: row.photo_url,
+    photoUrl: typeof row.photo_url === "string" && isAllowedMediaUrl(row.photo_url) ? row.photo_url : "",
     knowledgeRating: row.knowledge_rating,
     pawsRating: storedRating(row.paws_rating),
     bioRating: storedRating(row.bio_rating),
@@ -295,6 +299,18 @@ export function profileFromRow(row: ProfileColumns): EmployeeProfile {
   };
 }
 
+/** Pure row mapping shared by the table read and the signed server read; a row without a text employee_id is skipped. */
+export function profileIndexFromRows(rows: unknown[]): ProfileIndex {
+  const valid = rows.filter((row): row is ProfileRow => typeof row === "object" && row !== null && typeof (row as ProfileRow).employee_id === "string");
+  return {
+    byId: new Map(valid.map((row) => [row.employee_id, profileFromRow(row)])),
+    robloxIdByNickname: new Map(valid.flatMap((row) => {
+      const robloxId = Number(row.employee_id.match(/^roblox-(\d+)$/)?.[1]);
+      return row.nickname && robloxId ? [[nicknameKey(row.nickname), robloxId] as const] : [];
+    })),
+  };
+}
+
 export async function readEmployeeProfiles(supabase: SupabaseClient): Promise<ProfileIndex> {
   // select("*") so columns the database does not have yet cannot fail the whole read.
   const { data, error } = await supabase
@@ -302,14 +318,7 @@ export async function readEmployeeProfiles(supabase: SupabaseClient): Promise<Pr
     .select("*")
     .returns<ProfileRow[]>();
   if (error) throw error;
-  const rows = data ?? [];
-  return {
-    byId: new Map(rows.map((row) => [row.employee_id, profileFromRow(row)])),
-    robloxIdByNickname: new Map(rows.flatMap((row) => {
-      const robloxId = Number(row.employee_id.match(/^roblox-(\d+)$/)?.[1]);
-      return row.nickname && robloxId ? [[nicknameKey(row.nickname), robloxId] as const] : [];
-    })),
-  };
+  return profileIndexFromRows(data ?? []);
 }
 
 export function withProfile(employee: RosterEmployee, profiles: ProfileIndex): PortiaEmployee {
@@ -332,6 +341,16 @@ export function sanitizeManualEmployee(value: unknown): ManualEmployeeInput | nu
   const nickname = typeof candidate.nickname === "string" ? candidate.nickname.trim() : "";
   if (!nickname) return null;
   return { nickname, title: clip64(candidate.title), rank: clip64(candidate.rank), callsign: clip64(candidate.callsign) };
+}
+
+/** Only the five named columns of a manual row, so created_by never reaches an API answer; a row without them is skipped. */
+export function manualRowsFromRows(rows: unknown[]): ManualRow[] {
+  return rows.flatMap((row) => {
+    if (typeof row !== "object" || row === null) return [];
+    const { employee_id, nickname, title, rank, callsign } = row as Record<string, unknown>;
+    if ([employee_id, nickname, title, rank, callsign].some((column) => typeof column !== "string")) return [];
+    return [{ employee_id, nickname, title, rank, callsign } as ManualRow];
+  });
 }
 
 /** Explicit columns, so created_by never reaches an API answer. A missing table is an empty, healthy list. */
@@ -381,6 +400,28 @@ async function fetchSheetRows() {
   return parseCsv(await response.text());
 }
 
+type RobloxLookup = Awaited<ReturnType<typeof resolveRobloxProfiles>>;
+/** What every viewer gets from outside the database: the sheet and the Roblox accounts of its nicknames. No stored profile is in it. */
+export type SheetSnapshot = { rows: string[][]; roblox: RobloxLookup; complete: boolean };
+
+/** The one build of the roster list from the sheet, the Roblox map and what the database stored. */
+function assembleEmployees(rows: string[][], roblox: RobloxLookup, profiles: ProfileIndex | null, manual: { rows: ManualRow[]; ok: boolean }) {
+  const index = profiles ?? { byId: new Map(), robloxIdByNickname: new Map() };
+  const roster = mergeManualEmployees(rosterFromRows(rows, roblox.byName, index.robloxIdByNickname), manual.rows, roblox.byName);
+  return {
+    employees: roster.map((employee) => withProfile(employee, index)),
+    syncedAt: new Date().toISOString(),
+    // An incomplete answer is cached only briefly so avatars and biographies return quickly.
+    complete: Boolean(profiles) && roblox.ok && manual.ok,
+    // Without the stored profiles every employee looks blank; a save from that would wipe them.
+    profilesRead: Boolean(profiles),
+    // Without the manual rows a manual employee is missing from the roster, so a delete would wrongly say not-found.
+    manualRead: manual.ok,
+    profiles: index,
+  };
+}
+
+// The editor paths read the tables with the editor's own session and reach the sheet and Roblox live every time.
 export async function loadEmployees(supabase: SupabaseClient) {
   const [rows, profiles, manual] = await Promise.all([
     fetchSheetRows(),
@@ -394,18 +435,26 @@ export async function loadEmployees(supabase: SupabaseClient) {
   const sheetOnly = rosterFromRows(rows, new Map(), index.robloxIdByNickname);
   // shortcut: manual employees are looked up by their stored nickname; after a Roblox rename the avatar is empty until they are removed and added again.
   const roblox = await resolveRobloxProfiles([...sheetOnly, ...manual.rows].map((employee) => employee.nickname));
-  const roster = mergeManualEmployees(rosterFromRows(rows, roblox.byName, index.robloxIdByNickname), manual.rows, roblox.byName);
-  return {
-    employees: roster.map((employee) => withProfile(employee, index)),
-    syncedAt: new Date().toISOString(),
-    // An incomplete answer is cached only briefly so avatars and biographies return quickly.
-    complete: Boolean(profiles) && roblox.ok && manual.ok,
-    // Without the stored profiles every employee looks blank; a save from that would wipe them.
-    profilesRead: Boolean(profiles),
-    // Without the manual rows a manual employee is missing from the roster, so a delete would wrongly say not-found.
-    manualRead: manual.ok,
-    profiles: index,
-  };
+  return assembleEmployees(rows, roblox, profiles, manual);
+}
+
+async function loadSheetSnapshot(manualNicknames: string[]): Promise<SheetSnapshot> {
+  const rows = await fetchSheetRows();
+  const roblox = await resolveRobloxProfiles([...rosterFromRows(rows, new Map()).map((employee) => employee.nickname), ...manualNicknames]);
+  return { rows, roblox, complete: roblox.ok };
+}
+
+/**
+ * The list for a viewer whose rows came from the signed server read (Phase 25). `null` is a read that did not happen (refused or
+ * failed): the list is then the sheet alone, with the same degraded flags as a failed table read before.
+ */
+export async function loadEmployeesFromRows(stored: { profiles: unknown[]; manual: unknown[] } | null) {
+  const profiles = stored ? profileIndexFromRows(stored.profiles) : null;
+  const manual = stored ? { rows: manualRowsFromRows(stored.manual), ok: true } : { rows: [], ok: false };
+  // The sheet and Roblox part comes from the shared snapshot (D-23). A manual employee that is not in its Roblox map yet has an
+  // empty avatar until the next snapshot, as one has today while Roblox is down. The signed rows above are read on every request.
+  const snapshot = await employeesSnapshot(() => loadSheetSnapshot(manual.rows.map((row) => row.nickname)));
+  return assembleEmployees(snapshot.rows, snapshot.roblox, profiles, manual);
 }
 
 export type AddManualResult =
@@ -501,7 +550,9 @@ export async function saveEmployeeProfile(supabase: SupabaseClient, target: { id
   const table = supabase.from("portia_employee_profiles");
   const first = await table.upsert({ ...base, ...ratings }).select("*").single<ProfileRow>();
   if (!first.error) return { profile: profileFromRow(first.data), ratingsSaved: true };
-  // Tolerates the rating columns being absent until 03.2-06 applies the SQL.
+  // Rating columns are added by supabase/migrations/20261101000000_portia_baseline.sql (add column if not exists).
+  // Remove this retry, ratingsSaved and the ratingsPending state once the owner confirms production applied that baseline;
+  // production is not checked in phase 20 (D-33/IN-05).
   if (!isMissingColumnError(first.error) || !Object.keys(ratings).length) throw first.error;
   const retry = await table.upsert(base).select("*").single<ProfileRow>();
   if (retry.error) throw retry.error;
@@ -520,7 +571,7 @@ export function sanitizeEmployeeUpdate(value: unknown): EmployeeUpdate | null {
   if (candidate.photoUrl !== undefined) {
     if (typeof candidate.photoUrl !== "string") return null;
     const photoUrl = candidate.photoUrl.trim().slice(0, 2048);
-    if (photoUrl && !photoUrl.startsWith("https://") && !photoUrl.startsWith("/")) return null;
+    if (photoUrl && !isAllowedMediaUrl(photoUrl)) return null;
     update.photoUrl = photoUrl;
   }
   for (const { key } of optionalRatings) {

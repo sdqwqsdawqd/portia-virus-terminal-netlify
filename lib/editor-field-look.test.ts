@@ -18,7 +18,7 @@ function rule(selector: string, property: string): string | undefined {
 const field = (area: string, surface: "light" | "dark") => `.formatted-rich-input[data-area="${area}"].preview-${surface}`;
 
 test("generic dark field uses the D-06 ink and reads the field variables", () => {
-  assert.equal(rule(".formatted-rich-input", "--field-ink"), "oklch(.79 .02 var(--accent-hue))");
+  assert.equal(rule(".formatted-rich-input", "--field-ink"), "oklch(.79 calc(.02 * var(--accent-chroma)) var(--accent-hue))");
   assert.equal(rule(".formatted-rich-input", "color"), "var(--field-ink)");
   assert.equal(rule(".formatted-rich-input", "background"), "var(--field-bg)");
 });

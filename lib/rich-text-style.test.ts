@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { RichTextDocument } from "./portia-content.ts";
+import { mergeFragments } from "./format-fragments.ts";
 import type { FieldSelectionEvent, FieldSelectionState } from "./rich-text-style.ts";
 import {
   applyRichTextStyle,
@@ -217,4 +218,58 @@ test("event order: owner scenario, weight buttons keep acting on the touched wor
   assert.deepEqual(state.stored, { start: 14, end: 14 });
   doc = applyRichTextStyle(doc, range().from, range().to, { fontWeight: 600 });
   assert.deepEqual(doc.runs, [{ text: "привет мир " }, { text: "сегодня", style: { fontWeight: 600 } }]);
+});
+
+test("the own-input window closes exactly 400 ms after up (05-IN-01)", () => {
+  const incoming = { start: 0, end: 0 };
+  assert.deepEqual(run({ start: 2, end: 6 }, [down, up(1000), read(1400, incoming)]).stored, { start: 2, end: 6 });
+  assert.deepEqual(run({ start: 2, end: 6 }, [down, up(1000), read(1399, incoming)]).stored, incoming);
+});
+
+// ---- Phase 19-13 (STAB-APP-08): the panel acts on the current selection and nowhere else ----
+const fragment = (key: string, from: number, to: number) => ({ key, from, to });
+
+test("a caret between words applies nothing: no neighbour is styled and no empty run appears (STAB-APP-08 empty)", () => {
+  const text = "слово  слово";
+  const doc = plain(text);
+  assert.equal(resolveRange(text, { start: 6, end: 6 }), null, "a caret in the gap names no word");
+  const applied = applyRichTextStyle(doc, 6, 6, { fontWeight: 800 });
+  assert.deepEqual(applied, doc);
+  assert.ok(applied.runs.every((run) => run.text !== ""), "no empty fragment");
+  assert.equal(resetRichTextStyle(doc, 6, 6), doc);
+  // An empty field keeps its one empty run and takes no style.
+  assert.deepEqual(applyRichTextStyle(plain(""), 0, 0, { fontWeight: 800 }), plain(""));
+});
+
+test("a caret inside a word styles that word only, not the words beside it (STAB-APP-08 empty)", () => {
+  const text = "первый второй третий";
+  const range = resolveRange(text, { start: 9, end: 9 });
+  assert.deepEqual(range, { from: 7, to: 13 });
+  const applied = applyRichTextStyle(plain(text), range!.from, range!.to, { fontWeight: 600 });
+  assert.deepEqual(applied.runs.filter((run) => run.style).map((run) => run.text), ["второй"]);
+  assert.equal(applied.runs.map((run) => run.text).join(""), text);
+});
+
+test("a format on the boundary of two runs merges them when the style is equal and keeps them apart when it differs (STAB-APP-08 adjacency)", () => {
+  const doc: RichTextDocument = { runs: [{ text: "аб", style: { fontWeight: 800 } }, { text: "вг" }] };
+  assert.deepEqual(applyRichTextStyle(doc, 2, 4, { fontWeight: 800 }), { runs: [{ text: "абвг", style: { fontWeight: 800 } }] });
+  const different = applyRichTextStyle(doc, 2, 4, { color: "#b43632" });
+  assert.deepEqual(different, { runs: [{ text: "аб", style: { fontWeight: 800 } }, { text: "вг", style: { color: "#b43632" } }] });
+});
+
+test("after any application the runs still read in text order (STAB-APP-08 ordering)", () => {
+  const text = "первый второй третий";
+  let doc = plain(text);
+  doc = applyRichTextStyle(doc, 14, 20, { color: "#b43632" });
+  doc = applyRichTextStyle(doc, 0, 6, { fontWeight: 800 });
+  doc = applyRichTextStyle(doc, 7, 13, { fontSize: 22 });
+  assert.equal(doc.runs.map((run) => run.text).join(""), text);
+  assert.deepEqual(doc.runs.filter((run) => run.style).map((run) => run.text), ["первый", "второй", "третий"]);
+  assert.ok(doc.runs.every((run, index) => index === 0 || JSON.stringify(run.style ?? {}) !== JSON.stringify(doc.runs[index - 1].style ?? {})), "neighbours of equal style are one run");
+});
+
+test("multi-selection fragments: touching ones of one field fold, different fields stay apart, and the list reads in text order (STAB-APP-08)", () => {
+  assert.deepEqual(mergeFragments([fragment("a", 5, 9), fragment("a", 0, 5)]), [fragment("a", 0, 9)]);
+  assert.deepEqual(mergeFragments([fragment("a", 0, 3), fragment("b", 3, 6)]), [fragment("a", 0, 3), fragment("b", 3, 6)]);
+  assert.deepEqual(mergeFragments([fragment("a", 8, 9), fragment("a", 1, 2), fragment("a", 4, 4)]), [fragment("a", 1, 2), fragment("a", 8, 9)]);
 });

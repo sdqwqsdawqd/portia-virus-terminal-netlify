@@ -1,0 +1,10 @@
+{
+  "command": "node --experimental-strip-types --test --test-name-pattern=\"ref mismatch and port-busy refuse before spawn\" lib/phase19-acceptance.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# (node:17996) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time\n# (Use `node --trace-warnings ...` to show where the warning was created)\n# Subtest: acceptance-serve staging binding\n    # Subtest: ref mismatch and port-busy refuse before spawn\n    not ok 1 - ref mismatch and port-busy refuse before spawn\n      ---\n      duration_ms: 3.1253\n      location: 'C:\\\\Users\\\\User\\\\code\\\\portia-site\\\\lib\\\\phase19-acceptance.test.ts:78:3'\n      failureType: 'testCodeFailure'\n      error: |-\n        Expected values to be strictly equal:\n        \n        2 !== 1\n        \n      code: 'ERR_ASSERTION'\n      name: 'AssertionError'\n      expected: 1\n      actual: 2\n      operator: 'strictEqual'\n      stack: |-\n        TestContext.<anonymous> (file:///C:/Users/User/code/portia-site/lib/phase19-acceptance.test.ts:81:12)\n        async Test.run (node:internal/test_runner/test:932:9)\n        async Promise.all (index 1)\n        async Suite.run (node:internal/test_runner/test:1310:7)\n        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)\n      ...\n    1..1\nnot ok 1 - acceptance-serve staging binding\n  ---\n  duration_ms: 3.9876\n  type: 'suite'\n  location: 'C:\\\\Users\\\\User\\\\code\\\\portia-site\\\\lib\\\\phase19-acceptance.test.ts:35:1'\n  failureType: 'subtestsFailed'\n  error: '1 subtest failed'\n  code: 'ERR_TEST_FAILURE'\n  ...\n1..1\n# tests 1\n# suites 1\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 230.1199\n",
+  "targetTest": "ref mismatch and port-busy refuse before spawn",
+  "targetFile": "lib/phase19-acceptance.test.ts",
+  "expected": "main returns 1 with acceptance-serve-ref-mismatch before spawn",
+  "actual": "main returns 2 because acceptance-serve is not dispatched",
+  "semanticAssessment": "The target assertion ran and failed because the command is absent; no fixture or load failure."
+}

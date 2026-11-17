@@ -12,7 +12,12 @@ export async function ownerLogin(formData: FormData) {
 
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) redirect("/owner-login?error=invalid");
+  if (error) redirect(error.code === "email_not_confirmed" ? "/owner-login?error=unconfirmed" : "/owner-login?error=invalid");
+  // Confirm email off or an admin-created account: the session exists but the email was never confirmed.
+  if (!data.user?.email_confirmed_at) {
+    await supabase.auth.signOut();
+    redirect("/owner-login?error=unconfirmed");
+  }
   const access = await getEditorAccess(supabase, data.user);
   if (!access.canEdit) {
     await supabase.auth.signOut();

@@ -1,10 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, updateById } from "./editor-items.ts";
-import { defaultPortiaContent, portiaTextKey, type PortiaContent } from "./portia-content.ts";
+import { addBroadcast, moveGuideCard, removeBroadcast, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "./editor-items.ts";
+import { portiaTextKey, type PortiaContent } from "./portia-content.ts";
+import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 
 const fixture = (): PortiaContent => {
-  const content = structuredClone(defaultPortiaContent);
+  const content = structuredClone(portiaContentFixture);
   content.broadcasts = [
     { id: "a", type: "news", title: "A", body: "текст A", published: true, important: false, startsAt: "", endsAt: "", conditions: "" },
     { id: "b", type: "task", title: "B", body: "текст B", published: false, important: false, startsAt: "", endsAt: "", conditions: "" },
@@ -137,4 +138,112 @@ test("a new item is blank, not a copy of the last edited one", () => {
   assert.equal(content.broadcasts[0].body, "");
   assert.equal(content.broadcasts[0].title, "");
   assert.equal(content.broadcasts[1].body, "текст A2");
+});
+
+const binFixture = (): PortiaContent => {
+  const content = structuredClone(portiaContentFixture);
+  const [first] = content.viruses;
+  content.recycledViruses = [{ ...structuredClone(first), id: "ab" }, { ...structuredClone(first), id: "abc" }];
+  content.recycleFiles = [
+    { id: "f1", name: "F1", location: "", kind: "text", content: "1", image: "", virusId: "" },
+    { id: "f2", name: "F2", location: "", kind: "text", content: "2", image: "", virusId: "" },
+  ];
+  content.formattedText = {
+    "virus:ab:external": { runs: [] },
+    "virus:ab:ppu-health": { runs: [] },
+    "virus:ab:mutation:0:description": { runs: [] },
+    "virus:abc:external": { runs: [] },
+    [portiaTextKey.recycle("f1")]: { runs: [] },
+    [portiaTextKey.recycle("f2")]: { runs: [] },
+  };
+  return content;
+};
+
+test("permanently deleting a recycled virus removes all of its formatting and nothing else", () => {
+  const content = binFixture();
+  removeRecycledVirus(content, "ab");
+  assert.deepEqual(content.recycledViruses.map((virus) => virus.id), ["abc"]);
+  assert.deepEqual(Object.keys(content.formattedText).sort(), ["recycle:f1:content", "recycle:f2:content", "virus:abc:external"]);
+});
+
+test("permanently deleting a recycle file removes only its text formatting", () => {
+  const content = binFixture();
+  removeRecycleFile(content, "f1");
+  assert.deepEqual(content.recycleFiles.map((file) => file.id), ["f2"]);
+  assert.equal("recycle:f1:content" in content.formattedText, false);
+  assert.equal("recycle:f2:content" in content.formattedText, true);
+  assert.equal(Object.keys(content.formattedText).length, 5);
+});
+
+test("restoring from the bin keeps formatting", () => {
+  const content = binFixture();
+  const restored = content.recycledViruses.find((virus) => virus.id === "ab")!;
+  content.recycledViruses = content.recycledViruses.filter((virus) => virus.id !== "ab");
+  content.viruses.push(restored);
+  assert.equal(Object.keys(content.formattedText).filter((key) => key.startsWith("virus:ab:")).length, 3);
+});
+
+const withGuideCards = () => {
+  const content = fixture();
+  const text = (id: string) => ({ id, type: "text" as const, text: id });
+  content.guideSections = [
+    { id: "g1", title: "G1", photo: "", cards: [
+      { id: "c1", title: "C1", cover: "", blocks: [text("b1"), text("b2")] },
+      { id: "c2", title: "C2", cover: "", blocks: [text("b3")] },
+    ] },
+    { id: "g2", title: "G2", photo: "", cards: [{ id: "c3", title: "C3", cover: "", blocks: [text("b4")] }] },
+  ];
+  for (const id of ["b1", "b2", "b3", "b4"]) content.formattedText[portiaTextKey.guideBlock(id)] = { runs: [] };
+  return content;
+};
+const cardIds = (content: PortiaContent) => content.guideSections.map((section) => section.cards.map((card) => card.id));
+
+test("deleting a guide section takes its cards and their blocks' formatting, and no other section's", () => {
+  const content = withGuideCards();
+  removeGuideSection(content, "g1");
+  assert.deepEqual(content.guideSections.map((section) => section.id), ["g2"]);
+  for (const id of ["b1", "b2", "b3"]) assert.equal(portiaTextKey.guideBlock(id) in content.formattedText, false, id);
+  assert.equal(portiaTextKey.guideBlock("b4") in content.formattedText, true);
+});
+
+test("deleting a guide card finds it in whichever section holds it and removes its formatting only", () => {
+  const content = withGuideCards();
+  removeGuideCard(content, "c3");
+  assert.deepEqual(cardIds(content), [["c1", "c2"], []]);
+  assert.equal(portiaTextKey.guideBlock("b4") in content.formattedText, false);
+  assert.equal(portiaTextKey.guideBlock("b3") in content.formattedText, true);
+});
+
+test("deleting a guide block removes it and its formatting only", () => {
+  const content = withGuideCards();
+  removeGuideBlock(content, "c1", "b1");
+  assert.deepEqual(content.guideSections[0].cards[0].blocks.map((block) => block.id), ["b2"]);
+  assert.equal(portiaTextKey.guideBlock("b1") in content.formattedText, false);
+  assert.equal(portiaTextKey.guideBlock("b2") in content.formattedText, true);
+});
+
+test("moveGuideCard moves a card to any index of any section in one call, leaving formatting alone", () => {
+  const content = withGuideCards();
+  const formatting = structuredClone(content.formattedText);
+  moveGuideCard(content, "c1", "g2", 1);
+  assert.deepEqual(cardIds(content), [["c2"], ["c3", "c1"]]);
+  moveGuideCard(content, "c1", "g2", 0);
+  assert.deepEqual(cardIds(content), [["c2"], ["c1", "c3"]]);
+  moveGuideCard(content, "c1", "g2", 1);
+  assert.deepEqual(cardIds(content), [["c2"], ["c3", "c1"]]);
+  moveGuideCard(content, "c2", "g2", Number.MAX_SAFE_INTEGER);
+  assert.deepEqual(cardIds(content), [[], ["c3", "c1", "c2"]]);
+  moveGuideCard(content, "c2", "g1", -5);
+  assert.deepEqual(cardIds(content), [["c2"], ["c3", "c1"]]);
+  assert.deepEqual(content.formattedText, formatting);
+});
+
+test("moveGuideCard inside one section reorders it, and an unknown id changes nothing", () => {
+  const content = withGuideCards();
+  moveGuideCard(content, "c1", "g1", 1);
+  assert.deepEqual(cardIds(content), [["c2", "c1"], ["c3"]]);
+  const before = structuredClone(content);
+  moveGuideCard(content, "nope", "g2", 0);
+  moveGuideCard(content, "c1", "nope", 0);
+  assert.deepEqual(content, before);
 });

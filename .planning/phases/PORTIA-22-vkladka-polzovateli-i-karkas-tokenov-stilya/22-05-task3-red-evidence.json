@@ -1,0 +1,10 @@
+{
+  "command": "node --experimental-strip-types --test --test-reporter=tap --test-name-pattern=\"history lines carry\" lib/users-view.test.ts",
+  "exitCode": 1,
+  "output": "TAP version 13\n# Subtest: history lines carry the event verb, safe details, actor and Moscow time\nnot ok 1 - history lines carry the event verb, safe details, actor and Moscow time\n  ---\n  duration_ms: 10.6016\n  location: 'C:\\\\Users\\\\User\\\\code\\\\portia-site\\\\lib\\\\users-view.test.ts:77:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    historyLine must exist\n    + actual - expected\n    \n    + 'undefined'\n    - 'function'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 'function'\n  actual: 'undefined'\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///C:/Users/User/code/portia-site/lib/users-view.test.ts:79:10)\n    async Test.run (node:internal/test_runner/test:932:9)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 0\n# fail 1\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 132.3598\n",
+  "targetTest": "history lines carry the event verb, safe details, actor and Moscow time",
+  "targetFile": "lib/users-view.test.ts",
+  "expected": "historyLine formats event details, actor and a fixed Europe/Moscow timestamp.",
+  "actual": "The target assertion failed because historyLine is undefined.",
+  "semanticAssessment": "The named target executed and failed on the planned missing formatter; there was no syntax, import, setup, fixture or discovery failure."
+}

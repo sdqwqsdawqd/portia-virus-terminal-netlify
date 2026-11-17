@@ -1,18 +1,29 @@
 "use client";
 
-import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
-import { flushSync } from "react-dom";
-import { changedDossierTabs, changedSections, dossierTabs, editorSections, sectionLabels, type DossierTab } from "@/lib/editor-changes";
+import { useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { changedDossierTabs, changedSections, deniedSections, editorSections, revertSections, sectionLabels, type DossierTab, type EditorSection } from "@/lib/editor-changes";
+import { draftEdits, employeeRequestFailure, partialSave, rebaseDecision, SaveConflictError, SectionClosedError, saveStatusText, type DraftEdit, type SaveStatus } from "@/lib/editor-save-status";
+import { closedMessage, closedSectionsOf, openTabIds, tabRegistry, type TabDef } from "@/lib/editor-tabs";
 import { shortcutOf } from "@/lib/editor-shortcuts";
-import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
-import { broadcastTabOf, type BroadcastTab } from "@/lib/broadcasts";
-import { addBroadcast, removeBroadcast, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, updateById } from "@/lib/editor-items";
+import { columnMajor } from "@/lib/editor-columns";
 import {
-  classificationOptions,
+  trimRecommendationSections,
+} from "@/lib/editor-outline";
+import { compressImageForUpload } from "@/lib/image-compress";
+import { uploadRefusal } from "@/lib/image-upload";
+import { dropFields, mergeFragments, removeFragmentAt } from "@/lib/format-fragments";
+import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
+import { broadcastTabOf, categoryChange, questDateError, type BroadcastTab } from "@/lib/broadcasts";
+import { addBroadcast, makeId, moveGuideCard, removeBroadcast, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus, updateById } from "@/lib/editor-items";
+import {
+  LEVELED_APP_IDS,
+  findGuide,
   findInfo,
   portiaTextKey,
   scientistLogPlainText,
   type Broadcast,
+  type GuideBlock,
   type PortiaContent,
   type RecycleFile,
   type RichTextDocument,
@@ -20,12 +31,23 @@ import {
   type Virus,
 } from "@/lib/portia-content";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
-import type { FieldSelectionEvent, FieldSelectionState } from "@/lib/rich-text-style";
-import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset } from "@/lib/rich-text-style";
-import { clampPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
+import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS, MAX_TABLE_ROWS, bodyTooLargeMessage, contentBodyBytes, limitStatus, limitText, oversizeFields, oversizeMessage } from "@/lib/content-limits";
+import { compactRuns, expandStyles } from "@/lib/rich-text-style";
 import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, settleDraft, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
+import { ActiveFormatContext, FloatingTextFormatPanel, FormatLaunchButton, FormattedTextarea, findFormatField, replaceRichText, type EditorPreviewSurface, type FormatTarget } from "@/components/portia-editor-rich-text";
+import { PromotionEditor } from "@/components/portia-promotion-editor";
+import { LevelPicker } from "@/components/portia-level-picker";
+import { levelCopy } from "@/lib/level-copy";
+import { effectiveLevel, raiseChildren } from "@/lib/level-hierarchy";
+import { useImageRewrite } from "@/components/portia-image-rewrite";
+import { AppDeniedPanel } from "@/components/portia-desktop-states";
+import { UsersTab, UsersTabCount, useUsersPendingCount } from "@/components/portia-users-tab";
+import { accessCheckFailedText } from "@/lib/app-state";
+import { ArchivedVirusEditor, ClassificationField, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
+import { cardToggleName } from "@/lib/card-toggle-name";
+import { EditorActionBar, EditorDraftBar, EditorDraftBarContext, EditorEmptyDetail, EditorTabBody, type EditorDraftBarState } from "@/components/portia-editor-tab-shell";
 
-type EditorTab = "viruses" | "info" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "access";
+type EditorTab = "viruses" | "info" | "guide" | "broadcasts" | "recycle" | "search" | "assistant" | "employees" | "users" | "promo" | "access";
 
 type Props = {
   content: PortiaContent;
@@ -33,7 +55,13 @@ type Props = {
   revision: number;
   saveState: "idle" | "saving" | "saved" | "error" | "conflict";
   canManageEditors: boolean;
+  // Ids of the registry tabs the owner left open for this editor (GET /api/access); the owner gets all of them.
+  openTabs: readonly string[];
   active: boolean;
+  // STAB-APP-09: the rights check failed. The body shows «Доступ закрыт»; the draft stays in memory and nothing is saved until the check passes again (owner items 4 and 7).
+  accessFailed: boolean;
+  // True while the window manager has the editor window minimized; the format panel is hidden then and comes back on restore (D-06).
+  minimized: boolean;
   onDirtyChange: (dirty: boolean) => void;
   // Bumped by the window manager each time × is pressed while the editor reports unsaved edits.
   closeRequest: number;
@@ -42,23 +70,13 @@ type Props = {
   onSave: (content: PortiaContent, baseRevision: number) => Promise<number>;
   onEmployeeSaved: (employee: PortiaEmployee) => void;
   onEmployeeRemoved: (id: string) => void;
+  // The server's reason for the last refused save (D-12); empty when there is none.
+  saveError: string;
+  // LVL-08, D-05: the content handed to the editor is the viewer-shaped copy. No sync, no rebase and no save until a full copy arrives; the draft stays.
+  contentIncomplete?: boolean;
+  // D-17: the desktop's line after the server lifted levels on save; shown in the save status area.
+  saveNotice?: string;
 };
-
-type FormatTarget = {
-  key: string;
-  title: string;
-  value: string;
-  document: RichTextDocument;
-  selection: { start: number; end: number } | null;
-  area: DisplayArea;
-  onCommit: (value: string, document: RichTextDocument) => void;
-};
-
-type EditorPreviewSurface = "light" | "dark";
-// Site area whose font the field mirrors; paired in the shared font block in app/portia.css.
-type DisplayArea = "lead" | "metric" | "mutation" | "scientist" | "info" | "broadcast" | "trash" | "caption" | "search" | "assistant";
-type ImagePlacement = "dossier" | "mutation" | "recycle" | "guide" | "employee";
-
 const infoBlockHeads = {
   text: { label: "текст", title: "ТЕКСТ" },
   table: { label: "таблица", title: "ТАБЛИЦА: ПРИЗНАК — ЗНАЧЕНИЕ" },
@@ -66,50 +84,15 @@ const infoBlockHeads = {
   video: { label: "видео", title: "ВИДЕО YOUTUBE" },
 } as const;
 
-// The surface each field opens on is its site place's own (D-09, D-17); an explicit БЕЛЫЙ/ЧЁРНЫЙ choice overrides it until the next tab switch.
-const nativeSurface: Record<DisplayArea, EditorPreviewSurface> = { lead: "light", metric: "light", mutation: "light", scientist: "light", trash: "light", info: "dark", broadcast: "dark", caption: "dark", search: "dark", assistant: "dark" };
+const guideBlockHeads = {
+  heading: { label: "заголовок", title: "ЗАГОЛОВОК" },
+  text: { label: "текст", title: "ТЕКСТ" },
+  table: { label: "таблица", title: "ТАБЛИЦА" },
+  photo: { label: "фото", title: "ФОТО" },
+  video: { label: "видео", title: "ВИДЕО" },
+  callout: { label: "врезка", title: "ВРЕЗКА" },
+} as const;
 
-const ActiveFormatContext = createContext<{ key: string | null; surface: EditorPreviewSurface | null; phonePanelOpen: boolean }>({ key: null, surface: null, phonePanelOpen: false });
-
-function mediaUrlFromText(value: string) {
-  const trimmed = value.trim();
-  const markdown = trimmed.match(/^!\[[^\]]*\]\((https:\/\/[^\s)]+)\)$/i);
-  const plain = trimmed.match(/https:\/\/[^\s<>"']+/i);
-  const extracted = (markdown?.[1] ?? plain?.[0] ?? (trimmed.startsWith("/") ? trimmed : "")).replace(/[),.;]+$/, "");
-  if (!extracted) return trimmed;
-
-  try {
-    const url = new URL(extracted, window.location.origin);
-    if ((url.hostname === "giphy.com" || url.hostname === "www.giphy.com") && url.pathname.startsWith("/gifs/")) {
-      const id = url.pathname.split("/").filter(Boolean).at(-1)?.split("-").at(-1);
-      if (id && /^[a-z0-9]+$/i.test(id)) return `https://media.giphy.com/media/${id}/giphy.gif`;
-    }
-  } catch {}
-
-  return extracted;
-}
-
-const textColorPalette = [
-  { value: "#0b7568", label: "Portia" },
-  { value: "#167a4d", label: "Зелёный" },
-  { value: "#a06f00", label: "Янтарный" },
-  { value: "#b43632", label: "Красный" },
-  { value: "#316e9b", label: "Синий" },
-];
-
-// D-06 / D-07 base text colours; oklch is the source of truth (D-17). «Основной» shows this and stores no colour.
-const baseInk = { dark: "oklch(.79 .02 var(--accent-hue))", light: "oklch(.237 .015 var(--accent-hue))" };
-
-const backgroundColorPalette = [
-  { value: "#f0d66a", label: "Жёлтый" },
-  { value: "#9adfce", label: "Мятный" },
-  { value: "#a9cae1", label: "Голубой" },
-  { value: "#e8aaa6", label: "Розовый" },
-  { value: "#b8c0bd", label: "Серый" },
-  { value: "#26312f", label: "Тёмный" },
-];
-
-const makeId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 const clone = (content: PortiaContent) => JSON.parse(JSON.stringify(content)) as PortiaContent;
 const editorReducer = (state: EditorHistory<PortiaContent>, action: HistoryAction<PortiaContent>) => historyReducer(state, action, clone);
 const initEditorHistory = (value: PortiaContent) => initHistory(value, clone);
@@ -136,6 +119,9 @@ function editKeyFor(element: Element | null): string | null {
   return `field:${id}`;
 }
 
+// Read only when an edit is dispatched. A module function, so the render-purity lint does not follow changeDraft into the render helpers that only hold it in handlers.
+const timestamp = () => Date.now();
+
 function moveArrayItem<T>(items: T[], from: number, to: number) {
   if (from < 0 || to < 0 || from >= items.length || to >= items.length || from === to) return;
   const [item] = items.splice(from, 1);
@@ -143,8 +129,22 @@ function moveArrayItem<T>(items: T[], from: number, to: number) {
 }
 
 // Table rows are located by block id, then by their current index inside the same changeDraft call.
-function editTableRows(content: PortiaContent, subsectionId: string, blockId: string, edit: (rows: { key: string; value: string }[]) => void) {
+function editTableRows(content: PortiaContent, subsectionId: string, blockId: string, edit: (rows: { id: string; key: string; value: string }[]) => void) {
   const block = findInfo(content.infoSections, subsectionId)?.subsection?.blocks.find((item) => item.id === blockId);
+  if (block?.type === "table") edit(block.rows);
+}
+
+// Guide blocks are found by card id and block id, so an upload that ends after a reorder or delete still writes the right block (T-13-09).
+function findGuideBlock(content: PortiaContent, cardId: string, blockId: string) {
+  return findGuide(content.guideSections, cardId)?.card?.blocks.find((item) => item.id === blockId);
+}
+
+const guideNo = (index: number) => String(index + 1).padStart(2, "0");
+const firstLine = (value: string) => value.split("\n").map((line) => line.trim()).find(Boolean);
+const guideBlockTitle = (block: GuideBlock) => (block.type === "heading" || block.type === "text" ? firstLine(block.text) : block.type === "callout" ? firstLine(block.label) ?? firstLine(block.text) : undefined);
+
+function editGuideTableRows(content: PortiaContent, cardId: string, blockId: string, edit: (rows: { id: string; key: string; value: string }[]) => void) {
+  const block = findGuideBlock(content, cardId, blockId);
   if (block?.type === "table") edit(block.rows);
 }
 
@@ -160,165 +160,47 @@ function recycleKeys(content: PortiaContent) {
   ])];
 }
 
-function reorderRichTextLines(text: string, document: RichTextDocument | undefined, from: number, to: number) {
-  const sourceStyles = (document?.runs ?? []).flatMap((run) => Array.from({ length: run.text.length }, () => run.style ?? {}));
-  while (sourceStyles.length < text.length) sourceStyles.push({});
-  const lines = text.split("\n");
-  let offset = 0;
-  const parts = lines.map((line) => {
-    const part = { text: line, styles: sourceStyles.slice(offset, offset + line.length) };
-    offset += line.length + 1;
-    return part;
-  });
-  moveArrayItem(parts, from, to);
-  const nextText = parts.map((part) => part.text).join("\n");
-  const nextStyles = parts.flatMap((part, index) => index < parts.length - 1 ? [...part.styles, {}] : part.styles);
-  return { text: nextText, document: compactRuns(nextText, nextStyles) };
-}
-
-function OrderDragHandle({ index, onMove, label }: { index: number; onMove: (from: number, to: number) => void; label: string }) {
-  const button = useRef<HTMLButtonElement>(null);
-  const indexRef = useRef(index);
-  const onMoveRef = useRef(onMove);
-  const holdTimer = useRef<number | null>(null);
-  const frame = useRef<number | null>(null);
-  const pointer = useRef({ x: 0, y: 0 });
-  const active = useRef(false);
-  useEffect(() => { indexRef.current = index; onMoveRef.current = onMove; });
-  const placed = useRef<{ index: number; top: number } | null>(null);
-  // Per-handle FLIP: every row whose index changed slides itself, so the dragged row and its displaced neighbours all animate.
-  useLayoutEffect(() => {
-    const row = button.current?.closest<HTMLElement>("[data-sort-index]");
-    if (!row || row.offsetParent === null) { placed.current = null; return; }
-    const top = row.offsetTop;
-    const previous = placed.current;
-    placed.current = { index, top };
-    if (!previous || previous.index === index || previous.top === top) return;
-    // Mirrors the CSS motion switch, which cannot clamp Web Animations started from script.
-    const motion = document.documentElement.dataset.motion;
-    if (motion === undefined ? matchMedia("(prefers-reduced-motion: reduce)").matches : motion !== "full") return;
-    const easing = getComputedStyle(document.documentElement).getPropertyValue("--ease-out").trim() || "ease-out";
-    row.animate([{ transform: `translateY(${previous.top - top}px)` }, { transform: "none" }], { duration: 160, easing });
-  });
-
-  const stop = (event?: React.PointerEvent<HTMLButtonElement>) => {
-    if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
-    if (frame.current !== null) cancelAnimationFrame(frame.current);
-    holdTimer.current = null;
-    frame.current = null;
-    active.current = false;
-    if (button.current) {
-      delete button.current.dataset.dragging;
-      delete button.current.dataset.dragId;
-    }
-    if (event?.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+// Two table columns swap, so a header ≡ is dropped on the other header (or moved with ArrowLeft/ArrowRight) instead of sorting live.
+function ColumnSwapHandle({ label, onSwap }: { label: string; onSwap: () => void }) {
+  const otherCell = (button: HTMLElement, x: number, y: number) => {
+    const cell = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-column]") ?? null;
+    return cell && cell !== button.closest("[data-column]") && cell.closest(".info-table-head") === button.closest(".info-table-head") ? cell : null;
   };
-  // A row swaps only once the pointer crosses its vertical middle, so rows of unequal height do not flip back and forth.
-  const moveTo = (x: number, y: number) => {
-    // Nested «Информация» lists must not swap across levels: only rows sharing the dragged row's parent are targets.
-    const parent = button.current?.closest<HTMLElement>("[data-sort-index]")?.parentElement;
-    const row = document.elementsFromPoint(x, y)
-      .map((element) => element.closest<HTMLElement>("[data-sort-index]"))
-      .find((candidate) => candidate && candidate.parentElement === parent);
-    const target = Number(row?.dataset.sortIndex);
-    if (!row || !Number.isInteger(target) || target === indexRef.current) return;
-    const { top, height } = row.getBoundingClientRect();
-    const middle = top + height / 2;
-    if (target > indexRef.current ? y < middle : y > middle) return;
-    onMoveRef.current(indexRef.current, target);
-    indexRef.current = target;
+  const clear = (button: HTMLElement) => {
+    delete button.dataset.dragging;
+    button.closest(".info-table-head")?.querySelectorAll("[data-drop-target]").forEach((cell) => cell.removeAttribute("data-drop-target"));
   };
-
-  // A stuck drag marker would fold every later edit into one undo step, so the drag also ends on unmount, on lost
-  // window focus, and on a release anywhere: once pointer capture is lost the handle may never see its pointerup.
-  // Tracking lives on window too, because a downward swap re-inserts the dragged row and drops pointer capture (03-REVIEW IN-05).
-  useEffect(() => {
-    const onBlur = () => stop();
-    const onRelease = (event: PointerEvent) => { if (event.isPrimary) stop(); };
-    const onTrack = (event: PointerEvent) => {
-      if (!event.isPrimary || holdTimer.current === null) return;
-      pointer.current = { x: event.clientX, y: event.clientY };
-      if (active.current) moveTo(event.clientX, event.clientY);
-    };
-    window.addEventListener("blur", onBlur);
-    window.addEventListener("pointermove", onTrack);
-    window.addEventListener("pointerup", onRelease);
-    window.addEventListener("pointercancel", onRelease);
-    return () => {
-      window.removeEventListener("blur", onBlur);
-      window.removeEventListener("pointermove", onTrack);
-      window.removeEventListener("pointerup", onRelease);
-      window.removeEventListener("pointercancel", onRelease);
-      stop();
-    };
-  }, []);
-
-  // Near the edge of whatever scrolls (the editor, or the page on phones) the list keeps moving under a still finger.
-  const autoscroll = () => {
-    const editor = button.current?.closest<HTMLElement>(".content-editor") ?? null;
-    const scrolls = editor !== null && editor.scrollHeight > editor.clientHeight && /auto|scroll/.test(getComputedStyle(editor).overflowY);
-    const scroller: { scrollBy: (x: number, y: number) => void } = scrolls ? editor : window;
-    // 56px: sticky system bar; 44px: taskbar (window mode only).
-    const { top, bottom } = scrolls ? editor.getBoundingClientRect() : { top: 56, bottom: window.innerHeight - 44 };
-    const { x, y } = pointer.current;
-    const direction = y < top + 48 ? -1 : y > bottom - 48 ? 1 : 0;
-    if (direction) {
-      scroller.scrollBy(0, direction * 8);
-      moveTo(x, y);
-    }
-    frame.current = requestAnimationFrame(autoscroll);
-  };
-
   return <button
-    ref={button}
-    className="order-drag-handle"
+    className="order-drag-handle column-swap-handle"
     type="button"
-    aria-label={`Изменить порядок: ${label}`}
-    aria-keyshortcuts="ArrowUp ArrowDown"
+    aria-label={`Переставить столбец «${label}»`}
+    aria-keyshortcuts="ArrowLeft ArrowRight"
     onPointerDown={(event) => {
-      // A second finger or a right-click must not start a drag or orphan the first one's timer and frame loop.
       if (!event.isPrimary || event.button !== 0) return;
-      stop();
-      const target = event.currentTarget;
-      pointer.current = { x: event.clientX, y: event.clientY };
-      target.setPointerCapture(event.pointerId);
-      holdTimer.current = window.setTimeout(() => {
-        active.current = true;
-        target.dataset.dragging = "true";
-        target.dataset.dragId = makeId("drag");
-        frame.current = requestAnimationFrame(autoscroll);
-      }, 170);
+      event.currentTarget.setPointerCapture(event.pointerId);
+      // "column", not "true": editKeyFor folds only row drags into one step, and a column swap is a single change on drop.
+      event.currentTarget.dataset.dragging = "column";
     }}
-    onPointerUp={stop}
-    onPointerCancel={stop}
+    onPointerMove={(event) => {
+      const button = event.currentTarget;
+      if (!button.dataset.dragging) return;
+      const cell = otherCell(button, event.clientX, event.clientY);
+      button.closest(".info-table-head")?.querySelectorAll("[data-column]").forEach((item) => item.toggleAttribute("data-drop-target", item === cell));
+    }}
+    onPointerUp={(event) => {
+      const button = event.currentTarget;
+      const dropped = button.dataset.dragging && otherCell(button, event.clientX, event.clientY);
+      clear(button);
+      if (dropped) onSwap();
+    }}
+    onPointerCancel={(event) => clear(event.currentTarget)}
+    onLostPointerCapture={(event) => clear(event.currentTarget)}
     onKeyDown={(event) => {
-      const step = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
-      if (!step) return;
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
       event.preventDefault();
-      onMove(index, index + step);
+      onSwap();
     }}
   ><span aria-hidden="true">≡</span></button>;
-}
-
-function replaceRichText(document: RichTextDocument, nextText: string) {
-  const previousText = document.runs.map((run) => run.text).join("");
-  const previousStyles = expandStyles(document);
-  let prefix = 0;
-  while (prefix < previousText.length && prefix < nextText.length && previousText[prefix] === nextText[prefix]) prefix += 1;
-  let suffix = 0;
-  while (
-    suffix < previousText.length - prefix &&
-    suffix < nextText.length - prefix &&
-    previousText[previousText.length - 1 - suffix] === nextText[nextText.length - 1 - suffix]
-  ) suffix += 1;
-  const insertedLength = nextText.length - prefix - suffix;
-  const inheritedStyle = previousStyles[Math.max(0, prefix - 1)] ?? previousStyles[prefix] ?? {};
-  const styles = [
-    ...previousStyles.slice(0, prefix),
-    ...Array.from({ length: Math.max(0, insertedLength) }, () => ({ ...inheritedStyle })),
-    ...previousStyles.slice(previousText.length - suffix),
-  ];
-  return compactRuns(nextText, styles);
 }
 
 function normalizePhraseLines(lines: string[], document: RichTextDocument | undefined, fallback: string) {
@@ -347,140 +229,194 @@ function normalizePhraseLines(lines: string[], document: RichTextDocument | unde
   return { lines: normalizedLines, document: compactRuns(normalizedText, normalizedStyles) };
 }
 
-function rgba(hex: string | undefined, opacity: number | undefined) {
-  if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) return undefined;
-  const value = Number.parseInt(hex.slice(1), 16);
-  return `rgba(${(value >> 16) & 255}, ${(value >> 8) & 255}, ${value & 255}, ${opacity ?? 1})`;
-}
-
-function renderRichTextEditor(root: HTMLElement, document: RichTextDocument) {
-  const fragment = window.document.createDocumentFragment();
-  const plainText = document.runs.map((run) => run.text).join("");
-  document.runs.forEach((run) => {
-    if (!run.text) return;
-    const span = window.document.createElement("span");
-    span.textContent = run.text;
-    if (run.style?.color) span.style.color = run.style.color;
-    if (run.style?.fontSize) span.style.fontSize = `${run.style.fontSize}px`;
-    if (run.style?.fontWeight) span.style.fontWeight = String(run.style.fontWeight);
-    const background = rgba(run.style?.backgroundColor, run.style?.backgroundOpacity);
-    if (background) span.style.backgroundColor = background;
-    fragment.append(span);
-  });
-  if (!plainText || plainText.endsWith("\n")) {
-    const sentinel = window.document.createElement("br");
-    sentinel.dataset.editorSentinel = "true";
-    fragment.append(sentinel);
-  }
-  root.replaceChildren(fragment);
-}
-
-function editorPlainText(root: HTMLElement) {
-  // Clearing the field natively leaves a bare <br>, which innerText reports as "\n".
-  if (!root.textContent) return "";
-  const text = root.innerText.replace(/\r/g, "").replace(/\u00a0/g, " ");
-  return root.querySelector("[data-editor-sentinel]") && text.endsWith("\n") ? text.slice(0, -1) : text;
-}
-
-// null when the document has no range in this field: a lost selection must not look like a caret at 0 (D-05).
-function selectionOffsets(root: HTMLElement) {
-  const selection = window.getSelection();
-  if (!selection?.rangeCount) return null;
-  const range = selection.getRangeAt(0);
-  if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return null;
-  const beforeStart = range.cloneRange();
-  beforeStart.selectNodeContents(root);
-  beforeStart.setEnd(range.startContainer, range.startOffset);
-  const beforeEnd = range.cloneRange();
-  beforeEnd.selectNodeContents(root);
-  beforeEnd.setEnd(range.endContainer, range.endOffset);
-  return { start: beforeStart.toString().length, end: beforeEnd.toString().length };
-}
-
 // On a phone the list and the record swap places; bring the new half to the top (read after the next render).
 function revealOnPhone(ref: React.RefObject<HTMLElement | null>) {
   if (!window.matchMedia("(max-width: 900px)").matches) return;
   window.requestAnimationFrame(() => ref.current?.scrollIntoView({ block: "start" }));
 }
 
-// Builds the Range for text offsets inside a rich-text field; used to restore the caret and to paint the phone highlight.
-function rangeFromOffsets(root: HTMLElement, offsets: { start: number; end: number }): Range {
-  const walker = window.document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const range = window.document.createRange();
-  // A caret right after a node's trailing "\n" belongs to the next line. Firefox and
-  // Safari draw it on the previous line, so Enter seemed to need a second press.
-  const fits = (offset: number, text: string, consumed: number) =>
-    offset < consumed + text.length || (offset === consumed + text.length && !text.endsWith("\n"));
-  let node = walker.nextNode();
-  let consumed = 0;
-  let startSet = false;
-  while (node) {
-    const text = node.textContent ?? "";
-    if (!startSet && fits(offsets.start, text, consumed)) {
-      range.setStart(node, Math.max(0, offsets.start - consumed));
-      startSet = true;
-    }
-    if (fits(offsets.end, text, consumed)) {
-      if (!startSet) range.setStart(node, 0);
-      range.setEnd(node, Math.max(0, offsets.end - consumed));
-      return range;
-    }
-    consumed += text.length;
-    node = walker.nextNode();
+// D-01/D-05: a card is one header row (handle, one toggle button, actions); the body is hidden, not unmounted, so rich fields keep their DOM and aria-controls always points at an element.
+function CollapsibleCard({ id, label, title, open, onToggle, sortIndex, handle, actions, cardProps, children }: {
+  id: string; label: string; title?: string; open: boolean; onToggle: () => void; sortIndex?: number;
+  handle?: ReactNode; actions?: ReactNode; cardProps?: Record<string, string>; children: ReactNode;
+}) {
+  const bodyId = useId();
+  return (
+    <div className="nested-editor-card" id={`card-${id}`} data-sort-index={sortIndex} data-open={open || undefined} {...cardProps}>
+      <div className="nested-editor-head">
+        {handle}
+        <button type="button" className="nested-editor-toggle" aria-expanded={open} aria-controls={bodyId} aria-label={cardToggleName(open, label, title)} onClick={onToggle}>
+          <strong>{label}</strong>{" "}
+          {title ? <span className="nested-editor-title" title={title}>{title}</span> : null}
+          <span className="nested-editor-chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
+        </button>
+        {actions}
+      </div>
+      <div className="nested-editor-body" id={bodyId} hidden={!open}>{children}</div>
+    </div>
+  );
+}
+
+// D-40/D-41: section cards run top to bottom in columns of five. Each card keeps its source index in data-sort-index, so ordering, undo and the stored order are unchanged; a card that crosses a column boundary remounts.
+function SectionColumns<T>({ items, render }: { items: readonly T[]; render: (item: T, index: number) => ReactNode }) {
+  return (
+    <div className="editor-section-columns" data-sort-columns>
+      {columnMajor(items).map((column, columnIndex) => (
+        <div className="editor-section-column" data-sort-column key={columnIndex}>
+          {column.map(({ item, index }) => render(item, index))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SectionTabs({ label, sections, activeId, onSelect, onMove }: {
+  label: string;
+  sections: readonly { id: string; title: string }[];
+  activeId: string;
+  onSelect: (id: string) => void;
+  onMove: (from: number, to: number) => void;
+}) {
+  const navRef = useRef<HTMLElement>(null);
+  // D-13a: the current section stays in view of the bar's nav when it changes; instant unless the house motion switch is on.
+  useEffect(() => {
+    navRef.current?.querySelector<HTMLElement>('[aria-current="true"]')?.scrollIntoView({ block: "nearest", inline: "nearest", behavior: document.documentElement.dataset.motion === "full" ? "smooth" : "auto" });
+  }, [activeId]);
+  return <div className="editor-section-tabs">
+    <nav aria-label={label} ref={navRef}>
+      {sections.map((section, index) => <span key={section.id} className="editor-section-tab" data-sort-index={index}>
+        <OrderDragHandle index={index} label={section.title || "раздел"} onMove={onMove} />
+        <button type="button" aria-current={section.id === activeId ? "true" : undefined} onClick={() => onSelect(section.id)}>{section.title || "Без названия"}</button>
+      </span>)}
+    </nav>
+  </div>;
+}
+
+function GuidePhotoLayoutEditor({ block, onChange }: {
+  block: Extract<GuideBlock, { type: "photo" }>;
+  onChange: (edit: (photo: Extract<GuideBlock, { type: "photo" }>) => void) => void;
+}) {
+  const width = block.width ?? 100;
+  const height = block.height ?? 0;
+  const align = block.align ?? "center";
+  const focusX = block.focusX ?? 50;
+  const focusY = block.focusY ?? 50;
+  return <div className="guide-photo-layout">
+    <strong>Расположение и видимая часть фото</strong>
+    <div className="guide-photo-layout-controls">
+      <label>Ширина: {width}%<input type="range" min="40" max="100" step="5" value={width} onChange={(event) => onChange((photo) => { photo.width = Number(event.target.value); })} /></label>
+      <label>Высота: {height ? `${height} px` : "по изображению"}<input type="range" min="0" max="600" step="20" value={height} onChange={(event) => onChange((photo) => { photo.height = Number(event.target.value); })} /></label>
+      <label>Положение<select value={align} onChange={(event) => onChange((photo) => { photo.align = event.target.value as "left" | "center" | "right"; })}><option value="left">Слева</option><option value="center">По центру</option><option value="right">Справа</option></select></label>
+      <label>Кадр по горизонтали: {focusX}%<input type="range" min="0" max="100" step="5" value={focusX} onChange={(event) => onChange((photo) => { photo.focusX = Number(event.target.value); })} /></label>
+      <label>Кадр по вертикали: {focusY}%<input type="range" min="0" max="100" step="5" value={focusY} onChange={(event) => onChange((photo) => { photo.focusY = Number(event.target.value); })} /></label>
+    </div>
+    <div className={`guide-photo-layout-preview guide-photo-${align}`} style={{ width: `${width}%` }}>
+      {block.url ? <img src={block.url} alt="Предпросмотр расположения фото" loading="lazy" style={{ width: "100%", height: height ? `${height}px` : "auto", objectPosition: `${focusX}% ${focusY}%` }} /> : <span>Выберите фото, чтобы увидеть результат.</span>}
+    </div>
+  </div>;
+}
+
+// A section moved across a column boundary remounts its handle; keep keyboard focus on it so ArrowUp/ArrowDown can continue (D-42).
+function sectionHandle(id: string) {
+  return document.getElementById(`card-${id}`)?.querySelector<HTMLElement>(":scope > .nested-editor-head .order-drag-handle") ?? null;
+}
+function keepSectionHandleFocus(id: string) {
+  const had = sectionHandle(id) === document.activeElement;
+  return () => { if (had) requestAnimationFrame(() => sectionHandle(id)?.focus()); };
+}
+
+// D-41: the add-section button stays at the top of the tab and opens a small form for the title. The owner dropped editor notes in 20-33.
+function SectionAddBar({ onCreate, children }: { onCreate: (title: string) => void; children?: ReactNode }) {
+  const formId = useId();
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const opener = useRef<HTMLButtonElement>(null);
+  const titleField = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (open) titleField.current?.focus(); }, [open]);
+  const close = (refocus: boolean) => {
+    setOpen(false);
+    setTitle("");
+    if (refocus) requestAnimationFrame(() => opener.current?.focus());
+  };
+  return (
+    <div className="editor-section-addbar">
+      <div className="editor-section-addbar-row">
+        <button ref={opener} type="button" className="secondary-control" aria-expanded={open} aria-controls={formId} onClick={() => (open ? close(true) : setOpen(true))}>+ ДОБАВИТЬ РАЗДЕЛ</button>
+        {children}
+      </div>
+      <form id={formId} className="editor-section-create" hidden={!open}
+        onSubmit={(event) => { event.preventDefault(); onCreate(title.trim()); close(false); }}
+        onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } }}>
+        <Field label="Заголовок раздела"><input ref={titleField} maxLength={300} value={title} onChange={(event) => setTitle(event.target.value)} /></Field>
+        <div className="editor-section-create-actions">
+          <button type="submit" className="primary-control">Создать раздел</button>
+          <button type="button" className="secondary-control" onClick={() => close(true)}>Отмена</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+type TocItem = { id: string; label: string; depth: 0 | 1 };
+
+// D-03: a compact table of contents for a long list (5 or more entries). It owns only its list state and the entry in view; what a jump does is the caller's.
+// The row lists (viruses, Корзина) pass no onAll, since nothing in them folds.
+function EditorToc({ items, onJump, onAll }: { items: TocItem[]; onJump: (id: string) => void; onAll?: (open: boolean) => void }) {
+  const listId = useId();
+  const [listOpen, setListOpen] = useState(false);
+  const [active, setActive] = useState("");
+  const idsKey = items.map((item) => item.id).join("\n");
+  // The first entry in list order that sits in the band below the TOC is the one in view.
+  useEffect(() => {
+    if (!idsKey) return;
+    const ids = idsKey.split("\n");
+    const seen = new Set<string>();
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) { if (entry.isIntersecting) seen.add(entry.target.id); else seen.delete(entry.target.id); }
+      setActive(ids.find((id) => seen.has(`card-${id}`)) ?? "");
+    }, { rootMargin: "-80px 0px -60% 0px" });
+    for (const id of ids) { const element = document.getElementById(`card-${id}`); if (element) observer.observe(element); }
+    return () => observer.disconnect();
+  }, [idsKey]);
+  if (items.length < 5) return null;
+  return (
+    <nav className="editor-toc" aria-label="Оглавление">
+      <div className="editor-toc-bar">
+        <button type="button" aria-expanded={listOpen} aria-controls={listId} onClick={() => setListOpen((value) => !value)}>ОГЛАВЛЕНИЕ ▾</button>
+        {onAll && <button type="button" onClick={() => onAll(false)}>СВЕРНУТЬ ВСЕ</button>}
+        {onAll && <button type="button" onClick={() => onAll(true)}>РАЗВЕРНУТЬ ВСЕ</button>}
+      </div>
+      <ol id={listId} hidden={!listOpen}>
+        {items.map((item) => (
+          <li key={item.id} data-depth={item.depth}>
+            <button type="button" title={item.label} aria-current={active === item.id ? "location" : undefined} onClick={() => { setListOpen(false); onJump(item.id); }}>{item.label}</button>
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+
+// EDIT-06: what a field activation makes of the target before it. A plain gesture starts over (D-14); an additive one keeps the fragments and,
+// on its first activation, turns the previous non-empty selection into one (D-13). A collapsed caret in an additive gesture drops the fragment it lands in.
+function joinFormatTarget(prev: FormatTarget | null, target: FormatTarget): FormatTarget {
+  if (!target.gesture.additive || !prev) return target;
+  let fragments = prev.fragments;
+  let peers = prev.peers;
+  if (prev.gesture.id !== target.gesture.id) {
+    const length = prev.document.runs.reduce((sum, run) => sum + run.text.length, 0);
+    const clamp = (value: number) => Math.max(0, Math.min(length, value));
+    const selection = prev.selection;
+    const picked = selection && selection.start !== selection.end ? [{ key: prev.key, from: clamp(selection.start), to: clamp(selection.end) }] : [];
+    fragments = [...prev.fragments, ...picked];
+    peers = { ...prev.peers, [prev.key]: { ...prev, fragments: [], peers: {} } };
   }
-  const sentinel = root.querySelector("[data-editor-sentinel]");
-  if (sentinel) {
-    if (!startSet) range.setStartBefore(sentinel);
-    range.setEndBefore(sentinel);
-  } else if (startSet) {
-    range.setEnd(root, root.childNodes.length);
-  } else {
-    range.selectNodeContents(root);
-    range.collapse(false);
-  }
-  return range;
-}
-
-// Never writes into an unfocused field: a phone would raise native selection handles, and an unfocused field has no stored selection anyway (cleared on blur).
-function restoreSelection(root: HTMLElement, offsets: { start: number; end: number }) {
-  if (window.document.activeElement !== root) return;
-  const range = rangeFromOffsets(root, offsets);
-  const selection = window.getSelection();
-  selection?.removeAllRanges();
-  selection?.addRange(range);
-}
-
-function findFormatField(key: string) {
-  return window.document.querySelector<HTMLElement>(`[data-format-key="${CSS.escape(key)}"]`);
-}
-
-function hsvToHex(hue: number, saturation: number, value: number) {
-  const chroma = value * saturation;
-  const segment = hue / 60;
-  const secondary = chroma * (1 - Math.abs((segment % 2) - 1));
-  const [red, green, blue] = segment < 1 ? [chroma, secondary, 0]
-    : segment < 2 ? [secondary, chroma, 0]
-      : segment < 3 ? [0, chroma, secondary]
-        : segment < 4 ? [0, secondary, chroma]
-          : segment < 5 ? [secondary, 0, chroma]
-            : [chroma, 0, secondary];
-  const match = value - chroma;
-  return `#${[red, green, blue].map((channel) => Math.round((channel + match) * 255).toString(16).padStart(2, "0")).join("")}`;
-}
-
-function hexToHsv(hex: string) {
-  const normalized = /^#[0-9a-f]{6}$/i.test(hex) ? hex : "#252827";
-  const red = Number.parseInt(normalized.slice(1, 3), 16) / 255;
-  const green = Number.parseInt(normalized.slice(3, 5), 16) / 255;
-  const blue = Number.parseInt(normalized.slice(5, 7), 16) / 255;
-  const maximum = Math.max(red, green, blue);
-  const minimum = Math.min(red, green, blue);
-  const delta = maximum - minimum;
-  const hue = delta === 0 ? 0
-    : maximum === red ? 60 * (((green - blue) / delta) % 6)
-      : maximum === green ? 60 * ((blue - red) / delta + 2)
-        : 60 * ((red - green) / delta + 4);
-  return { hue: (hue + 360) % 360, saturation: maximum === 0 ? 0 : delta / maximum, value: maximum };
+  fragments = mergeFragments(fragments);
+  const caret = target.selection;
+  if (caret && caret.start === caret.end) fragments = removeFragmentAt(fragments, target.key, caret.start);
+  const kept: Record<string, FormatTarget> = {};
+  for (const fragment of fragments) if (fragment.key !== target.key && peers[fragment.key]) kept[fragment.key] = peers[fragment.key];
+  return { ...target, fragments, peers: kept };
 }
 
 const blankVirus = (): Virus => ({
@@ -498,14 +434,11 @@ const blankVirus = (): Virus => ({
     spread: "Номос",
     transmission: "Контактно-бытовой",
     escapeRisk: "Предупреждение",
-    mind: "Альбедо",
-    appearance: "Нюктея",
-    behavior: "Фобус",
+    mind: "Транзитиум",
+    appearance: "Изоморф",
+    behavior: "Стабилар",
   },
-  scientistLogs: [
-    { id: makeId("log"), title: "ЗАПИСЬ 01", scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""] },
-    { id: makeId("log"), title: "ЗАПИСЬ 02", scientist: "ИМЯ УЧЁНОГО", lockedLevel: 4, content: [""] },
-  ],
+  scientistLogs: [],
 });
 
 const blankRecycleFile = (): RecycleFile => ({
@@ -518,20 +451,56 @@ const blankRecycleFile = (): RecycleFile => ({
   virusId: "",
 });
 
-export function PortiaEditor({ content, revision, saveState, canManageEditors, active, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved }: Props) {
+export function PortiaEditor({ accessFailed, content, revision, saveState, canManageEditors, openTabs, active, minimized, onDirtyChange, closeRequest, onCloseApproved, onSave, onEmployeeSaved, onEmployeeRemoved, saveError, contentIncomplete, saveNotice }: Props) {
   const [history, dispatch] = useReducer(editorReducer, content, initEditorHistory);
   // The revision the draft's baseline came from; a stale draft then gets the 409 instead of overwriting newer content (uat-03-owner-broadcast-vanishes).
   const baseRevision = useRef(revision);
   const draft = history.present;
   const changed = useMemo(() => changedSections(history.baseline, history.present), [history.baseline, history.present]);
+  // Invisible limits only warn (D-16); a body the server would refuse blocks the save with its reason (D-23).
+  const oversize = useMemo(() => oversizeFields(draft), [draft]);
+  const bodyBytes = useMemo(() => contentBodyBytes(draft), [draft]);
+  const bodyMessage = bodyTooLargeMessage(bodyBytes);
+  // D-18: a quest that ends before it starts is flagged and blocks the save; the editor never rewrites its dates.
+  const badQuest = draft.broadcasts.find(questDateError);
+  const dateMessage = badQuest ? `ИСПРАВЬТЕ ДАТЫ КВЕСТА: «${badQuest.title || "БЕЗ НАЗВАНИЯ"}»` : "";
+  const saveBlocked = bodyMessage !== "" || badQuest !== undefined;
   const dirty = changed.length > 0;
-  const [tab, setTab] = useState<EditorTab>("viruses");
+  const [pickedTab, setTab] = useState<EditorTab>("viruses");
+  // Derived at render, not by an effect: a closed pick shows the first open tab (D-14, D-17).
+  const stripTabs = ([
+    ...tabRegistry.filter((entry) => openTabs.includes(entry.id)).map((entry) => [entry.id, entry.label]),
+    ...(canManageEditors ? [["access", "Доступ"]] : []),
+  ]) as [EditorTab, string][];
+  const noTabs = stripTabs.length === 0;
+  // The owner has every section; for an editor the sections outside the open list are closed (D-14).
+  const closedKey = canManageEditors ? "" : closedSectionsOf(openTabs).join(",");
+  const closedSections = (closedKey ? closedKey.split(",") : []) as EditorSection[];
+  const employeesClosed = !canManageEditors && !openTabs.includes("employees");
+  // Closed sections are never shown; a D-13 move still counts in `dirty`.
+  const shownChanged = changed.filter((section) => !closedSections.includes(section));
+  const [closureNotice, setClosureNotice] = useState("");
+  // D-09: the revision the refused save was based on; the panel shows while the draft is dirty and the 409 is the last answer. Null once the user chose.
+  const [conflictBase, setConflictBase] = useState<number | null>(null);
+  // D-09: the user's own values from before «Загрузить их версию», kept beside the server's version until closed or saved.
+  const [theirEdits, setTheirEdits] = useState<DraftEdit[]>([]);
+  const [copiedEdit, setCopiedEdit] = useState("");
+  // D-10: the sections the server refused in the last save and the N of M it reported; both stay until the next edit or a save that takes everything.
+  const [refusedSections, setRefusedSections] = useState<EditorSection[]>([]);
+  const [partialResult, setPartialResult] = useState<{ saved: number; total: number; sections: EditorSection[] } | null>(null);
+  // The first refused section gets the focus once the partial result is rendered.
+  const focusRequest = useRef<EditorSection | null>(null);
+  const errorIdBase = useId();
+  const tab: EditorTab = stripTabs.some(([id]) => id === pickedTab) ? pickedTab : stripTabs[0]?.[0] ?? pickedTab;
+  const usersPending = useUsersPendingCount({ enabled: openTabs.includes("users"), visible: active && !minimized, tabActive: tab === "users" });
   const [selectedVirusId, setSelectedVirusId] = useState(content.viruses[0]?.id ?? "");
   const [selectedRecycleFileId, setSelectedRecycleFileId] = useState(content.recycleFiles[0]?.id ?? "");
   // The Recycle selection is one of two ids; the other stays "" (the render and the row highlight rely on it).
   const [selectedRecycledVirusId, setSelectedRecycledVirusId] = useState(content.recycleFiles.length ? "" : content.recycledViruses?.[0]?.id ?? "");
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "error">("idle");
-  const [dialog, setDialog] = useState<"discard" | "recycle" | "delete" | null>(null);
+  const [uploadMessage, setUploadMessage] = useState("");
+  const [dialog, setDialog] = useState<"discard" | "recycle" | "delete" | "delete-file" | null>(null);
+  // D-41: a section of «Сводка» or «Рекомендации» waiting for the delete confirmation.
   // A request made before this mount is not replayed; the dialog shows while a newer one is unanswered.
   const [handledCloseRequest, setHandledCloseRequest] = useState(closeRequest);
   const closeAsked = closeRequest !== handledCloseRequest;
@@ -542,13 +511,32 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const [formatterOpen, setFormatterOpen] = useState(false);
   const [dossierTab, setDossierTab] = useState<DossierTab>("main");
   const [broadcastEditorTab, setBroadcastEditorTab] = useState<BroadcastTab>("news");
+  const [selectedInfoSection, setSelectedInfoSection] = useState("");
+  const [selectedGuideSection, setSelectedGuideSection] = useState("");
+  // D-17: the line under a parent's level group after its raise lifted children; it lasts until the next level change or another section.
+  const [raisedNotice, setRaisedNotice] = useState<{ parentId: string; text: string } | null>(null);
   // A new or moved card is focused once it is in the DOM; focus scrolls it into view (G-03.2-2a).
-  const revealBroadcast = useRef<{ id: string; field: "title" | "type" } | null>(null);
+  const revealBroadcast = useRef<{ id: string; field: "title" | "type" | "endsAt" } | null>(null);
+  const [revealTick, setRevealTick] = useState(0);
   const [previewSurface, setPreviewSurface] = useState<EditorPreviewSurface | null>(null);
   // At 900px and below a list + form layout shows either the list or the open record (D-01, D-02).
+  // D-01: which cards are open. Component state only, never stored, so every visit starts collapsed.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const isOpen = (id: string) => expanded.has(id);
+  const setOpen = (ids: string[], open: boolean) => setExpanded((current) => {
+    const next = new Set(current);
+    for (const id of ids) { if (open) next.add(id); else next.delete(id); }
+    return next;
+  });
   const [recordOpen, setRecordOpen] = useState(false);
   const layoutRef = useRef<HTMLDivElement>(null);
   const tabsRef = useRef<HTMLElement>(null);
+  const toggleCard = (id: string) => {
+    const open = isOpen(id);
+    const body = document.getElementById(`card-${id}`)?.querySelector(":scope > .nested-editor-body");
+    if (open) dropFormatFields((key) => !!body?.contains(findFormatField(key)));
+    setOpen([id], !open);
+  };
   const showRecord = (open: boolean) => {
     setRecordOpen(open);
     revealOnPhone(layoutRef);
@@ -562,15 +550,72 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     setSelectedRecycledVirusId((current) => (current === "" || next.recycledViruses?.some((virus) => virus.id === current) ? current : next.recycledViruses?.[0]?.id ?? ""));
   };
 
+  // D-11: the timer below fires after render, so it reads the latest history and tab from here.
+  const syncRef = useRef({ history, tab });
+  useEffect(() => { syncRef.current = { history, tab }; });
+  // D-11: a newer stored copy overlaps the unsaved edits or the open section; the draft stays as typed and the save resolves it.
+  const [stale, setStale] = useState(false);
+
   useEffect(() => {
-    if (dirty) return;
     const syncTimer = window.setTimeout(() => {
-      dispatch({ type: "sync", content });
+      // LVL-08, D-05: a viewer-shaped copy is neither the base nor the draft; the next full copy syncs by the rules below.
+      if (contentIncomplete) return;
+      if (!dirty) {
+        dispatch({ type: "sync", content });
+        baseRevision.current = revision;
+        repairSelections(content);
+        setStale(false);
+        return;
+      }
+      // D-11: with unsaved edits a background update never replaces the draft. Sections nobody edited here follow the server; the section of the open tab (a field may be under the cursor) and the edited ones keep the draft.
+      if (revision <= baseRevision.current) return;
+      const { history: live, tab: shown } = syncRef.current;
+      const decision = rebaseDecision(live.baseline, live.present, content, editorSections.filter((section) => section === shown));
+      if (decision.kind === "conflict") {
+        setStale(true);
+        return;
+      }
       baseRevision.current = revision;
-      repairSelections(content);
+      setStale(false);
+      if (decision.kind === "none") return;
+      const theirs = changedSections(live.baseline, content);
+      dispatch({ type: "rebase", baseline: content, source: content, project: (entry) => revertSections(content, entry, theirs) });
+      repairSelections(decision.present);
     }, 0);
     return () => window.clearTimeout(syncTimer);
-  }, [content, dirty, revision]);
+  }, [content, contentIncomplete, dirty, revision, tab]);
+
+  // D-15, D-16: when the owner closes a section, its unsaved edits go back to the stored copy, in the history too, so Ctrl+Z cannot bring them back.
+  const closureRef = useRef({ history, employeeDirty });
+  useEffect(() => { closureRef.current = { history, employeeDirty }; });
+  const shutRef = useRef<string[]>([]);
+  useEffect(() => {
+    const closed = (closedKey ? closedKey.split(",") : []) as EditorSection[];
+    const shut = [...closed, ...(employeesClosed ? ["employees"] : [])];
+    const added = shut.filter((id) => !shutRef.current.includes(id));
+    shutRef.current = shut;
+    if (!shut.length) return;
+    // Read now: the employee editor unmounts with its tab and reports clean before the timer fires.
+    const wasEmployeeDirty = closureRef.current.employeeDirty;
+    const timer = window.setTimeout(() => {
+      const { baseline, present } = closureRef.current.history;
+      const lost: string[] = deniedSections(baseline, present, closed);
+      if (wasEmployeeDirty && added.includes("employees")) lost.push("employees");
+      if (closed.length) dispatch({ type: "restrict", project: (content) => revertSections(baseline, content, closed) });
+      if (!added.length) return;
+      setFormatTarget(null);
+      setFormatterOpen(false);
+      setRecordOpen(false);
+      setPreviewSurface(null);
+      setLeaveTo(null);
+      if (!lost.length) return;
+      const names = lost.map((id) => `«${id === "employees" ? "Сотрудники" : sectionLabels[id as EditorSection]}»`);
+      setClosureNotice(lost.length === 1
+        ? `Владелец закрыл раздел ${names[0]}, несохранённые правки в нём сброшены`
+        : `Владелец закрыл разделы ${names.join(", ")}, несохранённые правки в них сброшены`);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [closedKey, employeesClosed]);
 
   const selectedVirusIndex = useMemo(
     () => draft.viruses.findIndex((virus) => virus.id === selectedVirusId),
@@ -602,10 +647,19 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
 
   // Counted at dispatch, not after commit, so a save can tell synchronously whether the draft changed while it ran.
   const editCount = useRef(0);
+  // D-16: while the panel applies one control to several fields every change carries its batch:<id> key, so they are one undo step.
+  const batchKey = useRef<string | null>(null);
   const changeDraft = (updater: (next: PortiaContent) => void) => {
     editCount.current += 1;
-    dispatch({ type: "change", updater, key: editKeyFor(document.activeElement), now: Date.now() });
+    setPartialResult(null);
+    dispatch({ type: "change", updater, key: batchKey.current ?? editKeyFor(document.activeElement), now: timestamp() });
   };
+  const runBatch = (id: string, run: () => void) => {
+    batchKey.current = id;
+    try { run(); } finally { batchKey.current = null; }
+  };
+  // Phase 25, D-13 / D-14: «change the address of a picture» after a level is raised; the requests live in lib/media-rewrite-client.ts.
+  const rewrite = useImageRewrite(changeDraft);
 
   const step = (kind: "undo" | "redo") => {
     const target = kind === "undo" ? history.past.at(-1) : history.future[0];
@@ -614,7 +668,11 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     setFormatTarget(null);
     setFormatterOpen(false);
     repairSelections(target);
+    // CONT-05: an undo/redo that moves a card between news and quests takes the editor to that card.
+    const change = categoryChange(draft.broadcasts, target.broadcasts);
+    if (change) revealCard(change.id, "type", change.tab);
     editCount.current += 1;
+    setPartialResult(null);
     dispatch({ type: kind });
   };
 
@@ -642,8 +700,21 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   const deleteSelectedRecycledVirus = () => {
     if (!selectedRecycledVirus) return;
     const nextId = draft.recycledViruses.find((virus) => virus.id !== selectedRecycledVirus.id)?.id ?? "";
-    changeDraft((next) => { next.recycledViruses = next.recycledViruses.filter((virus) => virus.id !== selectedRecycledVirus.id); next.recycleOrder = recycleKeys(next); });
+    // The panel's stored commit targets this virus, which is about to be deleted.
+    setFormatTarget(null);
+    setFormatterOpen(false);
+    changeDraft((next) => { removeRecycledVirus(next, selectedRecycledVirus.id); next.recycleOrder = recycleKeys(next); });
     setSelectedRecycledVirusId(nextId);
+    showRecord(false);
+  };
+
+  const deleteSelectedRecycleFile = () => {
+    if (!selectedRecycleFile) return;
+    const nextId = draft.recycleFiles.find((file) => file.id !== selectedRecycleFile.id)?.id ?? "";
+    setFormatTarget(null);
+    setFormatterOpen(false);
+    changeDraft((next) => { removeRecycleFile(next, selectedRecycleFile.id); next.recycleOrder = recycleKeys(next); });
+    setSelectedRecycleFileId(nextId);
     showRecord(false);
   };
 
@@ -676,13 +747,15 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     next.formattedText[key] = document;
   });
 
-  const activateFormatter = (target: FormatTarget) => setFormatTarget(target);
-  // The panel's stored commit for a deleted item would write its formatting back.
-  const closeFormatterFor = (key: string) => {
-    if (formatTarget?.key !== key) return;
-    setFormatTarget(null);
-    setFormatterOpen(false);
+  const activateFormatter = (target: FormatTarget) => setFormatTarget((prev) => joinFormatTarget(prev, target));
+  // A gone field (deleted, folded) closes the panel when it is the main target and leaves the multi-selection otherwise, with its fragments (CR-01, WR-02).
+  // The updater is functional so several calls in one handler chain.
+  const dropFormatFields = (gone: (key: string) => boolean) => {
+    if (formatTarget && gone(formatTarget.key)) setFormatterOpen(false);
+    setFormatTarget((prev) => prev && dropFields(prev, gone));
   };
+  // The panel's stored commit for a deleted item would write its formatting back; peers too (CR-01).
+  const closeFormatterFor = (...keys: string[]) => dropFormatFields((key) => keys.includes(key));
 
   // The format panel keeps a target in the tab being hidden; leaving it open could write old text back (Pitfall 7).
   const selectDossierTab = (id: DossierTab) => {
@@ -692,6 +765,63 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   };
 
   const shownBroadcasts = draft.broadcasts.filter((item) => broadcastTabOf(item.type) === broadcastEditorTab);
+  const openBroadcast = (id: string) => setOpen([id], true);
+  // D-03: every TOC ends in this one scroll. Smooth only when the house motion switch is on; scroll-margin-top keeps the card clear of the sticky TOC.
+  const jumpToCard = (id: string) => requestAnimationFrame(() => document.getElementById(`card-${id}`)?.scrollIntoView({ block: "start", behavior: document.documentElement.dataset.motion === "full" ? "smooth" : "auto" }));
+  // Folding everything also drops a format target that sat in a card body (Pitfall 7), peers too (WR-02).
+  const setAllOpen = (ids: string[], open: boolean) => {
+    if (!open) dropFormatFields((key) => !!findFormatField(key)?.closest(".nested-editor-body"));
+    setOpen(ids, open);
+  };
+  const activeInfoSection = draft.infoSections.some((section) => section.id === selectedInfoSection) ? selectedInfoSection : draft.infoSections[0]?.id ?? "";
+  const activeGuideSection = draft.guideSections.some((section) => section.id === selectedGuideSection) ? selectedGuideSection : draft.guideSections[0]?.id ?? "";
+  // Derived reset, like the popover below: another section has no use for the line of the one left.
+  if (raisedNotice && raisedNotice.parentId !== activeInfoSection && raisedNotice.parentId !== activeGuideSection) setRaisedNotice(null);
+  const infoTocItems: TocItem[] = draft.infoSections.filter((section) => section.id === activeInfoSection).flatMap((section) => [
+    { id: section.id, label: section.title || "БЕЗ НАЗВАНИЯ", depth: 0 as const },
+    ...section.subsections.map((subsection) => ({ id: subsection.id, label: subsection.title || "БЕЗ НАЗВАНИЯ", depth: 1 as const })),
+  ]);
+  const infoCardIds = draft.infoSections.flatMap((section) => [section.id, ...section.subsections.flatMap((subsection) => [subsection.id, ...subsection.blocks.map((block) => block.id)])]);
+  const jumpInfo = (id: string) => {
+    const found = findInfo(draft.infoSections, id);
+    setOpen(found ? [found.section.id, id] : [id], true);
+    jumpToCard(id);
+  };
+  const writeGuideBlock = (cardId: string, blockId: string, write: (block: GuideBlock) => void) => changeDraft((next) => {
+    const block = findGuideBlock(next, cardId, blockId);
+    if (block) write(block);
+  });
+  const guideTocItems: TocItem[] = draft.guideSections.filter((section) => section.id === activeGuideSection).flatMap((section) => [
+    { id: section.id, label: section.title || "БЕЗ НАЗВАНИЯ", depth: 0 as const },
+    ...section.cards.map((card) => ({ id: card.id, label: card.title || "БЕЗ НАЗВАНИЯ", depth: 1 as const })),
+  ]);
+  const guideCardIds = draft.guideSections.flatMap((section) => [section.id, ...section.cards.flatMap((card) => [card.id, ...card.blocks.map((block) => block.id)])]);
+  const jumpGuide = (id: string) => {
+    const found = findGuide(draft.guideSections, id);
+    setOpen(found ? [found.section.id, id] : [id], true);
+    jumpToCard(id);
+  };
+  const addGuideBlock = (cardId: string, make: (id: string) => GuideBlock) => {
+    const id = makeId("block");
+    changeDraft((next) => { findGuide(next.guideSections, cardId)?.card?.blocks.push(make(id)); });
+    setOpen([id], true);
+  };
+  const broadcastTocItems: TocItem[] = shownBroadcasts.map((broadcast) => ({ id: broadcast.id, label: broadcast.title || "БЕЗ НАЗВАНИЯ", depth: 0 }));
+  // The row button and its TOC entry share these two handlers, so the TOC never duplicates selection logic.
+  const openVirus = (id: string) => { setSelectedVirusId(id); showRecord(true); };
+  const openRecycleEntry = (key: string) => {
+    const id = key.slice(key.indexOf(":") + 1);
+    if (key.startsWith("virus:")) { setSelectedRecycledVirusId(id); setSelectedRecycleFileId(""); }
+    else { setSelectedRecycleFileId(id); setSelectedRecycledVirusId(""); }
+    showRecord(true);
+  };
+  const virusTocItems: TocItem[] = draft.viruses.map((virus) => ({ id: virus.id, label: virus.name || "БЕЗ НАЗВАНИЯ", depth: 0 }));
+  // The same filter the rows use: a key whose record is gone has no row and no entry.
+  const recycleTocItems: TocItem[] = orderedRecycleKeys.flatMap((key) => {
+    const id = key.slice(key.indexOf(":") + 1);
+    const record = key.startsWith("virus:") ? draft.recycledViruses.find((item) => item.id === id) : draft.recycleFiles.find((item) => item.id === id);
+    return record ? [{ id: key, label: record.name || "БЕЗ ИМЕНИ", depth: 0 as const }] : [];
+  });
   // Same reason as selectDossierTab: the panel's target may sit in a card of the category being hidden (T-03.2-20).
   const selectBroadcastTab = (id: BroadcastTab) => {
     setBroadcastEditorTab(id);
@@ -703,14 +833,65 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
     const target = revealBroadcast.current;
     if (!target || tab !== "broadcasts") return;
     const card = document.querySelector(`[data-broadcast-id="${CSS.escape(target.id)}"]`);
-    const field = card?.querySelector<HTMLElement>(target.field === "title" ? "[data-broadcast-title]" : "[data-broadcast-type]");
+    const selector = target.field === "title" ? "[data-broadcast-title]" : target.field === "endsAt" ? "[data-broadcast-ends]" : "[data-broadcast-type]";
+    const field = card?.querySelector<HTMLElement>(selector);
     if (!field) return;
-    field.focus();
+    field.focus({ preventScroll: true });
+    field.scrollIntoView({ block: "nearest", behavior: document.documentElement.dataset.motion === "full" ? "smooth" : "auto" });
     revealBroadcast.current = null;
-  }, [draft.broadcasts, broadcastEditorTab, tab]);
+  }, [draft.broadcasts, broadcastEditorTab, tab, revealTick]);
 
+  // Brings the editor to one card's field from anywhere (D-18, CONT-05).
+  const revealCard = (id: string, field: "title" | "type" | "endsAt", cardTab: BroadcastTab) => {
+    revealBroadcast.current = { id, field };
+    openBroadcast(id);
+    selectBroadcastTab(cardTab);
+    if (tab !== "broadcasts") showTab("broadcasts");
+    // revealTick re-runs the effect when the tab and sub-tab are already right.
+    setRevealTick((value) => value + 1);
+  };
+
+  const addBroadcastEntry = () => {
+    const id = makeId("broadcast");
+    revealBroadcast.current = { id, field: "title" };
+    setOpen([id], true);
+    setFormatTarget(null);
+    setFormatterOpen(false);
+    changeDraft((next) => addBroadcast(next, id, broadcastEditorTab === "news" ? "news" : "quest"));
+  };
+  const renderBroadcastCard = (broadcast: Broadcast) => (
+    <CollapsibleCard key={broadcast.id} id={broadcast.id} label={`${broadcast.type === "news" ? "НОВОСТЬ" : broadcast.type === "quest" ? "КВЕСТ" : "ЗАДАЧА"} ${String(shownBroadcasts.indexOf(broadcast) + 1).padStart(2, "0")}`} title={broadcast.title} open={isOpen(broadcast.id)} onToggle={() => toggleCard(broadcast.id)} cardProps={{ "data-broadcast-id": broadcast.id }}
+      actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.broadcast(broadcast.id)); changeDraft((next) => removeBroadcast(next, broadcast.id)); }}>Удалить</button></div>}>
+      <Field label="Тип"><select data-broadcast-type value={broadcast.type} onChange={(event) => {
+        const type = event.target.value as Broadcast["type"];
+        changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => {
+          item.type = type;
+          // D-19: switching back does not restore it; undo restores the whole previous card.
+          if (type !== "news") item.important = false;
+        }));
+        // A card that changes category would vanish from this list, so the view follows it.
+        if (broadcastTabOf(type) !== broadcastEditorTab) {
+          revealBroadcast.current = { id: broadcast.id, field: "type" };
+          openBroadcast(broadcast.id);
+          selectBroadcastTab(broadcastTabOf(type));
+        }
+      }}><option value="quest">Еженедельный квест</option><option value="task">Задача</option><option value="news">Новость</option></select></Field>
+      <Field label="Заголовок"><input data-broadcast-title value={broadcast.title} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.title = event.target.value; }))} /></Field>
+      <FormattedTextarea area="broadcast" label="Текст" tall value={broadcast.body} document={draft.formattedText[portiaTextKey.broadcast(broadcast.id)]} formatKey={portiaTextKey.broadcast(broadcast.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.broadcast(broadcast.id), value, document, (next, text) => updateById(next.broadcasts, broadcast.id, (item) => { item.body = text; }))} />
+      {broadcast.type === "quest" && (
+        <>
+          <Field label="Дата начала"><input type="date" value={broadcast.startsAt} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.startsAt = event.target.value; }))} /></Field>
+          <Field label="Дата окончания" error={questDateError(broadcast) ? "Окончание раньше начала" : undefined} errorId={`ends-error-${broadcast.id}`}><input type="date" data-broadcast-ends aria-invalid={questDateError(broadcast) || undefined} aria-describedby={questDateError(broadcast) ? `ends-error-${broadcast.id}` : undefined} value={broadcast.endsAt} min={broadcast.startsAt || undefined} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.endsAt = event.target.value; }))} /></Field>
+          <Field label="Условия" wide><textarea value={broadcast.conditions} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.conditions = event.target.value; }))} /></Field>
+        </>
+      )}
+      <label className="publish-toggle"><input type="checkbox" checked={broadcast.published} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.published = event.target.checked; }))} /><span>Показывать посетителям</span></label>
+      {broadcast.type === "news" && <label className="publish-toggle"><input type="checkbox" checked={broadcast.important} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.important = event.target.checked; }))} /><span>Важная новость — выделить и закрепить сверху</span></label>}
+    </CollapsibleCard>
+  );
   const showTab = (id: EditorTab) => {
     setTab(id);
+    setClosureNotice("");
     setRecordOpen(false);
     setPreviewSurface(null);
     setFormatTarget(null);
@@ -735,34 +916,56 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   };
 
   const uploadImage = async (file: File, onUploaded: (url: string) => void) => {
+    if (uploadState === "uploading") return;
     setUploadState("uploading");
+    setUploadMessage("");
+    // A refusal never calls onUploaded, so the field and the draft keep their value (D-16).
+    const refuse = (message: string) => { setUploadMessage(message); setUploadState("error"); };
+    // Shrinks the picture in the browser before sending; any failure inside sends the original file.
+    const prepared = await compressImageForUpload(file);
+    let response: Response;
     try {
       const body = new FormData();
-      body.set("file", file);
-      const response = await fetch("/api/uploads", { method: "POST", body });
-      const payload = (await response.json()) as { url?: string; error?: string };
-      if (!response.ok || !payload.url) throw new Error(payload.error ?? "upload failed");
-      onUploaded(payload.url);
-      setUploadState("idle");
+      body.set("file", prepared);
+      response = await fetch("/api/uploads", { method: "POST", body });
     } catch {
-      setUploadState("error");
+      refuse(uploadRefusal.network);
+      return;
     }
+    const payload = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
+    if (!response.ok || !payload.url) {
+      refuse(typeof payload.error === "string" ? payload.error : uploadRefusal.server);
+      return;
+    }
+    onUploaded(payload.url);
+    setUploadState("idle");
   };
 
   // Read after an awaited save, when the closure that started it is renders old.
   const latest = useRef({ closeAsked, onCloseApproved });
   useEffect(() => { latest.current = { closeAsked, onCloseApproved }; });
+  // Set synchronously when a save starts, so a second click in the same frame cannot send a second request before saveState reaches this component (idempotency).
+  const inflight = useRef(false);
 
   // Resolves true only when nothing is left unsaved: the draft was clean, or the save succeeded and nothing was typed meanwhile.
-  const save = async (): Promise<boolean> => {
+  // mode "replace" is «Заменить своей» (D-09): the user's sections go over the latest server copy under its revision.
+  const save = async (mode: "mine" | "replace" = "mine"): Promise<boolean> => {
     if (!dirty) return true;
-    if (saveState === "saving") return false;
+    // STAB-APP-09: no save on a stale answer about the rights; the draft stays where it is.
+    // LVL-08, D-05: the same for a copy with hidden records stubbed out; saving it would erase them.
+    if (accessFailed || contentIncomplete) return false;
+    // D-23: the server would answer 413; the savebar already shows why.
+    if (saveBlocked) return false;
+    if (saveState === "saving" || inflight.current) return false;
+    inflight.current = true;
+    if (mode === "replace") baseRevision.current = revision;
     // The reducer compares this very object after the request to tell whether the owner kept typing meanwhile.
     const savedFrom = draft;
     const editsBefore = editCount.current;
     try {
       const normalized = clone(draft);
-      normalized.searchRecommendations = normalized.searchRecommendations.map((value) => value.trim()).filter(Boolean);
+      // D-41: with sections the lines are trimmed group by group and the flat list is rebuilt from them; without, as before.
+      if (!trimRecommendationSections(normalized)) normalized.searchRecommendations = normalized.searchRecommendations.map((value) => value.trim()).filter(Boolean);
       normalized.assistantAdvice = normalized.assistantAdvice.map((value) => value.trim()).filter(Boolean);
       normalized.assistantOffendedPhrases = (normalized.assistantOffendedPhrases ?? [normalized.assistantOffendedPhrase])
         .map((value) => value.trim()).filter(Boolean);
@@ -792,16 +995,79 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       if (normalized.assistantAutoMinSeconds > normalized.assistantAutoMaxSeconds) {
         [normalized.assistantAutoMinSeconds, normalized.assistantAutoMaxSeconds] = [normalized.assistantAutoMaxSeconds, normalized.assistantAutoMinSeconds];
       }
-      normalized.viruses.forEach((virus) => { virus.scientistLogs = virus.scientistLogs.slice(0, 5); });
-      baseRevision.current = await onSave(normalized, baseRevision.current);
-      const clean = editCount.current === editsBefore;
-      dispatch({ type: "saved", normalized, savedFrom });
+      normalized.viruses.forEach((virus) => { virus.scientistLogs = virus.scientistLogs.slice(0, MAX_SCIENTIST_LOGS); });
+      // Closed sections go exactly as stored, so the normalization above can never look like an edit of them (RESEARCH P4).
+      // Replacing: the sections the user did not touch come from the latest server copy, so only the user's own sections overwrite theirs (T-19-26: closed ones follow the server too).
+      const serverBase = mode === "replace" ? content : history.baseline;
+      const taken = mode === "replace" ? editorSections.filter((section) => !changed.includes(section)) : [];
+      const reverted = [...new Set([...taken, ...closedSections])];
+      const wanted = reverted.length ? revertSections(serverBase, normalized, reverted) : normalized;
+      let outgoing = wanted;
+      // D-10: sections the server refuses stay drafts; the rest is sent once more without them.
+      let refused: EditorSection[] = [];
+      try {
+        baseRevision.current = await onSave(outgoing, baseRevision.current);
+      } catch (error) {
+        if (!(error instanceof SectionClosedError)) throw error;
+        refused = error.refusedSections.filter((section) => changed.includes(section));
+        if (!refused.length || !partialSave(changed, refused).send.length) throw error;
+        outgoing = revertSections(serverBase, wanted, refused);
+        baseRevision.current = await onSave(outgoing, baseRevision.current);
+      }
+      const clean = editCount.current === editsBefore && refused.length === 0;
+      setClosureNotice("");
+      setConflictBase(null);
+      setStale(false);
+      setTheirEdits([]);
+      setRefusedSections(refused);
+      if (refused.length) {
+        const result = partialSave(changed, refused);
+        setPartialResult({ saved: result.saved, total: result.total, sections: result.send });
+        const first = editorSections.find((section) => refused.includes(section)) ?? null;
+        focusRequest.current = first;
+        if (first && stripTabs.some(([id]) => id === first)) setTab(first);
+      } else setPartialResult(null);
+      // A draft typed during the request follows the server copy for the sections this save took from it, except where the user typed meanwhile.
+      const rebase = taken.length ? (latest: PortiaContent) => {
+        const typed = changedSections(savedFrom, latest);
+        return revertSections(outgoing, latest, taken.filter((section) => !typed.includes(section)));
+      } : undefined;
+      // The refused sections stay in the draft: when nothing was typed meanwhile the draft becomes the full copy, not the reduced one that was stored.
+      dispatch({ type: "saved", normalized: outgoing, savedFrom, keep: refused.length ? wanted : undefined, rebase });
+      // D-13: only now that the server stored the record may the replaced files go; the server checks the references again.
+      void rewrite.retire(outgoing);
       return clean;
-    } catch {
+    } catch (error) {
       // Keep the local draft marked as changed so a temporary network error
       // can never discard the owner's work.
+      if (error instanceof SaveConflictError) setConflictBase(baseRevision.current);
       return false;
+    } finally {
+      inflight.current = false;
     }
+  };
+
+  // D-10: after a partial save the first refused section's tab takes the focus (its error text is linked from the tab).
+  useEffect(() => {
+    const section = focusRequest.current;
+    if (!section) return;
+    focusRequest.current = null;
+    tabsRef.current?.querySelector<HTMLElement>(`[data-tab-id="${section}"]`)?.focus();
+  });
+
+  // D-09 «Загрузить их версию»: the form shows the server's copy and the user's values stay in «Ваши правки».
+  const loadTheirVersion = () => {
+    setTheirEdits(draftEdits(history.baseline, history.present));
+    setConflictBase(null);
+    setStale(false);
+    baseRevision.current = revision;
+    repairSelections(content);
+    dispatch({ type: "sync", content });
+  };
+  const copyEdit = (edit: DraftEdit) => {
+    try {
+      void navigator.clipboard?.writeText(edit.value).then(() => setCopiedEdit(edit.path), () => {});
+    } catch {}
   };
 
   // save and step are new functions every render; the listeners read the latest pair through a ref instead of re-subscribing.
@@ -810,9 +1076,9 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
 
   // Window-level shortcuts only while this window is the active, non-minimized one and no dialog is open (D-10, D-11).
   useEffect(() => {
-    if (!active || dialog || closeAsked) return;
+    if (!active || dialog || closeAsked || accessFailed) return;
     // Сотрудники and Доступ are saved separately; their fields keep the browser's native undo.
-    const historyTab = tab !== "employees" && tab !== "access";
+    const historyTab = tab !== "employees" && tab !== "users" && tab !== "promo" && tab !== "access";
     const onKeyDown = (event: KeyboardEvent) => {
       const action = shortcutOf(event);
       if (!action) return;
@@ -834,7 +1100,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("beforeinput", onBeforeInput);
     };
-  }, [active, dialog, closeAsked, tab]);
+  }, [active, dialog, closeAsked, accessFailed, tab]);
 
   // The desktop asks on × only while this is true, so a dirty employee draft counts too (D-02).
   useEffect(() => { onDirtyChange(dirty || employeeDirty); }, [dirty, employeeDirty, onDirtyChange]);
@@ -862,71 +1128,181 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   }, [dirty]);
 
   // Only a save starts a new saveState, so after ОТМЕНИТЬ or undo back to clean the conflict text would sit over a current editor.
-  const conflict = saveState === "conflict" && dirty;
-  // While the format panel is open the bar is its anchor, so it must not appear under the panel mid-session (D-01/D-02).
-  const barVisible = dirty || saveState === "saving" || saveState === "saved" || formatterOpen;
-  const statusText = saveState === "saving" ? "СОХРАНЕНИЕ…"
-    : conflict ? "КТО-ТО СОХРАНИЛ РАНЬШЕ — СКОПИРУЙТЕ ПРАВКИ И ОБНОВИТЕ СТРАНИЦУ"
-    : saveState === "error" ? "ОШИБКА"
-    : saveState === "saved" && !dirty ? "СОХРАНЕНО"
-    : "";
+  const conflict = saveState === "conflict" && dirty && conflictBase !== null;
+  const refusedShown = refusedSections.filter((section) => changed.includes(section));
+  // Phase 26 (26-06, D-13b): the floating save chip is retired; the action bar of the draft tabs shows the status, the reasons and the buttons.
+  // UI E3: «Сохранено» only once the server answered (saveState "saved") and nothing was typed since; the text of a failure is the server's reason beside the status.
+  const partial = partialResult !== null && dirty ? partialResult : null;
+  const status: SaveStatus = saveState === "saving" ? "saving"
+    : conflict ? "conflict"
+    : saveState === "error" ? "error"
+    : partial ? "partial"
+    : saveState === "saved" && !dirty ? "saved"
+    : dirty ? "dirty"
+    : "clean";
+  const statusText = saveStatusText(status, partial ?? undefined);
+  // Review WR-01: the draft is shared by every tab. The draft tabs have the bar below; on any other tab the same buttons and reasons go through EditorDraftBarContext into that tab's bar.
+  const draftActions = <>
+    <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
+    <button type="button" className="secondary-control" disabled={!dirty} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") setDialog("discard"); }}>ОТМЕНИТЬ</button>
+    <button type="button" className="primary-control" disabled={!dirty || saveBlocked} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") void save(); }}>СОХРАНИТЬ</button>
+  </>;
+  const draftMessages = dirty ? [
+    status === "error" && saveError,
+    oversize.length > 0 && oversizeMessage(oversize),
+    bodyMessage,
+    badQuest && <button type="button" className="editor-save-fix" onClick={() => revealCard(badQuest.id, "endsAt", "quests")}>{dateMessage}</button>,
+  ] : [];
+  const draftBar: EditorDraftBarState | null = !editorSections.some((section) => section === tab) && (dirty || saveState !== "idle")
+    ? { statusText, tone: status, unsavedCount: dirty ? shownChanged.length : 0, notice: saveNotice, actions: draftActions, messages: draftMessages }
+    : null;
+
+  const header = (
+    <header className="editor-header">
+      <div>
+        <span className="eyebrow">УПРАВЛЕНИЕ СОДЕРЖИМЫМ</span>
+        <h1>Редактор PORTIA</h1>
+        <p>Изменения сохраняются в общей базе!</p>
+      </div>
+    </header>
+  );
+  // STAB-APP-09 fail-closed: whatever the last answer said, no section is shown while the rights are unchecked. The editor stays mounted, so the content draft survives until the check passes or the window closes.
+  if (accessFailed) {
+    return (
+      <div className="content-editor">
+        {header}
+        <AppDeniedPanel detail={accessCheckFailedText} />
+        {closeAsked && (
+          <ConfirmDialog
+            title="Закрыть редактор?"
+            text={`Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}. Права не проверены, сохранить сейчас нельзя.`}
+            actions={[
+              { label: "НЕ СОХРАНЯТЬ", tone: "danger", onClick: () => { setHandledCloseRequest(closeRequest); onCloseApproved(); } },
+              { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setHandledCloseRequest(closeRequest) },
+            ]}
+            onCancel={() => setHandledCloseRequest(closeRequest)}
+          />
+        )}
+      </div>
+    );
+  }
+  // LVL-08, D-05: a viewer-shaped copy shows no forms and nothing to save; the draft stays in memory until the full copy comes.
+  if (contentIncomplete) {
+    return (
+      <div className="content-editor">
+        {header}
+        <div className="empty-state app-fatal-panel">
+          <div className="app-state-reason" role="alert"><strong>{levelCopy.editorIncomplete.heading}</strong><span>{levelCopy.editorIncomplete.body}</span></div>
+        </div>
+        {closeAsked && (
+          <ConfirmDialog
+            title="Закрыть редактор?"
+            text={`Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}. ${levelCopy.editorIncomplete.heading}`}
+            actions={[
+              { label: "НЕ СОХРАНЯТЬ", tone: "danger", onClick: () => { setHandledCloseRequest(closeRequest); onCloseApproved(); } },
+              { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setHandledCloseRequest(closeRequest) },
+            ]}
+            onCancel={() => setHandledCloseRequest(closeRequest)}
+          />
+        )}
+      </div>
+    );
+  }
+  // D-17: the window stays; nothing of the sections is rendered.
+  if (noTabs) return <div className="content-editor">{header}<div className="editor-empty">Владелец пока не открыл вам ни одного раздела</div></div>;
 
   return (
     <ActiveFormatContext.Provider value={{ key: formatTarget?.key ?? null, surface: previewSurface, phonePanelOpen: formatterOpen && window.matchMedia("(max-width: 900px)").matches }}>
     <div className="content-editor">
-      <header className="editor-header">
-        <div>
-          <span className="eyebrow">УПРАВЛЕНИЕ СОДЕРЖИМЫМ</span>
-          <h1>Редактор PORTIA</h1>
-          <p>Изменения сохраняются в общей базе!</p>
-        </div>
-      </header>
+      {header}
 
       <nav className="editor-tabs" aria-label="Разделы редактора" ref={tabsRef}>
-        {([
-          ...editorSections.map((id) => [id, sectionLabels[id]]),
-          ["employees", "Сотрудники"],
-          ...(canManageEditors ? [["access", "Доступ"]] : []),
-        ] as [EditorTab, string][]).map(([id, label]) => {
-          const unsaved = changed.some((section) => section === id);
+        {stripTabs.map(([id, label]) => {
+          const unsaved = shownChanged.some((section) => section === id);
+          const failed = refusedShown.some((section) => section === id);
+          const savedNow = partial?.sections.some((section) => section === id) ?? false;
           return (
-            <button key={id} type="button" className={tab === id ? "active" : ""} aria-label={unsaved ? `${label}, есть несохранённые правки` : undefined} onClick={() => switchTab(id)}>
-              {label}{unsaved && <i className="tab-dot" aria-hidden="true" />}
+            <button key={id} type="button" data-tab-id={id} data-save-error={failed || undefined} className={tab === id ? "active" : ""} aria-describedby={failed ? `${errorIdBase}-${id}` : undefined} aria-label={failed ? `${label}, не сохранено` : unsaved ? `${label}, есть несохранённые правки` : savedNow ? `${label}, сохранено` : undefined} onClick={() => switchTab(id)}>
+              {label}{id === "users" && <UsersTabCount count={usersPending.count} />}{unsaved && <i className="tab-dot" aria-hidden="true" />}{savedNow && !unsaved && <i className="tab-saved" aria-hidden="true">✓</i>}
             </button>
           );
         })}
       </nav>
+      {editorSections.some((section) => section === tab) && (
+        <EditorActionBar
+          label={sectionLabels[tab as EditorSection]}
+          statusText={statusText}
+          tone={status}
+          unsavedCount={dirty ? shownChanged.length : 0}
+          notice={saveNotice}
+          nav={tab === "guide" ? <>
+            <SectionAddBar onCreate={(title) => {
+              const id = makeId("guide");
+              changeDraft((next) => { next.guideSections.push({ id, title: title || "НОВЫЙ РАЗДЕЛ", photo: "", cards: [] }); });
+              setSelectedGuideSection(id);
+              setOpen([id], true);
+              requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`#card-${id} > .nested-editor-body input`)?.focus());
+            }} />
+            <SectionTabs label="Разделы справочника" sections={draft.guideSections} activeId={activeGuideSection} onSelect={setSelectedGuideSection} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.guideSections, from, to))} />
+          </> : tab === "info" ? <>
+            <SectionAddBar onCreate={(title) => {
+              const id = makeId("info");
+              changeDraft((next) => { next.infoSections.push({ id, title: title || "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] }); });
+              setSelectedInfoSection(id);
+              setOpen([id], true);
+              requestAnimationFrame(() => document.querySelector<HTMLInputElement>(`#card-${id} > .nested-editor-body input`)?.focus());
+            }} />
+            <SectionTabs label="Разделы информации" sections={draft.infoSections} activeId={activeInfoSection} onSelect={setSelectedInfoSection} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} />
+          </> : tab === "broadcasts" ? (
+            <nav className="editor-tabs dossier-tabs" aria-label="Разделы сводки">
+              {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([id, label]) => (
+                <button key={id} type="button" className={broadcastEditorTab === id ? "active" : ""} aria-current={broadcastEditorTab === id ? "true" : undefined} onClick={() => selectBroadcastTab(id)}>
+                  {label} <span className="tab-count">{draft.broadcasts.filter((item) => broadcastTabOf(item.type) === id).length}</span>
+                </button>
+              ))}
+            </nav>
+          ) : undefined}
+          actions={draftActions}
+          messages={draftMessages}
+        />
+      )}
+      {refusedShown.map((section) => <p key={section} id={`${errorIdBase}-${section}`} className="editor-section-error" role="alert">{closedMessage([section])} Правки остались в черновике.</p>)}
+      {closureNotice && <p className="editor-guidance" role="status">{closureNotice}</p>}
+      {stale && dirty && !conflict && (
+        <div className="editor-stale-banner" role="status">
+          <strong>Запись изменили</strong>
+          <span>Показаны ваши правки. Конфликт решится при сохранении.</span>
+        </div>
+      )}
+      {conflict && <ConflictPanel ready={revision !== conflictBase} onLoadTheirs={loadTheirVersion} onReplace={() => void save("replace")} />}
+      {theirEdits.length > 0 && (
+        <details className="editor-their-edits">
+          <summary>Ваши правки ({theirEdits.length})</summary>
+          <ul>
+            {theirEdits.map((edit) => (
+              <li key={edit.path}>
+                <span className="editor-their-edit-label">{edit.label}</span>
+                <pre className="editor-their-edit-value">{edit.value}</pre>
+                <button type="button" className="secondary-control" onClick={() => copyEdit(edit)}>{copiedEdit === edit.path ? "Скопировано" : "Копировать"}</button>
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="secondary-control" onClick={() => setTheirEdits([])}>Закрыть</button>
+        </details>
+      )}
 
-      <div className="global-format-launch">
-        <button
-          type="button"
-          disabled={!formatTarget}
-          aria-label={formatTarget ? `Оформление текста: ${formatTarget.title}` : "Сначала выберите текстовое поле"}
-          aria-expanded={formatterOpen}
-          title={formatTarget ? `Оформление: ${formatTarget.title}` : "Сначала выберите текстовое поле"}
-          onPointerDown={(event) => event.preventDefault()}
-          onClick={() => {
-            // Phone: the field loses focus once per opening so the keyboard leaves (D-06).
-            if (!formatterOpen && formatTarget && window.matchMedia("(max-width: 900px)").matches) findFormatField(formatTarget.key)?.blur();
-            setFormatterOpen((current) => !current);
-          }}
-        >
-          <span aria-hidden="true">✎</span>
-          <strong>{formatTarget ? "ОФОРМЛЕНИЕ" : "ВЫБЕРИТЕ ТЕКСТ"}</strong>
-          {formatTarget && <em>{formatTarget.title}</em>}
-        </button>
-        <small>{formatTarget ? "Выделите текст в активном поле или поставьте курсор в слово, чтобы оформить его." : "Одна кнопка форматирования работает со всеми большими текстовыми полями."}</small>
-      </div>
+      <FormatLaunchButton target={formatTarget} open={formatterOpen} onToggle={() => setFormatterOpen((current) => !current)} />
 
       {tab === "viruses" && (
-        <div className="virus-editor-layout" ref={layoutRef} data-mobile-view={recordOpen && selectedVirus ? "record" : "list"}>
+        <div className="virus-editor-layout etab-body" ref={layoutRef} data-mobile-view={recordOpen && selectedVirus ? "record" : "list"}>
           <button type="button" className="secondary-control editor-back-to-list" onClick={() => showRecord(false)}>← К списку</button>
-          <aside className="editor-record-list">
+          <aside className="editor-record-list etab-list">
+            <EditorToc items={virusTocItems} onJump={(id) => { openVirus(id); jumpToCard(id); }} />
             {draft.viruses.map((virus, index) => (
-              <div className="editor-record-row" data-sort-index={index} key={virus.id}>
+              <div className="editor-record-row" id={`card-${virus.id}`} data-sort-index={index} key={virus.id}>
                 <OrderDragHandle index={index} label={virus.name || "вирус"} onMove={(from, to) => { setFormatTarget(null); setFormatterOpen(false); changeDraft((next) => moveArrayItem(next.viruses, from, to)); }} />
-                <button type="button" className={virus.id === selectedVirusId ? "active" : ""} onClick={() => { setSelectedVirusId(virus.id); showRecord(true); }}>
-                  <strong>{virus.name || "БЕЗ НАЗВАНИЯ"}</strong><small>{virus.code || "БЕЗ КОДА"}</small>
+                <button type="button" className={virus.id === selectedVirusId ? "active" : ""} aria-current={virus.id === selectedVirusId ? "true" : undefined} onClick={() => openVirus(virus.id)}>
+                  <strong title={virus.name || "БЕЗ НАЗВАНИЯ"}>{virus.name || "БЕЗ НАЗВАНИЯ"}</strong><small title={virus.code || "БЕЗ КОДА"}>{virus.code || "БЕЗ КОДА"}</small>
                 </button>
               </div>
             ))}
@@ -939,13 +1315,17 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
           </aside>
 
           {selectedVirus ? (
-            <div className="editor-form virus-editor-form">
-              <DossierTabs active={dossierTab} changed={liveDossierChanged} onSelect={selectDossierTab} />
+            <div className="editor-form virus-editor-form etab-detail">
+              <div className="virus-editor-head">
+                <DossierTabs active={dossierTab} changed={liveDossierChanged} onSelect={selectDossierTab} />
+                <button className="danger-control" type="button" onClick={() => setDialog("recycle")}>ПЕРЕМЕСТИТЬ В КОРЗИНУ</button>
+              </div>
               {dossierTab === "main" && <EditorGroup title="Основные данные">
                 <Field label="Название"><input value={selectedVirus.name} onChange={(event) => updateVirus((virus) => { virus.name = event.target.value; })} /></Field>
+                <LevelPicker name={`level-virus-${selectedVirus.id}`} value={selectedVirus.level} action={rewrite.action(`virus:${selectedVirus.id}`)} onChange={(level) => { rewrite.raised(`virus:${selectedVirus.id}`, "virus", selectedVirus.id, selectedVirus, effectiveLevel(selectedVirus.level, 1), level); updateVirus((virus) => { virus.level = level; }); }} />
                 <Field label="Код"><input value={selectedVirus.code} onChange={(event) => updateVirus((virus) => { virus.code = event.target.value; })} /></Field>
                 <Field label="Статус"><input value={selectedVirus.status} onChange={(event) => updateVirus((virus) => { virus.status = event.target.value; })} /></Field>
-                <ImageEditorField label="Фото или GIF после заражения" value={selectedVirus.infectedImage} placement="dossier" maxHint="На странице: максимум 540 × 620 px" uploadState={uploadState} onChange={(value) => updateVirus((virus) => { virus.infectedImage = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { virus.infectedImage = url; }))} />
+                <ImageEditorField label="Фото или GIF после заражения" value={selectedVirus.infectedImage} placement="dossier" maxHint="На странице: максимум 540 × 620 px" uploadState={uploadState} uploadMessage={uploadMessage} framing={selectedVirus.infectedImageFraming} framingBox="natural" onFramingChange={(frame) => updateVirus((virus) => { if (frame) virus.infectedImageFraming = frame; else delete virus.infectedImageFraming; })} onChange={(value) => updateVirus((virus) => { virus.infectedImage = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { virus.infectedImage = url; }))} />
               </EditorGroup>}
 
               {dossierTab === "text" && <EditorGroup title="Описание">
@@ -975,7 +1355,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                     <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={uploadState === "uploading"} onClick={() => { setFormatTarget(null); setFormatterOpen(false); changeDraft((next) => updateById(next.viruses, selectedVirus.id, (virus) => removeMutation(next, virus, index))); }}>Удалить</button></div>
                     <Field label="Название"><input value={mutation.name} onChange={(event) => updateVirus((virus) => { virus.mutations[index].name = event.target.value; })} /></Field>
                     <FormattedTextarea area="mutation" label="Описание" value={mutation.description} document={draft.formattedText[portiaTextKey.mutation(selectedVirus.id, index)]} formatKey={portiaTextKey.mutation(selectedVirus.id, index)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.mutation(selectedVirus.id, index), value, document, (next, text) => updateById(next.viruses, selectedVirus.id, (virus) => { const item = virus.mutations[index]; if (item) item.description = text; }))} />
-                    <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} onChange={(value) => updateVirus((virus) => { virus.mutations[index].image = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { const item = virus.mutations[index]; if (item) item.image = url; }))} />
+                    <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} uploadMessage={uploadMessage} framing={mutation.imageFraming} framingBox="natural" onFramingChange={(frame) => updateVirus((virus) => { const item = virus.mutations[index]; if (!item) return; if (frame) item.imageFraming = frame; else delete item.imageFraming; })} onChange={(value) => updateVirus((virus) => { virus.mutations[index].image = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { const item = virus.mutations[index]; if (item) item.image = url; }))} />
                   </div>
                 ))}
                 <button className="secondary-control" type="button" onClick={() => updateVirus((virus) => virus.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }))}>+ ДОБАВИТЬ МУТАЦИЮ</button>
@@ -983,124 +1363,189 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
 
               {dossierTab === "logs" && <EditorGroup title="Записи учёных" stack>
                 <p className="editor-guidance">Можно оставить досье без записей или добавить до пяти. Если текст не выделен, оформление применяется ко всей записи.</p>
-                {selectedVirus.scientistLogs.length === 0 && <div className="editor-empty compact-empty">Записей учёных пока нет.</div>}
+                {selectedVirus.scientistLogs.length === 0 && <p className="editor-guidance">{levelCopy.logsEmptyEditor}</p>}
                 {selectedVirus.scientistLogs.map((log, index) => (
                   <div className="nested-editor-card" key={log.id}>
                     <div className="nested-editor-head"><strong>ЗАПИСЬ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => updateVirus((virus) => { virus.scientistLogs.splice(index, 1); })}>Удалить</button></div>
                     <Field label="Название"><input value={log.title} onChange={(event) => updateVirus((virus) => { virus.scientistLogs[index].title = event.target.value; })} /></Field>
                     <Field label="Псевдоним учёного"><input value={log.scientist} onChange={(event) => updateVirus((virus) => { virus.scientistLogs[index].scientist = event.target.value; })} /></Field>
-                    <Field label="Уровень доступа записи"><select value={log.lockedLevel} onChange={(event) => updateVirus((virus) => { virus.scientistLogs[index].lockedLevel = Number(event.target.value); })}><option value={2}>II — доступна</option><option value={3}>III — заблокирована</option><option value={4}>IV — заблокирована</option></select></Field>
+                    <LevelPicker name={`level-log-${log.id}`} value={log.lockedLevel} onChange={(level) => updateVirus((virus) => { virus.scientistLogs[index].lockedLevel = level; })} />
                     <FormattedTextarea area="scientist" label="Текст записи" value={scientistLogPlainText(log)} document={log.richContent} formatKey={`scientist:${log.id}`} onActivate={activateFormatter} onChange={(value, document) => updateVirus((virus) => { virus.scientistLogs[index].content = value.split(/\n\s*\n/); virus.scientistLogs[index].richContent = document; })} />
                   </div>
                 ))}
-                <div className="scientist-log-actions"><button className="secondary-control" type="button" disabled={selectedVirus.scientistLogs.length >= 5} onClick={() => updateVirus((virus) => virus.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""], richContent: { runs: [{ text: "" }] } }))}>+ ДОБАВИТЬ ЗАПИСЬ</button><span>{selectedVirus.scientistLogs.length} / 5</span></div>
+                <div className="scientist-log-actions"><button className="secondary-control" type="button" disabled={selectedVirus.scientistLogs.length >= MAX_SCIENTIST_LOGS} onClick={() => updateVirus((virus) => virus.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 1, content: [""], richContent: { runs: [{ text: "" }] } }))}>+ ДОБАВИТЬ ЗАПИСЬ</button><span>{selectedVirus.scientistLogs.length} / {MAX_SCIENTIST_LOGS}</span></div>
               </EditorGroup>}
-
-              <button className="danger-control" type="button" onClick={() => setDialog("recycle")}>ПЕРЕМЕСТИТЬ В КОРЗИНУ</button>
             </div>
-          ) : <div className="editor-empty">Добавьте первую запись вируса.</div>}
+          ) : draft.viruses.length ? <EditorEmptyDetail /> : <div className="editor-empty">Добавьте первую запись вируса.</div>}
         </div>
       )}
 
       {tab === "info" && (
-        <div className="editor-form flat-editor-form">
+        <EditorTabBody list={infoTocItems.length >= 5 && <EditorToc items={infoTocItems} onJump={jumpInfo} onAll={(open) => setAllOpen(infoCardIds, open)} />} detail={
+        <div className="editor-form flat-editor-form editor-card-columns">
+          <EditorGroup title={levelCopy.appsGroup}>
+            {LEVELED_APP_IDS.map((id) => <LevelPicker key={id} name={`level-app-${id}`} caption={levelCopy.appLabels[id]} value={draft.appLevels?.[id]} onChange={(level) => changeDraft((next) => { next.appLevels = { ...(next.appLevels ?? {}), [id]: level }; })} />)}
+          </EditorGroup>
           <p className="editor-guidance">Каждый блок становится отдельным разделом приложения «Информация». Раздел может содержать подразделы, собранные из блоков в любом порядке.</p>
-          {draft.infoSections.map((section, index) => (
-            <div className="nested-editor-card" data-sort-index={index} key={section.id}>
-              <div className="nested-editor-head"><OrderDragHandle index={index} label={section.title || "раздел"} onMove={(from, to) => changeDraft((next) => moveArrayItem(next.infoSections, from, to))} /><strong>РАЗДЕЛ {String(index + 1).padStart(2, "0")}</strong><div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.info(section.id)); changeDraft((next) => removeInfoSection(next, section.id)); }}>Удалить</button></div></div>
+          {draft.infoSections.length === 0 && <div className="editor-empty">Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».</div>}
+          <div className="editor-section-single">{draft.infoSections.map((section, index) => section.id === activeInfoSection && (
+            <CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={`РАЗДЕЛ ${String(index + 1).padStart(2, "0")}`} title={section.title} open={isOpen(section.id)} onToggle={() => toggleCard(section.id)}
+              handle={<OrderDragHandle index={index} label={section.title || "раздел"} itemId={section.id} onMove={(from, to) => { const refocus = keepSectionHandleFocus(section.id); changeDraft((next) => moveArrayItem(next.infoSections, from, to)); refocus(); }} />}
+              actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.info(section.id), ...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id)))); changeDraft((next) => removeInfoSection(next, section.id)); }}>Удалить</button></div>}>
               <Field label="Заголовок"><input value={section.title} onChange={(event) => changeDraft((next) => updateById(next.infoSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>
+              <LevelPicker name={`level-info-${section.id}`} value={section.level} notice={raisedNotice?.parentId === section.id ? raisedNotice.text : undefined} action={rewrite.action(`info:${section.id}`)} onChange={(level) => {
+                rewrite.raised(`info:${section.id}`, "info-section", section.id, section, effectiveLevel(section.level, 1), level);
+                const raised = section.subsections.filter((child) => effectiveLevel(child.level, 1) < level).length;
+                changeDraft((next) => updateById(next.infoSections, section.id, (item) => { item.level = level; raiseChildren(item.subsections, level); }));
+                setRaisedNotice(raised > 0 ? { parentId: section.id, text: levelCopy.raisedSubsections(level, raised) } : null);
+              }} />
               <FormattedTextarea area="info" label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => updateById(next.infoSections, section.id, (item) => { item.body = text; }))} />
               <div className="info-subsection-list">
                 {section.subsections.map((subsection, subIndex) => (
-                  <div className="nested-editor-card" data-sort-index={subIndex} key={subsection.id}>
-                    <div className="nested-editor-head"><OrderDragHandle index={subIndex} label={subsection.title || "подраздел"} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.section; if (target) moveArrayItem(target.subsections, from, to); })} /><strong>ПОДРАЗДЕЛ {String(subIndex + 1).padStart(2, "0")}</strong><div className="nested-editor-actions"><button type="button" onClick={() => { subsection.blocks.forEach((block) => closeFormatterFor(portiaTextKey.infoBlock(block.id))); changeDraft((next) => removeInfoSubsection(next, section.id, subsection.id)); }}>Удалить</button></div></div>
+                  <CollapsibleCard key={subsection.id} id={subsection.id} sortIndex={subIndex} label={`ПОДРАЗДЕЛ ${String(subIndex + 1).padStart(2, "0")}`} title={subsection.title} open={isOpen(subsection.id)} onToggle={() => toggleCard(subsection.id)}
+                    handle={<OrderDragHandle index={subIndex} label={subsection.title || "подраздел"} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.section; if (target) moveArrayItem(target.subsections, from, to); })} />}
+                    actions={<div className="nested-editor-actions"><button type="button" onClick={() => { subsection.blocks.forEach((block) => closeFormatterFor(portiaTextKey.infoBlock(block.id))); changeDraft((next) => removeInfoSubsection(next, section.id, subsection.id)); }}>Удалить</button></div>}>
                     <Field label="Заголовок подраздела"><input maxLength={300} value={subsection.title} onChange={(event) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) target.title = event.target.value; })} /></Field>
+                    <LevelPicker name={`level-sub-${subsection.id}`} min={effectiveLevel(section.level, 1)} value={subsection.level} action={rewrite.action(`info:${subsection.id}`)} onChange={(level) => { rewrite.raised(`info:${subsection.id}`, "info-subsection", subsection.id, subsection, effectiveLevel(subsection.level, effectiveLevel(section.level, 1)), level); changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) target.level = level; }); setRaisedNotice(null); }} />
                     <div className="info-block-list">
                       {subsection.blocks.map((block, blockIndex) => (
-                        <div className="nested-editor-card" data-sort-index={blockIndex} key={block.id}>
-                          <div className="nested-editor-head"><OrderDragHandle index={blockIndex} label={infoBlockHeads[block.type].label} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) moveArrayItem(target.blocks, from, to); })} /><strong>{infoBlockHeads[block.type].title}</strong><div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.infoBlock(block.id)); changeDraft((next) => removeInfoBlock(next, subsection.id, block.id)); }} disabled={block.type === "photo" && uploadState === "uploading"}>Удалить</button></div></div>
+                        <CollapsibleCard key={block.id} id={block.id} sortIndex={blockIndex} label={infoBlockHeads[block.type].title} title={block.type === "text" ? block.text.split("\n").map((line) => line.trim()).find(Boolean) : undefined} open={isOpen(block.id)} onToggle={() => toggleCard(block.id)}
+                          handle={<OrderDragHandle index={blockIndex} label={infoBlockHeads[block.type].label} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) moveArrayItem(target.blocks, from, to); })} />}
+                          actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.infoBlock(block.id)); changeDraft((next) => removeInfoBlock(next, subsection.id, block.id)); }} disabled={block.type === "photo" && uploadState === "uploading"}>Удалить</button></div>}>
                           {block.type === "text" && <FormattedTextarea area="info" label="Текст" tall value={block.text} document={draft.formattedText[portiaTextKey.infoBlock(block.id)]} formatKey={portiaTextKey.infoBlock(block.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.infoBlock(block.id), value, document, (next, text) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "text") item.text = text; }); })} />}
                           {block.type === "video" && <YoutubeField videoId={block.videoId} onChange={(videoId) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "video") item.videoId = videoId; }); })} />}
-                          {block.type === "photo" && <ImageEditorField label="Фото" value={block.url} placement="guide" maxHint="На странице: до 820 px в ширину" uploadState={uploadState} onChange={(value) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") item.url = value; }); })} onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") item.url = url; }); }))} />}
-                          {block.type === "table" && (
-                            <>
-                              {block.rows.map((row, rowIndex) => (
-                                <div className="info-table-row" key={rowIndex}>
-                                  <Field label="Признак"><input maxLength={500} value={row.key} onChange={(event) => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { if (rows[rowIndex]) rows[rowIndex].key = event.target.value; }); })} /></Field>
-                                  <Field label="Значение"><input maxLength={500} value={row.value} onChange={(event) => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { if (rows[rowIndex]) rows[rowIndex].value = event.target.value; }); })} /></Field>
-                                  <button type="button" onClick={() => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { rows.splice(rowIndex, 1); }); })}>Удалить строку</button>
-                                </div>
-                              ))}
-                              <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { editTableRows(next, subsection.id, block.id, (rows) => { rows.push({ key: "", value: "" }); }); })}>+ СТРОКА</button>
-                            </>
-                          )}
-                        </div>
+                          {block.type === "photo" && <ImageEditorField label="Фото" value={block.url} placement="guide" maxHint="На странице: до 820 px в ширину" uploadState={uploadState} uploadMessage={uploadMessage} framing={block.framing} framingBox="natural" onFramingChange={(frame) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") { if (frame) item.framing = frame; else delete item.framing; } }); })} onChange={(value) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") item.url = value; }); })} onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.subsection; if (target) updateById(target.blocks, block.id, (item) => { if (item.type === "photo") item.url = url; }); }))} />}
+                          {block.type === "table" && <TableBlockEditor blockId={block.id} rows={block.rows} onEdit={(edit) => changeDraft((next) => editTableRows(next, subsection.id, block.id, edit))} />}
+                        </CollapsibleCard>
                       ))}
                     </div>
-                    <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "text", text: "" }); })}>+ ТЕКСТ</button>
-                    <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "table", rows: [{ key: "", value: "" }] }); })}>+ ТАБЛИЦА</button>
-                    <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "video", videoId: "" }); })}>+ ВИДЕО</button>
-                    <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id: makeId("block"), type: "photo", url: "" }); })}>+ ФОТО</button>
-                  </div>
+                    <div className="scientist-log-actions">
+                      <div className="limit-buttons">
+                        <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => { const id = makeId("block"); changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id, type: "text", text: "" }); }); setOpen([id], true); }}>+ ТЕКСТ</button>
+                        <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => { const id = makeId("block"); changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id, type: "table", rows: [{ id: makeId("row"), key: "", value: "" }] }); }); setOpen([id], true); }}>+ ТАБЛИЦА</button>
+                        <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => { const id = makeId("block"); changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id, type: "video", videoId: "" }); }); setOpen([id], true); }}>+ ВИДЕО</button>
+                        <button className="secondary-control limit-add" type="button" disabled={subsection.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${subsection.id}`} onClick={() => { const id = makeId("block"); changeDraft((next) => { findInfo(next.infoSections, subsection.id)?.subsection?.blocks.push({ id, type: "photo", url: "" }); }); setOpen([id], true); }}>+ ФОТО</button>
+                      </div>
+                      <LimitNote id={`limit-blocks-${subsection.id}`} count={subsection.blocks.length} max={MAX_BLOCKS} />
+                    </div>
+                  </CollapsibleCard>
                 ))}
               </div>
-              <button className="secondary-control" type="button" onClick={() => changeDraft((next) => { updateById(next.infoSections, section.id, (item) => { item.subsections.push({ id: makeId("info"), title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }); }); })}>+ ПОДРАЗДЕЛ</button>
-            </div>
-          ))}
-          <button className="secondary-control" type="button" onClick={() => changeDraft((next) => next.infoSections.push({ id: makeId("info"), title: "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] }))}>+ ДОБАВИТЬ РАЗДЕЛ</button>
+              <div className="scientist-log-actions">
+                <button className="secondary-control limit-add" type="button" disabled={section.subsections.length >= MAX_SUBSECTIONS} aria-describedby={`limit-subsections-${section.id}`} onClick={() => { const id = makeId("info"); changeDraft((next) => { updateById(next.infoSections, section.id, (item) => { item.subsections.push({ id, title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }); }); }); setOpen([id], true); }}>+ ПОДРАЗДЕЛ</button>
+                <LimitNote id={`limit-subsections-${section.id}`} count={section.subsections.length} max={MAX_SUBSECTIONS} />
+              </div>
+            </CollapsibleCard>
+          ))}</div>
         </div>
+        } />
+      )}
+
+      {tab === "guide" && (
+        <EditorTabBody list={guideTocItems.length >= 5 && <EditorToc items={guideTocItems} onJump={jumpGuide} onAll={(open) => setAllOpen(guideCardIds, open)} />} detail={
+        <div className="editor-form flat-editor-form editor-card-columns">
+          <p className="editor-guidance">Справочник на рабочем столе состоит из разделов, в разделах лежат карточки-плитки. Нажатие на плитку открывает страницу карточки из блоков в любом порядке. Подразделы раздела — его карточки-плитки.</p>
+          {draft.guideSections.length === 0 && <div className="editor-empty">Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».</div>}
+          <div className="editor-section-single">{draft.guideSections.map((section, index) => section.id === activeGuideSection && (
+            <CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={`РАЗДЕЛ ${guideNo(index)}`} title={section.title} open={isOpen(section.id)} onToggle={() => toggleCard(section.id)} cardProps={{ "data-drop-group": section.id }}
+              handle={<OrderDragHandle index={index} label={section.title || "раздел"} itemId={section.id} onMove={(from, to) => { const refocus = keepSectionHandleFocus(section.id); changeDraft((next) => moveArrayItem(next.guideSections, from, to)); refocus(); }} />}
+              actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить раздел «${section.title || "Без названия"}» вместе с карточками`} onClick={() => { closeFormatterFor(...section.cards.flatMap((card) => card.blocks.map((block) => portiaTextKey.guideBlock(block.id)))); changeDraft((next) => removeGuideSection(next, section.id)); }}>Удалить</button></div>}>
+              <Field label="Заголовок раздела"><input maxLength={300} value={section.title} onChange={(event) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.title = event.target.value; }))} /></Field>
+              <LevelPicker name={`level-guide-${section.id}`} value={section.level} notice={raisedNotice?.parentId === section.id ? raisedNotice.text : undefined} action={rewrite.action(`guide:${section.id}`)} onChange={(level) => {
+                rewrite.raised(`guide:${section.id}`, "guide-section", section.id, section, effectiveLevel(section.level, 1), level);
+                const raised = section.cards.filter((child) => effectiveLevel(child.level, 1) < level).length;
+                changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.level = level; raiseChildren(item.cards, level); }));
+                setRaisedNotice(raised > 0 ? { parentId: section.id, text: levelCopy.raisedCards(level, raised) } : null);
+              }} />
+              <ImageEditorField label="Фото раздела" value={section.photo} placement="guide" maxHint="За заголовком раздела: низкая полоса во всю ширину" removeLabel="Убрать фото" uploadState={uploadState} uploadMessage={uploadMessage} framing={section.photoFraming} framingBox="band" onFramingChange={(frame) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { if (frame) item.photoFraming = frame; else delete item.photoFraming; }))}
+                onChange={(value) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.photo = value; }))}
+                onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.photo = url; })))} />
+              <div className="info-subsection-list" data-sort-group="guide-cards" data-group-id={section.id}>
+                {section.cards.length === 0 && <div className="editor-empty compact-empty">В разделе нет карточек. Добавьте первую кнопкой «+ ДОБАВИТЬ КАРТОЧКУ».</div>}
+                {section.cards.map((card, cardIndex) => (
+                  <CollapsibleCard key={card.id} id={card.id} sortIndex={cardIndex} label={`КАРТОЧКА ${guideNo(cardIndex)}`} title={card.title} open={isOpen(card.id)} onToggle={() => toggleCard(card.id)}
+                    handle={<OrderDragHandle index={cardIndex} label={card.title || "карточка"} itemId={card.id} onMoveAcross={(groupId, toIndex) => changeDraft((next) => moveGuideCard(next, card.id, groupId, toIndex))}
+                      onMove={(from, to) => {
+                      // Keyboard only: ArrowUp on the first card or ArrowDown on the last goes to the neighbouring section (D-11); pointer drags never pass an out-of-range target.
+                      const neighbour = to < 0 ? draft.guideSections[index - 1] : to >= section.cards.length ? draft.guideSections[index + 1] : undefined;
+                      if (!neighbour) { changeDraft((next) => { const target = findGuide(next.guideSections, section.id)?.section; if (target) moveArrayItem(target.cards, from, to); }); return; }
+                      changeDraft((next) => moveGuideCard(next, card.id, neighbour.id, to < 0 ? Number.MAX_SAFE_INTEGER : 0));
+                      setOpen([neighbour.id], true);
+                      requestAnimationFrame(() => document.getElementById(`card-${card.id}`)?.querySelector<HTMLElement>(":scope > .nested-editor-head .order-drag-handle")?.focus());
+                    }} />}
+                    actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить карточку «${card.title || "Без названия"}»`} onClick={() => { closeFormatterFor(...card.blocks.map((block) => portiaTextKey.guideBlock(block.id))); changeDraft((next) => removeGuideCard(next, card.id)); }}>Удалить</button></div>}>
+                    <Field label="Заголовок карточки"><input maxLength={300} value={card.title} onChange={(event) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.title = event.target.value; })} /></Field>
+                    <LevelPicker name={`level-card-${card.id}`} min={effectiveLevel(section.level, 1)} value={card.level} action={rewrite.action(`guide:${card.id}`)} onChange={(level) => { rewrite.raised(`guide:${card.id}`, "guide-card", card.id, card, effectiveLevel(card.level, effectiveLevel(section.level, 1)), level); changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.level = level; }); setRaisedNotice(null); }} />
+                    <ImageEditorField label="Обложка" value={card.cover} placement="guide" maxHint="На плитке: 4:3, края обрезаются" removeLabel="Убрать обложку" uploadState={uploadState} uploadMessage={uploadMessage} framing={card.coverFraming} framingBox="tile" onFramingChange={(frame) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) { if (frame) target.coverFraming = frame; else delete target.coverFraming; } })}
+                      onChange={(value) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.cover = value; })}
+                      onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) target.cover = url; }))} />
+                    <div className="info-block-list">
+                      {card.blocks.map((block, blockIndex) => (
+                        <CollapsibleCard key={block.id} id={block.id} sortIndex={blockIndex} label={guideBlockHeads[block.type].title} title={guideBlockTitle(block)} open={isOpen(block.id)} onToggle={() => toggleCard(block.id)}
+                          handle={<OrderDragHandle index={blockIndex} label={guideBlockHeads[block.type].label} onMove={(from, to) => changeDraft((next) => { const target = findGuide(next.guideSections, card.id)?.card; if (target) moveArrayItem(target.blocks, from, to); })} />}
+                          actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.guideBlock(block.id)); changeDraft((next) => removeGuideBlock(next, card.id, block.id)); }} disabled={block.type === "photo" && uploadState === "uploading"}>Удалить</button></div>}>
+                          {block.type === "heading" && <Field label="Заголовок"><input maxLength={300} value={block.text} onChange={(event) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "heading") item.text = event.target.value; })} /></Field>}
+                          {block.type === "text" && <FormattedTextarea area="info" label="Текст" tall value={block.text} document={draft.formattedText[portiaTextKey.guideBlock(block.id)]} formatKey={portiaTextKey.guideBlock(block.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.guideBlock(block.id), value, document, (next, text) => { const target = findGuideBlock(next, card.id, block.id); if (target?.type === "text") target.text = text; })} />}
+                          {block.type === "table" && <TableBlockEditor blockId={block.id} rows={block.rows} onEdit={(edit) => changeDraft((next) => editGuideTableRows(next, card.id, block.id, edit))} />}
+                          {block.type === "photo" && (
+                            <>
+                              <ImageEditorField label="Фото" value={block.url} placement="guide" maxHint="Размер и кадр настраиваются ниже" showPreview={false} uploadState={uploadState} uploadMessage={uploadMessage}
+                                onChange={(value) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "photo") item.url = value; })}
+                                onUpload={(file) => uploadImage(file, (url) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "photo") item.url = url; }))} />
+                              <GuidePhotoLayoutEditor block={block} onChange={(edit) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "photo") edit(item); })} />
+                              <Field label="Подпись"><input maxLength={300} value={block.caption} onChange={(event) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "photo") item.caption = event.target.value; })} /></Field>
+                            </>
+                          )}
+                          {block.type === "video" && <YoutubeField videoId={block.videoId} onChange={(videoId) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "video") item.videoId = videoId; })} />}
+                          {block.type === "callout" && (
+                            <>
+                              <Field label="Подпись врезки"><input maxLength={300} value={block.label} onChange={(event) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "callout") item.label = event.target.value; })} /></Field>
+                              <FormattedTextarea area="info" label="Текст врезки" tall value={block.text} document={draft.formattedText[portiaTextKey.guideBlock(block.id)]} formatKey={portiaTextKey.guideBlock(block.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.guideBlock(block.id), value, document, (next, text) => { const target = findGuideBlock(next, card.id, block.id); if (target?.type === "callout") target.text = text; })} />
+                            </>
+                          )}
+                        </CollapsibleCard>
+                      ))}
+                    </div>
+                    <div className="scientist-log-actions">
+                      <div className="limit-buttons">
+                        <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "heading", text: "" }))}>+ ЗАГОЛОВОК</button>
+                        <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "text", text: "" }))}>+ ТЕКСТ</button>
+                        <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "table", rows: [{ id: makeId("row"), key: "", value: "" }] }))}>+ ТАБЛИЦА</button>
+                        <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "photo", url: "", caption: "" }))}>+ ФОТО</button>
+                        <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "video", videoId: "" }))}>+ ВИДЕО</button>
+                        <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "callout", label: "", text: "" }))}>+ ВРЕЗКА</button>
+                      </div>
+                      <LimitNote id={`limit-blocks-${card.id}`} count={card.blocks.length} max={MAX_BLOCKS} />
+                    </div>
+                  </CollapsibleCard>
+                ))}
+              </div>
+              <div className="scientist-log-actions">
+                <button className="secondary-control limit-add" type="button" disabled={section.cards.length >= MAX_SUBSECTIONS} aria-describedby={`limit-cards-${section.id}`} onClick={() => { const id = makeId("card"); changeDraft((next) => { updateById(next.guideSections, section.id, (item) => { item.cards.push({ id, title: "НОВАЯ КАРТОЧКА", cover: "", blocks: [] }); }); }); setOpen([id], true); }}>+ ДОБАВИТЬ КАРТОЧКУ</button>
+                <LimitNote id={`limit-cards-${section.id}`} count={section.cards.length} max={MAX_SUBSECTIONS} />
+              </div>
+            </CollapsibleCard>
+          ))}</div>
+        </div>
+        } />
       )}
 
       {tab === "broadcasts" && (
-        <div className="editor-form flat-editor-form">
-          <p className="editor-guidance">Публикуйте новости, еженедельные квесты и задачи. Выключенные записи сохраняются как черновики.</p>
-          <nav className="editor-tabs dossier-tabs" aria-label="Разделы сводки">
-            {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([id, label]) => (
-              <button key={id} type="button" className={broadcastEditorTab === id ? "active" : ""} aria-pressed={broadcastEditorTab === id} onClick={() => selectBroadcastTab(id)}>
-                {label} {draft.broadcasts.filter((item) => broadcastTabOf(item.type) === id).length}
-              </button>
-            ))}
-          </nav>
-          <button className="secondary-control" type="button" onClick={() => {
-            const id = makeId("broadcast");
-            revealBroadcast.current = { id, field: "title" };
-            setFormatTarget(null);
-            setFormatterOpen(false);
-            changeDraft((next) => addBroadcast(next, id, broadcastEditorTab === "news" ? "news" : "quest"));
-          }}>{broadcastEditorTab === "news" ? "+ НОВАЯ НОВОСТЬ" : "+ НОВЫЙ КВЕСТ"}</button>
+        <EditorTabBody list={broadcastTocItems.length >= 5 && <EditorToc items={broadcastTocItems} onJump={(id) => { openBroadcast(id); jumpToCard(id); }} onAll={(open) => setAllOpen(broadcastTocItems.map((item) => item.id), open)} />} detail={
+        <div className="editor-form flat-editor-form editor-card-columns">
+          <p className="editor-guidance">Публикуйте новости, еженедельные квесты и задачи. Выключенные записи сохраняются как черновики: снимите «Показывать посетителям», чтобы убрать запись с сайта.</p>
+          <button className="secondary-control" type="button" onClick={addBroadcastEntry}>{broadcastEditorTab === "news" ? "+ НОВАЯ НОВОСТЬ" : "+ НОВЫЙ КВЕСТ"}</button>
           {shownBroadcasts.length === 0 && <div className="editor-empty">{broadcastEditorTab === "news" ? "Новостей пока нет." : "Квестов и задач пока нет."}</div>}
-          {shownBroadcasts.map((broadcast, index) => (
-            <div className="nested-editor-card" key={broadcast.id} data-broadcast-id={broadcast.id}>
-              <div className="nested-editor-head"><strong>{broadcast.type === "news" ? "НОВОСТЬ" : broadcast.type === "quest" ? "КВЕСТ" : "ЗАДАЧА"} {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.broadcast(broadcast.id)); changeDraft((next) => removeBroadcast(next, broadcast.id)); }}>Удалить</button></div>
-              <Field label="Тип"><select data-broadcast-type value={broadcast.type} onChange={(event) => {
-                const type = event.target.value as Broadcast["type"];
-                changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.type = type; }));
-                // A card that changes category would vanish from this list, so the view follows it.
-                if (broadcastTabOf(type) !== broadcastEditorTab) {
-                  revealBroadcast.current = { id: broadcast.id, field: "type" };
-                  selectBroadcastTab(broadcastTabOf(type));
-                }
-              }}><option value="quest">Еженедельный квест</option><option value="task">Задача</option><option value="news">Новость</option></select></Field>
-              <Field label="Заголовок"><input data-broadcast-title value={broadcast.title} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.title = event.target.value; }))} /></Field>
-              <FormattedTextarea area="broadcast" label="Текст" tall value={broadcast.body} document={draft.formattedText[portiaTextKey.broadcast(broadcast.id)]} formatKey={portiaTextKey.broadcast(broadcast.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.broadcast(broadcast.id), value, document, (next, text) => updateById(next.broadcasts, broadcast.id, (item) => { item.body = text; }))} />
-              {broadcast.type === "quest" && (
-                <>
-                  <Field label="Дата начала"><input type="date" value={broadcast.startsAt} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.startsAt = event.target.value; }))} /></Field>
-                  <Field label="Дата окончания"><input type="date" value={broadcast.endsAt} min={broadcast.startsAt || undefined} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.endsAt = event.target.value; }))} /></Field>
-                  <Field label="Условия" wide><textarea value={broadcast.conditions} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.conditions = event.target.value; }))} /></Field>
-                </>
-              )}
-              <label className="publish-toggle"><input type="checkbox" checked={broadcast.published} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.published = event.target.checked; }))} /><span>Показывать посетителям</span></label>
-              {broadcast.type === "news" && <label className="publish-toggle"><input type="checkbox" checked={broadcast.important} onChange={(event) => changeDraft((next) => updateById(next.broadcasts, broadcast.id, (item) => { item.important = event.target.checked; }))} /><span>Важная новость — выделить и закрепить сверху</span></label>}
-            </div>
-          ))}
+          <div className="broadcast-entry-list">{shownBroadcasts.map(renderBroadcastCard)}</div>
         </div>
+        } />
       )}
 
       {tab === "recycle" && (
-        <div className="virus-editor-layout recycle-editor-layout" ref={layoutRef} data-mobile-view={recordOpen && (selectedRecycledVirus || selectedRecycleFile) ? "record" : "list"}>
+        <div className="virus-editor-layout recycle-editor-layout etab-body" ref={layoutRef} data-mobile-view={recordOpen && (selectedRecycledVirus || selectedRecycleFile) ? "record" : "list"}>
           <button type="button" className="secondary-control editor-back-to-list" onClick={() => showRecord(false)}>← К списку</button>
-          <aside className="editor-record-list">
+          <aside className="editor-record-list etab-list">
+            <EditorToc items={recycleTocItems} onJump={(key) => { openRecycleEntry(key); jumpToCard(key); }} />
             {orderedRecycleKeys.map((key, index) => {
               const isVirus = key.startsWith("virus:");
               const id = key.slice(key.indexOf(":") + 1);
@@ -1108,14 +1553,11 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               const file = !isVirus ? draft.recycleFiles.find((item) => item.id === id) : null;
               if (!virus && !file) return null;
               const title = virus?.name || file?.name || "БЕЗ ИМЕНИ";
-              return <div className="editor-record-row" data-sort-index={index} key={key}>
+              const kindText = virus ? "ВИРУС В КОРЗИНЕ" : file!.kind === "virus" ? "ФАЙЛ ВИРУСА" : file!.kind === "image" ? "ИЗОБРАЖЕНИЕ" : "ТЕКСТОВЫЙ ФАЙЛ";
+              return <div className="editor-record-row" id={`card-${key}`} data-sort-index={index} key={key}>
                 <OrderDragHandle index={index} label={title} onMove={(from, to) => changeDraft((next) => { const order = recycleKeys(next); moveArrayItem(order, from, to); next.recycleOrder = order; })} />
-                <button type="button" className={(virus ? virus.id === shownRecycledVirusId : file!.id === shownRecycleFileId) ? "active" : ""} onClick={() => {
-                  if (virus) { setSelectedRecycledVirusId(virus.id); setSelectedRecycleFileId(""); }
-                  else { setSelectedRecycleFileId(file!.id); setSelectedRecycledVirusId(""); }
-                  showRecord(true);
-                }}>
-                  <strong>{title}</strong><small>{virus ? "ВИРУС В КОРЗИНЕ" : file!.kind === "virus" ? "ФАЙЛ ВИРУСА" : file!.kind === "image" ? "ИЗОБРАЖЕНИЕ" : "ТЕКСТОВЫЙ ФАЙЛ"}</small>
+                <button type="button" className={(virus ? virus.id === shownRecycledVirusId : file!.id === shownRecycleFileId) ? "active" : ""} aria-current={(virus ? virus.id === shownRecycledVirusId : file!.id === shownRecycleFileId) ? "true" : undefined} onClick={() => openRecycleEntry(key)}>
+                  <strong title={title}>{title}</strong><small title={kindText}>{kindText}</small>
                 </button>
               </div>;
             })}
@@ -1139,10 +1581,11 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
             <ArchivedVirusEditor
               virus={selectedRecycledVirus}
               dossierChanged={archivedDossierChanged}
-              uploadState={uploadState}
+              uploadState={uploadState} uploadMessage={uploadMessage}
               onUpload={uploadImage}
               onChange={updateRecycledVirus}
-              onRemoveMutation={(index) => changeDraft((next) => updateById(next.recycledViruses ?? [], selectedRecycledVirus.id, (virus) => removeMutation(next, virus, index)))}
+              // Index-keyed formatting shifts on delete, so the target is cleared as in the live list.
+              onRemoveMutation={(index) => { setFormatTarget(null); setFormatterOpen(false); changeDraft((next) => updateById(next.recycledViruses ?? [], selectedRecycledVirus.id, (virus) => removeMutation(next, virus, index))); }}
               // No confirm(): embedded browsers may answer it "no" without showing it, and a restore only
               // changes the unsaved draft and can be undone by moving the virus back.
               onRestore={() => {
@@ -1159,9 +1602,10 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                 showRecord(true);
               }}
               onDelete={() => setDialog("delete")}
+              restoreBlocked={closedSections.includes("viruses")}
             />
           ) : selectedRecycleFile ? (
-            <div className="editor-form">
+            <div className="editor-form etab-detail">
               <p className="editor-guidance">Посетители могут только открыть файл. Создание, изменение и удаление доступны здесь владельцу.</p>
               <EditorGroup title="Свойства файла">
                 <Field label="Имя файла"><input value={selectedRecycleFile.name} onChange={(event) => updateRecycleFile((file) => { file.name = event.target.value; })} /></Field>
@@ -1185,7 +1629,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
 
               {selectedRecycleFile.kind === "image" && (
                 <EditorGroup title="Фотография" stack>
-                  <ImageEditorField label="Фотография или GIF" value={selectedRecycleFile.image} placement="recycle" maxHint="На странице: максимум 800 × 720 px" uploadState={uploadState} onChange={(value) => updateRecycleFile((file) => { file.image = value; })} onUpload={(upload) => uploadImage(upload, (url) => updateRecycleFile((file) => {
+                  <ImageEditorField label="Фотография или GIF" value={selectedRecycleFile.image} placement="recycle" maxHint="На странице: максимум 800 × 720 px" uploadState={uploadState} uploadMessage={uploadMessage} framing={selectedRecycleFile.imageFraming} framingBox="natural" onFramingChange={(frame) => updateRecycleFile((file) => { if (frame) file.imageFraming = frame; else delete file.imageFraming; })} onChange={(value) => updateRecycleFile((file) => { file.image = value; })} onUpload={(upload) => uploadImage(upload, (url) => updateRecycleFile((file) => {
                     file.image = url;
                     if (!file.name || file.name === "НОВЫЙ_ФАЙЛ.txt") file.name = upload.name;
                   }))} />
@@ -1196,34 +1640,33 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
                 <FormattedTextarea area={selectedRecycleFile.kind === "image" ? "caption" : "trash"} label={selectedRecycleFile.kind === "image" ? "Описание фотографии" : "Текст файла"} tall value={selectedRecycleFile.content} document={draft.formattedText[portiaTextKey.recycle(selectedRecycleFile.id)]} formatKey={portiaTextKey.recycle(selectedRecycleFile.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.recycle(selectedRecycleFile.id), value, document, (next, text) => updateById(next.recycleFiles, selectedRecycleFile.id, (file) => { file.content = text; }))} />
               </EditorGroup>
 
-              <button className="danger-control" type="button" onClick={() => {
-                const nextId = draft.recycleFiles.find((file) => file.id !== selectedRecycleFile.id)?.id ?? "";
-                changeDraft((next) => { next.recycleFiles = next.recycleFiles.filter((file) => file.id !== selectedRecycleFile.id); next.recycleOrder = recycleKeys(next); });
-                setSelectedRecycleFileId(nextId);
-                showRecord(false);
-              }}>УДАЛИТЬ ЭТОТ ФАЙЛ</button>
+              <button className="danger-control" type="button" onClick={() => setDialog("delete-file")}>УДАЛИТЬ ЭТОТ ФАЙЛ</button>
             </div>
           ) : <div className="editor-empty">Корзина пуста. Добавьте файл или создайте полную запись вируса.</div>}
         </div>
       )}
 
       {tab === "search" && (
-        <div className="editor-form flat-editor-form compact-editor">
-          <p className="editor-guidance">Каждая строка станет ненавязчивой рекомендацией под строкой глобального поиска.</p>
-          <FormattedTextarea area="search" label="Рекомендации" tall value={draft.searchRecommendations.join("\n")} document={draft.formattedText[portiaTextKey.searchRecommendations]} formatKey={portiaTextKey.searchRecommendations} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.searchRecommendations, value, document, (next, text) => { next.searchRecommendations = text.split("\n"); })} />
-          <div className="recommendation-order-list" aria-label="Порядок рекомендаций">
-            {draft.searchRecommendations.map((recommendation, index) => <div className="recommendation-order-row" data-sort-index={index} key={`${recommendation}:${draft.searchRecommendations.slice(0, index).filter((item) => item === recommendation).length}`}><OrderDragHandle index={index} label={recommendation || "рекомендация"} onMove={(from, to) => changeDraft((next) => {
-              const currentText = next.searchRecommendations.join("\n");
-              const reordered = reorderRichTextLines(currentText, next.formattedText[portiaTextKey.searchRecommendations], from, to);
-              next.searchRecommendations = reordered.text.split("\n");
-              next.formattedText[portiaTextKey.searchRecommendations] = reordered.document;
-            })} /><span><small>{String(index + 1).padStart(2, "0")}</small>{recommendation || "ПУСТАЯ СТРОКА"}</span></div>)}
+        <div className="editor-form flat-editor-form etab-detail">
+          <p className="editor-guidance">Введите варианты рекомендаций по одному на строку. При каждом новом заходе сайт случайно показывает посетителю от 5 до 10 вариантов из этого списка.</p>
+          <FormattedTextarea area="search" label="Варианты рекомендаций — по одному на строку" tall value={draft.searchRecommendations.join("\n")}
+            document={draft.formattedText[portiaTextKey.searchRecommendations]} formatKey={portiaTextKey.searchRecommendations}
+            onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.searchRecommendations, value, document, (next, text) => {
+              next.searchRecommendations = text.split("\n");
+              next.searchRecommendationSections = [];
+            })} />
+          <div className="recommendation-preview" aria-label="Список вариантов рекомендаций">
+            <h3>Все варианты</h3>
+            <SectionColumns items={draft.searchRecommendations.map((text, index) => ({ text, index })).filter(({ text }) => text.trim())} render={({ text, index }) => (
+              <div className="recommendation-preview-item" key={index}><small>{String(index + 1).padStart(2, "0")}</small><span>{text}</span></div>
+            )} />
+            {draft.searchRecommendations.every((text) => !text.trim()) && <p className="editor-empty compact-empty">Пока нет вариантов. Добавьте первую строку в поле выше.</p>}
           </div>
         </div>
       )}
 
       {tab === "assistant" && (
-        <div className="editor-form flat-editor-form assistant-editor">
+        <div className="editor-form flat-editor-form assistant-editor etab-detail">
           <p className="editor-guidance">Каждая строка — отдельный совет. В одной строке можно совместить текст и GIF.</p>
           <div className="assistant-switches">
             <label className="publish-toggle"><input type="checkbox" checked={draft.assistantIdleEnabled} onChange={(event) => changeDraft((next) => { next.assistantIdleEnabled = event.target.checked; })} /><span>Фразы при долгом бездействии</span></label>
@@ -1255,31 +1698,28 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               <Field label="Максимум, секунд"><input type="number" min="1" max="3600" step="1" value={draft.assistantAutoMaxSeconds} onChange={(event) => changeDraft((next) => { next.assistantAutoMaxSeconds = Number(event.target.value); })} /></Field>
             </div>
           )}
-          <p className="editor-guidance">Если за выбранный промежуток дружок пирожок ничего не делал, Вивьян выберет фразу бездействия. Если он нажимал, печатал, прокручивал страницу или двигал указатель — фразу активности</p>
+          <p className="editor-guidance">Если за выбранный промежуток пользователь ничего не делал, Вивьян выберет фразу бездействия. Если он нажимал, печатал, прокручивал страницу или двигал указатель — фразу активности</p>
         </div>
       )}
 
-      {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}
+      <EditorDraftBarContext.Provider value={draftBar}>
+        {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} uploadMessage={uploadMessage} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}
+
+        {tab === "users" && openTabs.includes("users") && <UsersTab visible={active && !minimized} canManageEditors={canManageEditors} onPendingCount={usersPending.report} />}
+
+        {tab === "promo" && openTabs.includes("promo") && <PromotionEditor visible={active && !minimized} canManageEditors={canManageEditors} />}
+
+        {tab === "access" && canManageEditors && <EditorDraftBar />}
+      </EditorDraftBarContext.Provider>
 
       {tab === "access" && canManageEditors && <EditorAccessManager />}
-      {formatterOpen && formatTarget && <FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onClose={() => setFormatterOpen(false)} />}
-      {barVisible && (
-        <div className="editor-savebar" data-dirty={dirty || undefined}>
-          <p role="status" aria-live="polite">
-            {statusText && <span className={`editor-save-status ${saveState}`}>{statusText}</span>}
-            {dirty && <span className="editor-savebar-sections">{`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}</span>}
-          </p>
-          <div className="editor-savebar-actions">
-            <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
-            <button type="button" className="secondary-control" disabled={!dirty || saveState === "saving"} onClick={() => setDialog("discard")}>ОТМЕНИТЬ</button>
-            <button type="button" className="primary-control" disabled={!dirty || saveState === "saving"} onClick={() => void save()}>СОХРАНИТЬ</button>
-          </div>
-        </div>
-      )}
+      {formatterOpen && formatTarget && !minimized && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onBatch={runBatch} onClose={() => setFormatterOpen(false)} />, document.getElementById("desktop") ?? document.body)}
+      {/* Review WR-05: one live region for the save status. On the draft tabs it is the status of the bar; on the other tabs the draft row is not live and this hidden line is. */}
+      {!editorSections.some((section) => section === tab) && <p className="sr-only" role="status" aria-live="polite">{`${statusText}${dirty ? `${status === "dirty" ? ":" : ". Не сохранено:"} ${shownChanged.map((id) => sectionLabels[id]).join(", ")}` : ""}`}</p>}
       {dialog === "discard" && (
         <ConfirmDialog
           title="Отменить несохранённые правки?"
-          text={`Черновик вернётся к последнему сохранённому состоянию. Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}
+          text={`Черновик вернётся к последнему сохранённому состоянию. Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}`}
           actions={[
             {
               label: "ВЕРНУТЬ СОХРАНЁННОЕ",
@@ -1311,10 +1751,21 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       {dialog === "delete" && selectedRecycledVirus && (
         <ConfirmDialog
           title="УДАЛИТЬ НАВСЕГДА"
-          text={`Удалить «${selectedRecycledVirus.name}» навсегда? Это действие нельзя отменить.`}
+          text={`Удалить «${selectedRecycledVirus.name}» вместе с оформлением? Запись будет удалена навсегда, её не восстановить.`}
           actions={[
             { label: "УДАЛИТЬ НАВСЕГДА", tone: "danger", onClick: () => { setDialog(null); deleteSelectedRecycledVirus(); } },
-            { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
+            { label: "Не удалять", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
+          ]}
+          onCancel={() => setDialog(null)}
+        />
+      )}
+      {dialog === "delete-file" && selectedRecycleFile && (
+        <ConfirmDialog
+          title="УДАЛИТЬ НАВСЕГДА"
+          text={`Удалить «${selectedRecycleFile.name}» вместе с оформлением? Запись будет удалена навсегда, её не восстановить.`}
+          actions={[
+            { label: "УДАЛИТЬ НАВСЕГДА", tone: "danger", onClick: () => { setDialog(null); deleteSelectedRecycleFile(); } },
+            { label: "Не удалять", tone: "secondary", autoFocus: true, onClick: () => setDialog(null) },
           ]}
           onCancel={() => setDialog(null)}
         />
@@ -1322,7 +1773,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
       {closeAsked && !employeeDirty && (
         <ConfirmDialog
           title="Закрыть редактор?"
-          text={`Не сохранено: ${changed.map((id) => sectionLabels[id]).join(", ")}`}
+          text={`Не сохранено: ${shownChanged.map((id) => sectionLabels[id]).join(", ")}${saveBlocked ? ` ${bodyMessage || dateMessage}` : ""}`}
           actions={[
             {
               label: "СОХРАНИТЬ",
@@ -1330,7 +1781,7 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
               // The modal stays up during the request, so nothing can be typed that the close would lose.
               // Closes only if the save left nothing unsaved and the close was not cancelled meanwhile;
               // otherwise the window stays and the bar shows the unsaved edits, ОШИБКА or the conflict.
-              disabled: saveState === "saving",
+              disabled: saveState === "saving" || saveBlocked,
               onClick: () => {
                 void save().then((clean) => {
                   if (!latest.current.closeAsked) return;
@@ -1351,12 +1802,30 @@ export function PortiaEditor({ content, revision, saveState, canManageEditors, a
   );
 }
 
+// D-09: not a modal and not a toast; the choice between the two labelled buttons is the explicit decision (owner item 5, variant A: no extra confirmation window).
+function ConflictPanel({ ready, onLoadTheirs, onReplace }: { ready: boolean; onLoadTheirs: () => void; onReplace: () => void }) {
+  const noteId = useId();
+  return (
+    <section className="editor-conflict-panel" role="alert">
+      <h2>Запись изменили до вас</h2>
+      <p>Ваши правки не потеряны. Выберите, какую версию оставить.</p>
+      <div className="editor-conflict-actions">
+        <button type="button" className="primary-control" aria-disabled={!ready || undefined} onClick={() => { if (ready) onLoadTheirs(); }}>Загрузить их версию</button>
+        <button type="button" className="danger-control" aria-describedby={noteId} aria-disabled={!ready || undefined} onClick={() => { if (ready) onReplace(); }}>Заменить своей</button>
+      </div>
+      <p id={noteId}>Их изменения будут перезаписаны.</p>
+      {!ready && <p>Загружаем их версию…</p>}
+    </section>
+  );
+}
+
 const detailsOf = (employee: PortiaEmployee) => ({ title: employee.title, rank: employee.rank, callsign: employee.callsign });
 
-function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onDirtyChange, leaving, onLeave }: {
+function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage, onUpload, onDirtyChange, leaving, onLeave }: {
   onSaved: (employee: PortiaEmployee) => void;
   onRemoved: (id: string) => void;
   uploadState: "idle" | "uploading" | "error";
+  uploadMessage?: string;
   onUpload: (file: File, onUploaded: (url: string) => void) => void;
   onDirtyChange: (dirty: boolean) => void;
   /** The editor wants to leave this tab or close; the unsaved draft has to be answered first. */
@@ -1404,6 +1873,9 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
   useEffect(() => () => { if (savedTimer.current !== null) window.clearTimeout(savedTimer.current); }, []);
   // An employee clicked during a save, acted on once the answer is in (D-05).
   const queuedEmployeeIdRef = useRef<string | null>(null);
+  // WR-05: the running save and add requests; a second Ctrl+S or form submit during one joins it instead of sending again.
+  const saveInflight = useRef<Promise<boolean> | null>(null);
+  const addInflight = useRef(false);
 
   useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
   // Unmounting (tab left after the answer) must not leave the editor believing a draft is still dirty.
@@ -1422,17 +1894,32 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
 
   useEffect(() => {
     let active = true;
-    // The editor-only path is never CDN-cached; the public one can serve an old copy even to a no-store request (D-10).
-    void fetch("/api/employees/editor", { credentials: "same-origin", cache: "no-store" })
-      .then(async (response) => {
+    const fail = (text: string) => {
+      if (!active) return;
+      setLoadError(text);
+      setLoadState("error");
+    };
+    void (async () => {
+      try {
+        // The editor-only path is never CDN-cached; the public one can serve an old copy even to a no-store request (D-10).
+        let response: Response;
+        try {
+          response = await fetch("/api/employees/editor", { credentials: "same-origin", cache: "no-store" });
+        } catch {
+          fail(employeeRequestFailure({ transport: true, action: "load" }));
+          return;
+        }
         const payload = await response.json().catch(() => ({})) as { employees?: PortiaEmployee[]; profilesRead?: boolean; error?: string };
-        if (!response.ok) throw new Error(response.status === 403 ? "Сессия редактора истекла. Войдите в редактор снова." : payload.error || `Сервер не отдал список сотрудников (${response.status}).`);
-        return payload;
-      })
-      .then((payload) => {
+        if (!response.ok) {
+          fail(employeeRequestFailure({ transport: false, status: response.status, payloadError: payload.error, action: "load" }));
+          return;
+        }
         if (!active) return;
         // Blank profiles must not become drafts: saving one would erase the stored biography and photo (D-09).
-        if (!acceptsEditorList(payload)) throw new Error("Профили сотрудников не загрузились, сохранять сейчас нельзя. Повторите через минуту.");
+        if (!acceptsEditorList(payload)) {
+          fail("Профили сотрудников не загрузились, сохранять сейчас нельзя. Повторите через минуту.");
+          return;
+        }
         const next = payload.employees;
         const first = next[0];
         setEmployees(next);
@@ -1440,12 +1927,10 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
         setDraft(first ? profileOf(first) : null);
         setDetails(first ? detailsOf(first) : { title: "", rank: "", callsign: "" });
         setLoadState("ready");
-      })
-      .catch((error) => {
-        if (!active) return;
-        setLoadError(error instanceof Error ? error.message : "Не удалось загрузить сотрудников.");
-        setLoadState("error");
-      });
+      } catch {
+        fail("Не удалось загрузить сотрудников.");
+      }
+    })();
     return () => { active = false; };
   }, [loadAttempt]);
   // In place, without a page reload: other tabs' unsaved edits live in the parent and stay.
@@ -1462,8 +1947,22 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
     else setPendingEmployeeId(queued);
   };
 
+  // A second Ctrl+S or click while the PATCH runs gets the same answer and sends nothing (WR-05).
+  const save = (): Promise<boolean> => {
+    if (saveInflight.current) return saveInflight.current;
+    const run = (async () => {
+      try {
+        return await sendSave();
+      } finally {
+        saveInflight.current = null;
+      }
+    })();
+    saveInflight.current = run;
+    return run;
+  };
+
   // Resolves true only when the profile is saved; a failure leaves the error text on the current employee.
-  const save = async (): Promise<boolean> => {
+  const sendSave = async (): Promise<boolean> => {
     if (!selected || !draft) return false;
     // Only what the editor changed goes out; an empty body would still create a bare row for a never-saved sheet employee (D-11).
     const changes = changedFields(profileOf(selected), draft);
@@ -1479,21 +1978,29 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
     setRatingsPending(false);
     setDetailsPending(false);
     setErrorMessage("");
+    const failed = (text: string) => {
+      setErrorMessage(text);
+      setState("error");
+      resolveQueued(false);
+      return false;
+    };
+    let response: Response;
     try {
-      const response = await fetch("/api/employees", {
+      response = await fetch("/api/employees", {
         method: "PATCH",
         credentials: "same-origin",
         cache: "no-store",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: selected.id, nickname: selected.nickname, changes, ...(Object.keys(detailChanges).length ? { details: detailChanges } : {}) }),
       });
-      const payload = await response.json() as { employee?: Partial<PortiaEmployee> & { id: string }; ratingsPending?: boolean; detailsPending?: boolean; error?: string };
-      if (!response.ok || !payload.employee) {
-        const message = response.status === 403
-          ? "Сессия редактора истекла. Войдите в редактор снова."
-          : payload.error || `Сервер отклонил сохранение (${response.status}).`;
-        throw new Error(message);
-      }
+    } catch {
+      return failed(employeeRequestFailure({ transport: true, action: "save" }));
+    }
+    const payload = await response.json().catch(() => ({})) as { employee?: Partial<PortiaEmployee> & { id: string }; ratingsPending?: boolean; detailsPending?: boolean; error?: string };
+    if (!response.ok || !payload.employee) {
+      return failed(employeeRequestFailure({ transport: false, status: response.status, payloadError: payload.error, action: "save" }));
+    }
+    try {
       // The answer is the stored profile only; the card keeps its avatar, nickname, source and sheet title (D-07).
       const merged: PortiaEmployee = { ...selected, ...payload.employee };
       setEmployees((current) => current.map((employee) => employee.id === merged.id ? merged : employee));
@@ -1508,37 +2015,41 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
         setDetailsPending(Boolean(payload.detailsPending));
       }
       setState("saved");
-      savedTimer.current = window.setTimeout(() => setState("idle"), 1800);
+      savedTimer.current = window.setTimeout(() => setState("idle"), 4000);
       // A draft typed during the save stays dirty and unsaved; no automatic second save (D-04). No await from here to the return (A4).
       const typedMeanwhile = stillOpen && (Object.keys(changedFields(sentProfile, draftRef.current ?? sentProfile)).length > 0 || Object.keys(changedDetails(sentDetails, detailsRef.current)).length > 0);
       resolveQueued(!typedMeanwhile);
       return !typedMeanwhile;
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Не удалось сохранить профиль.");
-      setState("error");
-      resolveQueued(false);
-      return false;
+    } catch {
+      return failed("Не удалось сохранить профиль.");
     }
   };
 
   // A person outside the sheet, by Roblox nickname; an open selection and its draft stay as they are.
   const addEmployee = async () => {
+    // A second submit during the POST sends nothing (WR-05).
+    if (addInflight.current) return;
+    addInflight.current = true;
     setAddState("adding");
     setAddError("");
     try {
-      const response = await fetch("/api/employees", {
-        method: "POST",
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(addDraft),
-      });
-      const payload = await response.json() as { employee?: PortiaEmployee; error?: string };
+      let response: Response;
+      try {
+        response = await fetch("/api/employees", {
+          method: "POST",
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(addDraft),
+        });
+      } catch {
+        setAddError(employeeRequestFailure({ transport: true, action: "add" }));
+        return;
+      }
+      const payload = await response.json().catch(() => ({})) as { employee?: PortiaEmployee; error?: string };
       if (!response.ok || !payload.employee) {
-        const message = response.status === 403
-          ? "Сессия редактора истекла. Войдите в редактор снова."
-          : payload.error || `Сервер отклонил добавление (${response.status}).`;
-        throw new Error(message);
+        setAddError(employeeRequestFailure({ transport: false, status: response.status, payloadError: payload.error, action: "add" }));
+        return;
       }
       setEmployees((current) => [...current, payload.employee!]);
       onSaved(payload.employee);
@@ -1546,10 +2057,12 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
       setAddOpen(false);
       // The list was empty (or the last person was removed): nothing is open yet, so open the new person.
       if (!draft) openEmployee(payload.employee);
-    } catch (error) {
-      setAddError(error instanceof Error ? error.message : "Не удалось добавить сотрудника.");
+    } catch {
+      setAddError("Не удалось добавить сотрудника.");
+    } finally {
+      addInflight.current = false;
+      setAddState("idle");
     }
-    setAddState("idle");
   };
 
   if (loadState === "loading") return <div className="editor-empty">Загрузка сотрудников…</div>;
@@ -1599,21 +2112,33 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
     if (!selected) return;
     setDeleting(true);
     setErrorMessage("");
+    const failed = (text: string) => {
+      setErrorMessage(text);
+      setState("error");
+      setDeleteAsked(false);
+      setDeleting(false);
+    };
+    let response: Response;
     try {
-      const response = await fetch("/api/employees", {
+      response = await fetch("/api/employees", {
         method: "DELETE",
         credentials: "same-origin",
         cache: "no-store",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ id: selected.id }),
       });
-      const payload = await response.json() as { id?: string; error?: string; code?: string };
-      if (!response.ok) {
-        const message = response.status === 403 && payload.code !== "sheet-employee"
-          ? "Сессия редактора истекла. Войдите в редактор снова."
-          : payload.error || `Сервер отклонил удаление (${response.status}).`;
-        throw new Error(message);
-      }
+    } catch {
+      failed(employeeRequestFailure({ transport: true, action: "remove" }));
+      return;
+    }
+    const payload = await response.json().catch(() => ({})) as { id?: string; error?: string; code?: string };
+    if (!response.ok) {
+      // A sheet employee is refused with 403 and its own text; that is not an expired session.
+      const sheetRefusal = response.status === 403 && payload.code === "sheet-employee";
+      failed(employeeRequestFailure({ transport: false, status: sheetRefusal ? undefined : response.status, payloadError: payload.error, action: "remove" }));
+      return;
+    }
+    try {
       const index = employees.findIndex((employee) => employee.id === selected.id);
       const next = employees[index + 1] ?? employees[index - 1];
       setEmployees(employees.filter((employee) => employee.id !== selected.id));
@@ -1621,10 +2146,9 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
       setDeleteAsked(false);
       if (next) openEmployee(next);
       else { setDraft(null); setRecordOpen(false); }
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : "Не удалось удалить сотрудника.");
-      setState("error");
-      setDeleteAsked(false);
+    } catch {
+      failed("Не удалось удалить сотрудника.");
+      return;
     }
     setDeleting(false);
   };
@@ -1632,10 +2156,17 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
   // «СОХРАНЕНО» never shows over a draft that is dirty again.
   const saveStatus = state === "saved" && dirty ? "idle" : state;
   const preview = selected && draft ? draft.photoUrl || selected.robloxAvatarUrl : "";
-  return <div className="virus-editor-layout employee-editor-layout" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>
+  return <>
+    <EditorActionBar
+      label={tabRegistry.find((entry) => entry.id === "employees")?.label ?? ""}
+      statusText={selected && draft ? (saveStatus === "saving" ? saveStatusText("saving") : saveStatus === "saved" ? saveStatusText("saved") : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ") : ""}
+      tone={saveStatus}
+      actions={selected && draft ? <>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></> : undefined}
+    />
+    <div className="virus-editor-layout employee-editor-layout etab-body" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>
     <button type="button" className="secondary-control editor-back-to-list" onClick={() => { setRecordOpen(false); revealOnPhone(layoutRef); }}>← К списку</button>
-    <aside className="editor-record-list">
-      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected?.id ? "active" : ""} onClick={() => chooseEmployee(employee)}><strong>{employee.nickname}</strong>{employee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
+    <aside className="editor-record-list etab-list">
+      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected?.id ? "active" : ""} aria-current={employee.id === selected?.id ? "true" : undefined} onClick={() => chooseEmployee(employee)}><strong>{employee.nickname}</strong>{employee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
       <button className="add-record" type="button" aria-expanded={addOpen} onClick={() => setAddOpen((open) => !open)}>+ ВНЕ ТАБЛИЦЫ</button>
       {addOpen && <form className="employee-add-form" onSubmit={(event) => { event.preventDefault(); void addEmployee(); }}>
         <Field label="Ник Roblox"><input value={addDraft.nickname} required maxLength={20} autoCapitalize="none" spellCheck={false} onChange={(event) => setAddDraft((current) => ({ ...current, nickname: event.target.value }))} /></Field>
@@ -1646,7 +2177,7 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
         <button className="primary-control" type="submit" disabled={addState === "adding" || !addDraft.nickname.trim()}>{addState === "adding" ? "ДОБАВЛЕНИЕ…" : "ДОБАВИТЬ"}</button>
       </form>}
     </aside>
-    <div className="editor-form employee-profile-editor">
+    <div className="editor-form employee-profile-editor etab-detail">
       {selected && draft ? <>
       <p className="editor-guidance">Поля из Google Таблицы обновляются автоматически. Здесь редакторы могут менять фотографию, оценки и биографию. Людей вне таблицы добавляют по нику Roblox; их звание, ранг и позывной можно менять здесь.</p>
       <div className="employee-editor-summary">
@@ -1660,13 +2191,12 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
           <Field label="Позывной"><input value={details.callsign} maxLength={64} onChange={(event) => setDetails((current) => ({ ...current, callsign: event.target.value }))} /></Field>
         </>}
         {employeeRatings.map(({ key, label }) => <Field key={key} label={`${label} — от 1 до 10`}><select value={draft[key] ?? ""} onChange={(event) => setDraft((current) => current && ({ ...current, [key]: event.target.value === "" ? null : Number(event.target.value) }))}><option value="">—</option>{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>)}
-        <ImageEditorField label="Фото сотрудника" value={draft.photoUrl} placement="employee" maxHint="Пусто — используется аватар Roblox" uploadState={uploadState} onChange={(value) => setDraft((current) => current && ({ ...current, photoUrl: value }))} onUpload={(file) => { const startedFor = selected.id; onUpload(file, (url) => { if (selectedIdRef.current === startedFor) setDraft((current) => current && ({ ...current, photoUrl: url })); }); }} />
+        <ImageEditorField label="Фото сотрудника" value={draft.photoUrl} placement="employee" maxHint="Пусто — используется аватар Roblox" uploadState={uploadState} uploadMessage={uploadMessage} onChange={(value) => setDraft((current) => current && ({ ...current, photoUrl: value }))} onUpload={(file) => { const startedFor = selected.id; onUpload(file, (url) => { if (selectedIdRef.current === startedFor) setDraft((current) => current && ({ ...current, photoUrl: url })); }); }} />
         <Field label="Биография" wide><textarea className="tall-textarea" value={draft.biography} onChange={(event) => setDraft((current) => current && ({ ...current, biography: event.target.value }))} /></Field>
       </EditorGroup>
       {ratingsPending && <p className="editor-guidance" role="status">Сохранено без новых оценок ({employeeRatings.map((rating) => rating.label).join(", ")}): база данных ещё не обновлена.</p>}
       {detailsPending && <p className="editor-guidance" role="status">Профиль сохранён, но звание, ранг и позывной — нет: база данных ещё не обновлена.</p>}
       {selected.source === "manual" && <button type="button" className="danger-control employee-remove" disabled={state === "saving" || deleting} onClick={() => setDeleteAsked(true)}>УДАЛИТЬ СОТРУДНИКА</button>}
-      <div className="employee-editor-save"><span className={`editor-save-status ${saveStatus}`}>{saveStatus === "saving" ? "СОХРАНЕНИЕ…" : saveStatus === "saved" ? "СОХРАНЕНО" : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ"}</span>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></div>
       </> : <div className="editor-empty">Сотрудников пока нет. Добавьте человека вне таблицы кнопкой «+ ВНЕ ТАБЛИЦЫ».</div>}
     </div>
     {deleteAsked && selected?.source === "manual" && (
@@ -1703,472 +2233,43 @@ function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, onUpload, onD
         onCancel={cancelLeave}
       />
     )}
-  </div>;
+  </div>
+  </>;
 }
 
-function ArchivedVirusEditor({ virus, uploadState, onUpload, onChange, onRemoveMutation, onRestore, onDelete, dossierChanged }: {
-  virus: Virus;
-  uploadState: "idle" | "uploading" | "error";
-  onUpload: (file: File, onUploaded: (url: string) => void) => void;
-  onChange: (updater: (virus: Virus) => void) => void;
-  onRemoveMutation: (index: number) => void;
-  onRestore: () => void;
-  onDelete: () => void;
-  dossierChanged: DossierTab[];
-}) {
-  const [dossierTab, setDossierTab] = useState<DossierTab>("main");
-  return <div className="editor-form virus-editor-form">
-    <p className="editor-guidance">Это полная запись вируса в Корзине. Она не показывается в основной базе, но остаётся доступной посетителям в Корзине и может быть восстановлена.</p>
-    <DossierTabs active={dossierTab} changed={dossierChanged} onSelect={setDossierTab} />
-    {dossierTab === "main" && <EditorGroup title="Основные данные">
-      <Field label="Название"><input value={virus.name} onChange={(event) => onChange((item) => { item.name = event.target.value; })} /></Field>
-      <Field label="Код"><input value={virus.code} onChange={(event) => onChange((item) => { item.code = event.target.value; })} /></Field>
-      <Field label="Статус"><input value={virus.status} onChange={(event) => onChange((item) => { item.status = event.target.value; })} /></Field>
-      <ImageEditorField label="Фото или GIF после заражения" value={virus.infectedImage} placement="dossier" maxHint="На странице: максимум 540 × 620 px" uploadState={uploadState} onChange={(value) => onChange((item) => { item.infectedImage = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { item.infectedImage = url; }))} />
-    </EditorGroup>}
-    {dossierTab === "text" && <EditorGroup title="Описание" stack>
-      <Field label="Внешние характеристики" wide><textarea value={virus.external} onChange={(event) => onChange((item) => { item.external = event.target.value; })} /></Field>
-      <Field label="Физиологические характеристики" wide><textarea value={virus.physiology} onChange={(event) => onChange((item) => { item.physiology = event.target.value; })} /></Field>
-    </EditorGroup>}
-    {dossierTab === "text" && <EditorGroup title="Характеристики PPU" stack>
-      {(["health", "speed", "abilities"] as const).map((key) => <Field key={key} label={{ health: "Здоровье", speed: "Скорость", abilities: "Способности" }[key]} wide><textarea value={virus.ppu[key]} onChange={(event) => onChange((item) => { item.ppu[key] = event.target.value; })} /></Field>)}
-    </EditorGroup>}
-    {dossierTab === "main" && <EditorGroup title="Классификация">
-      {([
-        ["danger", "Общий уровень опасности"], ["spread", "Распространение"], ["transmission", "Способ распространения"],
-        ["escapeRisk", "Угроза и риск побега"], ["mind", "Разум"], ["appearance", "Вид / внешность"], ["behavior", "Поведение"],
-      ] as [keyof Virus["classification"], string][]).map(([key, label]) => <ClassificationField key={key} label={label} classificationKey={key} value={virus.classification[key]} onChange={(value) => onChange((item) => { item.classification[key] = value; })} />)}
-    </EditorGroup>}
-    {dossierTab === "mutations" && <EditorGroup title="Мутации" stack>
-      {virus.mutations.map((mutation, index) => <div className="nested-editor-card" key={`${virus.id}-mutation-${index}`}>
-        <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={uploadState === "uploading"} onClick={() => onRemoveMutation(index)}>Удалить</button></div>
-        <Field label="Название"><input value={mutation.name} onChange={(event) => onChange((item) => { item.mutations[index].name = event.target.value; })} /></Field>
-        <Field label="Описание" wide><textarea value={mutation.description} onChange={(event) => onChange((item) => { item.mutations[index].description = event.target.value; })} /></Field>
-        <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} onChange={(value) => onChange((item) => { item.mutations[index].image = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { const target = item.mutations[index]; if (target) target.image = url; }))} />
-      </div>)}
-      <button className="secondary-control" type="button" onClick={() => onChange((item) => { item.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }); })}>+ ДОБАВИТЬ МУТАЦИЮ</button>
-    </EditorGroup>}
-    {dossierTab === "logs" && <EditorGroup title="Записи учёных" stack>
-      {virus.scientistLogs.map((log, index) => <div className="nested-editor-card" key={log.id}>
-        <div className="nested-editor-head"><strong>ЗАПИСЬ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => onChange((item) => { item.scientistLogs.splice(index, 1); })}>Удалить</button></div>
-        <Field label="Название"><input value={log.title} onChange={(event) => onChange((item) => { item.scientistLogs[index].title = event.target.value; })} /></Field>
-        <Field label="Псевдоним учёного"><input value={log.scientist} onChange={(event) => onChange((item) => { item.scientistLogs[index].scientist = event.target.value; })} /></Field>
-        <Field label="Уровень доступа"><select value={log.lockedLevel} onChange={(event) => onChange((item) => { item.scientistLogs[index].lockedLevel = Number(event.target.value); })}><option value={2}>II — доступна</option><option value={3}>III — заблокирована</option><option value={4}>IV — заблокирована</option></select></Field>
-        <Field label="Текст записи" wide><textarea value={scientistLogPlainText(log)} onChange={(event) => onChange((item) => { item.scientistLogs[index].content = event.target.value.split(/\n\s*\n/); item.scientistLogs[index].richContent = { runs: [{ text: event.target.value }] }; })} /></Field>
-      </div>)}
-      <button className="secondary-control" type="button" disabled={virus.scientistLogs.length >= 5} onClick={() => onChange((item) => { item.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(item.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 3, content: [""] }); })}>+ ДОБАВИТЬ ЗАПИСЬ</button>
-    </EditorGroup>}
-    <div className="archive-virus-actions"><button className="secondary-control" type="button" onClick={onRestore}>ВОССТАНОВИТЬ В БАЗУ</button><button className="danger-control" type="button" onClick={onDelete}>УДАЛИТЬ НАВСЕГДА</button></div>
-  </div>;
-}
-
-function DossierTabs({ active, changed, onSelect }: { active: DossierTab; changed: DossierTab[]; onSelect: (id: DossierTab) => void }) {
-  return <nav className="editor-tabs dossier-tabs" aria-label="Разделы досье">
-    {dossierTabs.map(([id, label]) => {
-      const unsaved = changed.includes(id);
-      return <button key={id} type="button" className={active === id ? "active" : ""} aria-label={unsaved ? `${label}, есть несохранённые правки` : undefined} onClick={() => onSelect(id)}>
-        {label}{unsaved && <i className="tab-dot" aria-hidden="true" />}
-      </button>;
-    })}
-  </nav>;
-}
-
-function ClassificationField({ label, classificationKey, value, onChange }: {
-  label: string;
-  classificationKey: keyof Virus["classification"];
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  const options = classificationOptions[classificationKey] as readonly { value: string; level?: number }[];
-  const selected = options.find((option) => option.value === value);
-  const level = selected?.level;
-
-  return <label className="editor-field classification-editor-field">
-    <span>{label}</span>
-    <div className={`classification-select-wrap${level ? ` level-${level}` : ""}`}>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {options.map((option) => {
-          const optionLevel = option.level;
-          return <option key={option.value} value={option.value}>{optionLevel ? `${optionLevel} уровень — ` : ""}{option.value}</option>;
-        })}
-      </select>
-      {level ? <strong>УРОВЕНЬ {level}</strong> : <strong className="neutral">МЕТОД</strong>}
-    </div>
-  </label>;
-}
-
-function FormattedTextarea({ label, area, value, document, formatKey, onChange, onActivate, tall = false }: {
-  label: string;
-  area: DisplayArea;
-  value: string;
-  document?: RichTextDocument;
-  formatKey: string;
-  onChange: (value: string, document: RichTextDocument) => void;
-  onActivate: (target: FormatTarget) => void;
-  tall?: boolean;
-}) {
-  const activeFormat = useContext(ActiveFormatContext);
-  const editorRef = useRef<HTMLDivElement>(null);
-  // Selection policy of this field: own input opens on pointer / key down and closes after release or blur (CR-01, D-05).
-  const selectionRef = useRef<FieldSelectionState>({ stored: null, ownUntil: 0 });
-  const localDocumentSignatureRef = useRef<string | null>(null);
-  const sourceDocument = document?.runs?.length ? document : { runs: [{ text: value }] };
-  const currentDocument = sourceDocument.runs.map((run) => run.text).join("") === value
-    ? sourceDocument
-    : replaceRichText(sourceDocument, value);
-  const documentSignature = JSON.stringify(currentDocument);
-
-  const track = (event: FieldSelectionEvent) => { selectionRef.current = fieldSelectionStep(selectionRef.current, event); };
-
-  const activate = (editor: HTMLDivElement, nextValue = value, nextDocument = currentDocument) => {
-    track({ type: "read", at: Date.now(), incoming: selectionOffsets(editor), guarded: activeFormat.phonePanelOpen });
-    onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection: selectionRef.current.stored, area, onCommit: onChange });
-  };
-
-  const editorSelection = (editor: HTMLElement, text: string) =>
-    selectionOffsets(editor) ?? selectionRef.current.stored ?? { start: text.length, end: text.length };
-
-  const commitEditorValue = (
-    editor: HTMLDivElement,
-    nextValue: string,
-    selection: { start: number; end: number },
-  ) => {
-    const nextDocument = replaceRichText(currentDocument, nextValue);
-    selectionRef.current = { ...selectionRef.current, stored: selection };
-    renderRichTextEditor(editor, nextDocument);
-    localDocumentSignatureRef.current = JSON.stringify(nextDocument);
-    restoreSelection(editor, selection);
-    onChange(nextValue, nextDocument);
-    onActivate({ key: formatKey, title: label, value: nextValue, document: nextDocument, selection, area, onCommit: onChange });
-  };
-
-  useLayoutEffect(() => {
-    const editor = editorRef.current;
-    if (!editor || localDocumentSignatureRef.current === documentSignature) return;
-    renderRichTextEditor(editor, currentDocument);
-    localDocumentSignatureRef.current = documentSignature;
-    if (selectionRef.current.stored) restoreSelection(editor, selectionRef.current.stored);
-  }, [currentDocument, documentSignature]);
-
-  return <div className="editor-field wide formatted-text-field">
-    <div className="formatted-text-field-head"><span>{label}</span><small></small></div>
-    <div
-      ref={editorRef}
-      data-area={area}
-      data-format-key={formatKey}
-      className={`formatted-rich-input${tall ? " tall" : ""} preview-${activeFormat.surface ?? nativeSurface[area]}${activeFormat.key === formatKey ? " is-editor-active" : ""}`}
-      contentEditable
-      inputMode={activeFormat.phonePanelOpen ? "none" : undefined}
-      suppressContentEditableWarning
-      role="textbox"
-      aria-multiline="true"
-      spellCheck
-      onPointerDown={() => track({ type: "down" })}
-      onPointerUp={() => track({ type: "up", at: Date.now() })}
-      onPointerCancel={() => track({ type: "up", at: Date.now() })}
-      onBlur={() => track({ type: "blur" })}
-      onFocus={(event) => activate(event.currentTarget)}
-      onSelect={(event) => activate(event.currentTarget)}
-      onMouseUp={(event) => activate(event.currentTarget)}
-      onKeyDown={(event) => {
-        track({ type: "down" });
-        if (event.key !== "Enter") return;
-        event.preventDefault();
-        const editor = event.currentTarget;
-        const text = currentDocument.runs.map((run) => run.text).join("");
-        const selection = editorSelection(editor, text);
-        const nextValue = `${text.slice(0, selection.start)}\n${text.slice(selection.end)}`;
-        const caret = { start: selection.start + 1, end: selection.start + 1 };
-        commitEditorValue(editor, nextValue, caret);
-      }}
-      onKeyUp={(event) => {
-        track({ type: "up", at: Date.now() });
-        if (event.key !== "Enter") activate(event.currentTarget);
-      }}
-      onPaste={(event) => {
-        event.preventDefault();
-        const editor = event.currentTarget;
-        const text = currentDocument.runs.map((run) => run.text).join("");
-        const selection = editorSelection(editor, text);
-        const pastedText = event.clipboardData.getData("text/plain").replace(/\r\n?/g, "\n").replace(/\u00a0/g, " ");
-        const nextValue = `${text.slice(0, selection.start)}${pastedText}${text.slice(selection.end)}`;
-        const caretPosition = selection.start + pastedText.length;
-        commitEditorValue(editor, nextValue, { start: caretPosition, end: caretPosition });
-      }}
-      onInput={(event) => {
-        const nextValue = editorPlainText(event.currentTarget);
-        const selection = editorSelection(event.currentTarget, nextValue);
-        commitEditorValue(event.currentTarget, nextValue, selection);
-      }}
-    />
-    <small className="formatted-text-field-hint">Текст и GIF можно использовать вместе, не добавляй всякой фигни ок?</small>
-  </div>;
-}
-
-function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurface, onUpdate, onClose }: {
-  target: FormatTarget;
-  previewSurface: EditorPreviewSurface | null;
-  onPreviewSurface: (surface: EditorPreviewSurface) => void;
-  onUpdate: (target: FormatTarget) => void;
-  onClose: () => void;
-}) {
-  // Seeds the custom colour picker for text without a colour: baseInk at the default accent.
-  const surface = previewSurface ?? nativeSurface[target.area];
-  const defaultTextColor = surface === "dark" ? "#aebfba" : "#17211f";
-  const documentRef = useRef(target.document);
-  const panelRef = useRef<HTMLElement>(null);
-  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; right: number; bottom: number; last: PanelOffset | null } | null>(null);
-  // Every control acts on one range: the selection, else the word under the caret, else nothing (D-04).
-  const text = target.document.runs.map((run) => run.text).join("");
-  const range = resolveRange(text, target.selection);
-  // The readout comes from the committed document, so a click shows exactly what it applied. A repeat click on a manual control
-  // re-applies the same value; the row styles toggle (D-02). Unstyled text marks no size or weight, because every area renders its own.
-  const style = richTextStyleAt(target.document, range?.from ?? target.selection?.start ?? 0);
-  const marked = (preset: RichTextStyle) => range !== null && rangeHasStyle(target.document, range.from, range.to, preset);
-  const plainMarked = range !== null && rangeIsPlain(target.document, range.from, range.to);
-  const color = style.color ?? defaultTextColor;
-  const { fontSize, fontWeight } = style;
-  const backgroundColor = style.backgroundColor ?? "#f0d66a";
-  const backgroundOpacity = style.backgroundOpacity ?? 0;
-  const [colorPicker, setColorPicker] = useState<"text" | "background" | null>(null);
-  // Phone only: one control group at a time under the style row (D-12); on a PC every group shows.
-  const [tab, setTab] = useState<"color" | "size" | "background">("color");
-  useEffect(() => { documentRef.current = target.document; }, [target.document]);
-
-  const formatKey = target.key;
-  const paintFrom = range?.from;
-  const paintTo = range?.to;
-  const formatDocument = target.document;
-  // The text the next style changes is painted with the Custom Highlight API at every width: on a phone it takes the keyboard's place
-  // (D-05, D-06; ✎ takes focus from the field once and rich fields carry inputMode none, owner UAT 12), on a PC it keeps the target
-  // visible when focus has gone to a panel input or the ✎ button. Only keeping it above the panel is phone-only.
-  // formatDocument is a dependency because a style change re-renders the field's text nodes, which orphans the painted range.
-  useEffect(() => {
-    const field = findFormatField(formatKey);
-    const panel = panelRef.current;
-    if (!field || !panel) return;
-    // Paint what the next style will change: the selection, else the word under the caret (D-04, D-05).
-    const painted = paintFrom !== undefined && paintTo !== undefined ? rangeFromOffsets(field, { start: paintFrom, end: paintTo }) : null;
-    const paints = painted !== null && typeof Highlight !== "undefined" && "highlights" in CSS;
-    if (paints) CSS.highlights.set("portia-format", new Highlight(painted));
-    const keepVisible = () => {
-      const rect = painted ? painted.getBoundingClientRect() : field.getBoundingClientRect();
-      const overlap = rect.bottom - (panel.getBoundingClientRect().top - 16);
-      // 64 keeps the text under the 48px system bar.
-      if (overlap > 0) window.scrollBy(0, Math.max(0, Math.min(overlap, rect.top - 64)));
-    };
-    const phone = window.matchMedia("(max-width: 900px)").matches;
-    const frame = phone ? window.requestAnimationFrame(keepVisible) : 0;
-    if (phone) window.visualViewport?.addEventListener("resize", keepVisible);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.visualViewport?.removeEventListener("resize", keepVisible);
-      if (paints) CSS.highlights.delete("portia-format");
-    };
-  }, [formatKey, paintFrom, paintTo, formatDocument]);
-
-  // On a phone, closing returns the caret to the field in the same tap so the keyboard can come back (iOS may still need one more tap);
-  // flushSync commits the close first so the field has dropped inputMode none before it gets focus.
-  const finish = () => {
-    flushSync(onClose);
-    if (!window.matchMedia("(max-width: 900px)").matches) return;
-    const field = findFormatField(formatKey);
-    if (!field) return;
-    field.focus({ preventScroll: true });
-    if (target.selection) restoreSelection(field, target.selection);
-  };
-
-  const word = range ? text.slice(range.from, range.to) : "";
-  const selectionLabel = !range
-    ? "ВЫДЕЛИТЕ ТЕКСТ"
-    : target.selection?.start !== target.selection?.end
-      ? `${range.to - range.from} ЗНАК.`
-      : `СЛОВО: «${word.length > 12 ? `${word.slice(0, 12)}…` : word}»`;
-
-  const commit = (document: RichTextDocument) => {
-    documentRef.current = document;
-    target.onCommit(target.value, document);
-    onUpdate({ ...target, document });
-  };
-
-  const applyStyle = (style: RichTextStyle) => {
-    if (range) commit(applyRichTextStyle(documentRef.current, range.from, range.to, style));
-  };
-
-  const togglePresetStyle = (preset: RichTextStyle) => {
-    if (range) commit(togglePreset(documentRef.current, range.from, range.to, preset));
-  };
-
-  // Restore the remembered place on mount and press it to the edge whenever the editor window changes size (D-11). The phone panel is docked by CSS.
-  useLayoutEffect(() => {
-    const panel = panelRef.current;
-    const parent = panel?.offsetParent;
-    if (!panel || !parent) return;
-    const place = () => {
-      if (window.matchMedia("(max-width: 900px)").matches) {
-        panel.style.right = "";
-        panel.style.bottom = "";
-        return;
-      }
-      let saved: PanelOffset | null = null;
-      try { saved = parsePanelOffset(localStorage.getItem(formatPanelStorageKey)); } catch { saved = null; }
-      if (saved) paintPanelOffset(panel, parent, saved);
-    };
-    place();
-    const observer = new ResizeObserver(place);
-    observer.observe(parent);
-    return () => observer.disconnect();
-  }, []);
-
-  // PC: the panel moves by its header like a desktop window and never leaves the editor window (D-10). The phone panel is docked.
-  const beginDrag = (event: React.PointerEvent<HTMLElement>) => {
-    const panel = panelRef.current;
-    const parent = panel?.offsetParent;
-    if (!panel || !parent || window.matchMedia("(max-width: 900px)").matches) return;
-    if ((event.target as HTMLElement).closest("button")) return;
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = {
-      pointerId: event.pointerId, startX: event.clientX, startY: event.clientY,
-      right: parent.clientWidth - panel.offsetLeft - panel.offsetWidth, bottom: parent.clientHeight - panel.offsetTop - panel.offsetHeight, last: null,
-    };
-  };
-
-  const moveDrag = (event: React.PointerEvent<HTMLElement>) => {
-    const drag = dragRef.current;
-    const panel = panelRef.current;
-    const parent = panel?.offsetParent;
-    if (!drag || !panel || !parent || drag.pointerId !== event.pointerId) return;
-    drag.last = paintPanelOffset(panel, parent, { right: drag.right - (event.clientX - drag.startX), bottom: drag.bottom - (event.clientY - drag.startY) });
-  };
-
-  const endDrag = (event: React.PointerEvent<HTMLElement>) => {
-    const drag = dragRef.current;
-    if (drag?.pointerId !== event.pointerId) return;
-    dragRef.current = null;
-    // A blocked storage only means the place is not remembered.
-    if (drag.last) try { localStorage.setItem(formatPanelStorageKey, JSON.stringify(drag.last)); } catch { /* ignore */ }
-  };
-
-  // mousedown is the event whose default moves focus and clears the field's selection; pointerdown alone does not stop it in Chromium or WebKit (WR-04); inputs keep focus.
-  const keepFieldFocus = (event: React.SyntheticEvent) => { if (!(event.target as HTMLElement).closest("input")) event.preventDefault(); };
-  return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`} onPointerDown={keepFieldFocus} onMouseDown={keepFieldFocus}>
-    <header onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
-      <div><span>РЕДАКТОР ОФОРМЛЕНИЯ</span><strong>{target.title}</strong></div>
-      <small>{selectionLabel}</small>
-      <button type="button" onClick={finish} aria-label="Закрыть редактор">×</button>
-    </header>
-    <div className="format-presets format-choice-row" role="group" aria-label="Готовые стили">
-      <button type="button" className={plainMarked ? "selected" : ""} aria-pressed={plainMarked} disabled={!range} onClick={() => range && commit(resetRichTextStyle(documentRef.current, range.from, range.to))}>Обычный</button>
-      <button type="button" className={marked(stylePresets.heading) ? "selected" : ""} aria-pressed={marked(stylePresets.heading)} disabled={!range} onClick={() => togglePresetStyle(stylePresets.heading)}>Заголовок</button>
-      <button type="button" className={marked(stylePresets.important) ? "selected" : ""} aria-pressed={marked(stylePresets.important)} disabled={!range} onClick={() => togglePresetStyle(stylePresets.important)}>Важно</button>
-    </div>
-    <div className="format-tabs format-choice-row" role="tablist" aria-label="Группы оформления">
-      {([["color", "Цвет"], ["size", "Размер"], ["background", "Фон"]] as const).map(([id, label]) => <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "selected" : ""} onClick={() => setTab(id)}>{label}</button>)}
-    </div>
-    <div className="rich-text-toolbar" aria-label="Оформление текста" data-tab={tab}>
-      {target.area === "assistant" && <p className="format-area-note">Помощник показывает фразы своим цветом, размером и толщиной — эти настройки здесь не действуют. Фон текста работает.</p>}
-      <div data-tab-group="background" className="format-control preview-surface-control"><span>Фон предпросмотра</span><div className="format-choice-row"><button type="button" className={surface === "light" ? "selected" : ""} onClick={() => onPreviewSurface("light")}>БЕЛЫЙ</button><button type="button" className={surface === "dark" ? "selected" : ""} onClick={() => onPreviewSurface("dark")}>ЧЁРНЫЙ</button></div></div>
-      <div data-tab-group="color" className="format-control"><span className="format-control-title">Цвет текста <b><i style={{ backgroundColor: style.color ?? baseInk[surface] }} />{style.color ? style.color.toUpperCase() : "ОСНОВНОЙ"}</b></span><div className="format-swatches"><button type="button" disabled={!range} className={style.color ? "" : "selected"} title="Основной" aria-label="Основной" onClick={() => { setColorPicker(null); if (range) commit(removeRichTextStyleKeys(documentRef.current, range.from, range.to, ["color"])); }}><i style={{ backgroundColor: baseInk[surface] }} /></button>{textColorPalette.map((item) => <button key={item.value} type="button" disabled={!range} className={style.color?.toLowerCase() === item.value ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { setColorPicker(null); applyStyle({ color: item.value }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!range} title="Свой цвет" aria-label="Выбрать свой цвет текста" onClick={() => setColorPicker(colorPicker === "text" ? null : "text")}><span>+</span></button></div></div>
-      <div data-tab-group="size" className="format-control"><span>Размер</span><div className="format-choice-row">{[[13,"S"],[17,"M"],[22,"L"],[30,"XL"]].map(([size, label]) => <button key={size} type="button" disabled={!range} className={fontSize === size ? "selected" : ""} onClick={() => { const value = Number(size); applyStyle({ fontSize: value }); }}>{label}</button>)}</div></div>
-      <div data-tab-group="size" className="format-control"><span>Толщина</span><div className="format-choice-row">{[[400,"ОБЫЧНЫЙ"],[600,"СРЕДНИЙ"],[800,"ЖИРНЫЙ"]].map(([weight, label]) => <button key={weight} type="button" disabled={!range} className={fontWeight === weight ? "selected" : ""} onClick={() => { const value = Number(weight); applyStyle({ fontWeight: value }); }}>{label}</button>)}</div></div>
-      <div data-tab-group="background" className="format-control"><span className="format-control-title">Фон текста <b><i style={{ backgroundColor }} />{backgroundOpacity > 0 ? backgroundColor.toUpperCase() : "БЕЗ ФОНА"}</b></span><div className="format-swatches"><button type="button" disabled={!range} className={`no-background${backgroundOpacity === 0 ? " selected" : ""}`} onClick={() => { setColorPicker(null); applyStyle({ backgroundOpacity: 0 }); }}>БЕЗ ФОНА</button>{backgroundColorPalette.map((item) => <button key={item.value} type="button" disabled={!range} className={backgroundColor.toLowerCase() === item.value && backgroundOpacity > 0 ? "selected" : ""} title={item.label} aria-label={item.label} onClick={() => { const opacity = backgroundOpacity || .45; setColorPicker(null); applyStyle({ backgroundColor: item.value, backgroundOpacity: opacity }); }}><i style={{ backgroundColor: item.value }} /></button>)}<button className="custom-color" type="button" disabled={!range} title="Свой фон" aria-label="Выбрать свой цвет фона" onClick={() => setColorPicker(colorPicker === "background" ? null : "background")}><span>+</span></button></div></div>
-      <label data-tab-group="background" className="format-control opacity-control"><span>Плотность фона: {Math.round(backgroundOpacity * 100)}%</span><input type="range" min="0" max="1" step="0.05" value={backgroundOpacity} disabled={!range} onChange={(event) => { const opacity = Number(event.target.value); applyStyle({ backgroundColor, backgroundOpacity: opacity }); }} /></label>
-      {colorPicker && <CustomColorPicker
-        key={`${colorPicker}:${target.selection?.start}:${target.selection?.end}`}
-        group={colorPicker === "text" ? "color" : "background"}
-        title={colorPicker === "text" ? "Свой цвет текста" : "Свой цвет фона"}
-        color={colorPicker === "text" ? color : backgroundColor}
-        onChange={(nextColor) => {
-          if (colorPicker === "text") {
-            applyStyle({ color: nextColor });
-          } else {
-            const opacity = backgroundOpacity || .45;
-            applyStyle({ backgroundColor: nextColor, backgroundOpacity: opacity });
-          }
-        }}
-        onClose={() => setColorPicker(null)}
-      />}
-    </div>
-    <footer><p>Изменения применяются сразу. Без выделения меняется слово под курсором.</p><div><button type="button" className="finish-format" onClick={finish}>ГОТОВО</button></div></footer>
-  </section>;
-}
-
-// Where the PC format panel was left, px from the editor window's bottom-right; read back on mount (D-11).
-const formatPanelStorageKey = "portia-format-panel-v1";
-
-// Writes the clamped right/bottom straight on the panel (no React render per move) and returns what was painted.
-function paintPanelOffset(panel: HTMLElement, parent: Element, offset: { right: number; bottom: number }) {
-  const next = clampPanelOffset(offset, { width: panel.offsetWidth, height: panel.offsetHeight }, { width: parent.clientWidth, height: parent.clientHeight });
-  panel.style.right = `${next.right}px`;
-  panel.style.bottom = `${next.bottom}px`;
-  return next;
-}
-
-function CustomColorPicker({ group, title, color, onChange, onClose }: {
-  group: "color" | "background";
-  title: string;
-  color: string;
-  onChange: (color: string) => void;
-  onClose: () => void;
-}) {
-  const initial = hexToHsv(color);
-  const [hue, setHue] = useState(initial.hue);
-  const [saturation, setSaturation] = useState(initial.saturation);
-  const [value, setValue] = useState(initial.value);
-  const [hex, setHex] = useState(color.toUpperCase());
-
-  const choose = (nextHue: number, nextSaturation: number, nextValue: number) => {
-    setHue(nextHue);
-    setSaturation(nextSaturation);
-    setValue(nextValue);
-    const nextHex = hsvToHex(nextHue, nextSaturation, nextValue).toUpperCase();
-    setHex(nextHex);
-    onChange(nextHex);
-  };
-
-  const chooseFromBoard = (event: React.PointerEvent<HTMLDivElement>) => {
-    const board = event.currentTarget;
-    const rect = board.getBoundingClientRect();
-    const nextSaturation = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
-    const nextValue = Math.max(0, Math.min(1, 1 - (event.clientY - rect.top) / rect.height));
-    choose(hue, nextSaturation, nextValue);
-  };
-
-  return <div className="custom-color-picker" data-tab-group={group} role="group" aria-label={title}>
-    <div className="custom-color-picker-head"><strong>{title}</strong><button type="button" onClick={onClose} aria-label="Закрыть выбор цвета">×</button></div>
-    <div
-      className="custom-color-board"
-      style={{ background: `linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, hsl(${hue} 100% 50%))` }}
-      onPointerDown={(event) => { event.currentTarget.setPointerCapture(event.pointerId); chooseFromBoard(event); }}
-      onPointerMove={(event) => { if (event.currentTarget.hasPointerCapture(event.pointerId)) chooseFromBoard(event); }}
-    >
-      <i style={{ left: `${saturation * 100}%`, top: `${(1 - value) * 100}%` }} />
-    </div>
-    <label className="custom-hue"><span>ТОН</span><input type="range" min="0" max="359" value={Math.round(hue)} onChange={(event) => choose(Number(event.target.value), saturation, value)} /></label>
-    <div className="custom-color-value">
-      <i style={{ backgroundColor: hex }} />
-      <label><span>HEX</span><input value={hex} maxLength={7} onChange={(event) => {
-        const nextHex = event.target.value.toUpperCase();
-        setHex(nextHex);
-        if (/^#[0-9A-F]{6}$/.test(nextHex)) {
-          const next = hexToHsv(nextHex);
-          setHue(next.hue);
-          setSaturation(next.saturation);
-          setValue(next.value);
-          onChange(nextHex);
-        }
-      }} /></label>
-    </div>
-  </div>;
-}
-
-type EditorAccount = { email: string; created_at: string };
+type TabLists = { closedTabs: string[]; grantedTabs: string[] };
+type EditorAccount = { email: string; created_at: string } & TabLists;
+type RowNote = { error: boolean; text: string };
 
 function EditorAccessManager() {
   const [editors, setEditors] = useState<EditorAccount[]>([]);
+  // IN-03: the editor whose access is about to be revoked; the revoke runs only after the dialog is confirmed.
+  const [revokeAsked, setRevokeAsked] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [state, setState] = useState<"loading" | "idle" | "saving" | "error">("loading");
   const [message, setMessage] = useState("");
+  const [tabsEnforced, setTabsEnforced] = useState(false);
+  const [notes, setNotes] = useState<Record<string, RowNote>>({});
+  const confirmed = useRef(new Map<string, TabLists>());
+  const noteTimers = useRef(new Map<string, number>());
+  // Per row: what the owner wants saved last, and whether a PATCH is in flight (at most one, T-12-27).
+  const wanted = useRef(new Map<string, TabLists>());
+  const busy = useRef(new Set<string>());
+
+  useEffect(() => {
+    const timers = noteTimers.current;
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, []);
+
+  const setNote = (editorEmail: string, note: RowNote | null) => {
+    window.clearTimeout(noteTimers.current.get(editorEmail));
+    setNotes((current) => {
+      const rest = { ...current };
+      delete rest[editorEmail];
+      return note ? { ...rest, [editorEmail]: note } : rest;
+    });
+    if (note && !note.error) noteTimers.current.set(editorEmail, window.setTimeout(() => setNote(editorEmail, null), 1800));
+  };
 
   // Every call ends in idle or error, never stuck in loading or saving (D-09 #9).
   const loadEditors = async (keepMessage = false) => {
@@ -2181,8 +2282,12 @@ function EditorAccessManager() {
         setMessage(payload.error ?? "Не удалось загрузить список.");
         return;
       }
-      const payload = await response.json() as { editors?: EditorAccount[] };
-      setEditors(payload.editors ?? []);
+      const payload = await response.json() as { editors?: Partial<EditorAccount>[]; tabsEnforced?: boolean };
+      const loaded = (payload.editors ?? []).map((item) => ({ ...item, email: item.email ?? "", created_at: item.created_at ?? "", closedTabs: item.closedTabs ?? [], grantedTabs: item.grantedTabs ?? [] }));
+      // A row with a request in flight keeps its local lists: a reload must not undo a click.
+      loaded.filter((item) => !busy.current.has(item.email)).forEach((item) => { const lists = { closedTabs: item.closedTabs, grantedTabs: item.grantedTabs }; confirmed.current.set(item.email, lists); wanted.current.set(item.email, lists); });
+      setEditors((current) => loaded.map((item) => busy.current.has(item.email) ? current.find((row) => row.email === item.email) ?? item : item));
+      setTabsEnforced(payload.tabsEnforced === true);
       setState("idle");
       if (!keepMessage) setMessage("");
     } catch {
@@ -2227,6 +2332,8 @@ function EditorAccessManager() {
         return;
       }
       setEditors((current) => current.filter((item) => item.email !== editorEmail));
+      confirmed.current.delete(editorEmail);
+      wanted.current.delete(editorEmail);
       setMessage("Доступ отозван.");
       setState("idle");
     } catch {
@@ -2235,65 +2342,115 @@ function EditorAccessManager() {
     }
   };
 
-  return <div className="editor-form flat-editor-form access-editor">
+  const sameLists = (a: TabLists, b: TabLists) => JSON.stringify(a) === JSON.stringify(b);
+  const patchRow = (editorEmail: string, lists: TabLists) => setEditors((current) => current.map((item) => item.email === editorEmail ? { ...item, ...lists } : item));
+
+  // Sends the row's latest wanted lists, one request at a time; if the owner clicked meanwhile, sends once more.
+  const flushRow = async (editorEmail: string) => {
+    if (busy.current.has(editorEmail)) return;
+    busy.current.add(editorEmail);
+    const rollback = (text: string) => {
+      const back = confirmed.current.get(editorEmail) ?? { closedTabs: [], grantedTabs: [] };
+      wanted.current.set(editorEmail, back);
+      patchRow(editorEmail, back);
+      setNote(editorEmail, { error: true, text });
+    };
+    try {
+      for (;;) {
+        const sent = wanted.current.get(editorEmail);
+        const stored = confirmed.current.get(editorEmail);
+        if (!sent || (stored && sameLists(sent, stored))) return;
+        const response = await fetch("/api/editors", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: editorEmail, ...sent }), signal: AbortSignal.timeout(15_000) });
+        const payload = await response.json().catch(() => ({})) as { error?: string; editor?: Partial<TabLists> };
+        if (!response.ok) { rollback(payload.error ?? "Не удалось сохранить."); return; }
+        const answered = { closedTabs: payload.editor?.closedTabs ?? sent.closedTabs, grantedTabs: payload.editor?.grantedTabs ?? sent.grantedTabs };
+        confirmed.current.set(editorEmail, answered);
+        if (wanted.current.get(editorEmail) === sent) { setNote(editorEmail, { error: false, text: "Сохранено" }); return; }
+      }
+    } catch {
+      rollback("Нет связи с сервером. Попробуйте ещё раз.");
+    } finally {
+      busy.current.delete(editorEmail);
+    }
+  };
+
+  // One click saves the full lists on its own (D-02); an error puts the row back to what the server last confirmed.
+  const toggleTab = (editor: EditorAccount, tab: TabDef) => {
+    const base = wanted.current.get(editor.email) ?? editor;
+    const key = tab.kind === "trusted" ? "grantedTabs" : "closedTabs";
+    const list = base[key].includes(tab.id) ? base[key].filter((id) => id !== tab.id) : [...base[key], tab.id];
+    const next: TabLists = { closedTabs: base.closedTabs, grantedTabs: base.grantedTabs, [key]: tabRegistry.filter((entry) => list.includes(entry.id)).map((entry) => entry.id) };
+    wanted.current.set(editor.email, next);
+    patchRow(editor.email, next);
+    setNote(editor.email, null);
+    void flushRow(editor.email);
+  };
+
+  return <div className="editor-form flat-editor-form access-editor etab-detail">
     <div className="access-editor-intro"><span className="eyebrow">ТОЛЬКО ДЛЯ ВЛАДЕЛЬЦА</span><h2>Аккаунты редакторов</h2><p>Укажите email человека, которому разрешено менять сайт. Затем он откроет страницу входа, создаст собственный аккаунт с этим email и войдёт со своим паролем.</p></div>
     <div className="access-editor-add"><label className="editor-field"><span>Email нового редактора</span><input type="email" value={email} placeholder="name@example.com" onChange={(event) => setEmail(event.target.value)} /></label><button className="primary-control" type="button" disabled={!email.trim() || state === "saving"} onClick={() => void addEditor()}>ВЫДАТЬ ДОСТУП</button></div>
     {message && <div className={`access-editor-message ${state}`}>{message}</div>}
     <div className="access-editor-list">
       {state === "loading" && <div className="editor-empty compact-empty">Загрузка списка…</div>}
       {state !== "loading" && editors.length === 0 && <div className="editor-empty compact-empty">Дополнительных редакторов пока нет.</div>}
-      {editors.map((editor) => <div key={editor.email}><div><strong>{editor.email}</strong><small>ДОСТУП К РЕДАКТОРУ</small></div><button type="button" onClick={() => void removeEditor(editor.email)}>ОТОЗВАТЬ</button></div>)}
+      {editors.map((editor) => {
+        const open = openTabIds(editor.closedTabs, editor.grantedTabs);
+        const note = notes[editor.email];
+        return <div key={editor.email}><div><strong>{editor.email}</strong><small>ДОСТУП К РЕДАКТОРУ</small>
+          <div className="access-tab-chips" role="group" aria-label={`Вкладки ${editor.email}`}>
+            {tabRegistry.map((tab) => <button key={tab.id} type="button" className="access-tab-chip" aria-pressed={open.includes(tab.id)} disabled={!tabsEnforced} onClick={() => toggleTab(editor, tab)}>{open.includes(tab.id) ? `✓ ${tab.label}` : tab.label}</button>)}
+          </div>
+          {note && <span className={`access-tab-note${note.error ? " is-error" : ""}`} role="status">{note.text}</span>}
+        </div><button type="button" disabled={state === "saving"} onClick={() => setRevokeAsked(editor.email)}>ОТОЗВАТЬ</button></div>;
+      })}
+      {!tabsEnforced && editors.length > 0 && <p className="editor-guidance">Вкладки по редакторам заработают после применения SQL</p>}
     </div>
+    {revokeAsked !== null && (
+      <ConfirmDialog
+        title="Отозвать доступ?"
+        text={`${revokeAsked} потеряет доступ к редактору. Вернуть его можно только новой выдачей доступа.`}
+        actions={[
+          { label: "ОТОЗВАТЬ", tone: "danger", disabled: state === "saving", onClick: () => { const target = revokeAsked; setRevokeAsked(null); void removeEditor(target); } },
+          { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setRevokeAsked(null) },
+        ]}
+        onCancel={() => setRevokeAsked(null)}
+      />
+    )}
   </div>;
 }
 
-type ConfirmAction = { label: string; tone: "primary" | "secondary" | "danger"; onClick: () => void; autoFocus?: boolean; disabled?: boolean };
+// Always in the DOM so the change to «МАКСИМУМ» is announced (UI-SPEC).
+function LimitNote({ id, count, max }: { id: string; count: number; max: number }) {
+  return <span id={id} aria-live="polite" className={limitStatus(count, max) === "full" ? "limit-note is-full" : "limit-note"}>{limitText(count, max)}</span>;
+}
 
-// A native modal dialog lives in the top layer: above the transformed editor window, the taskbar and the boot screen,
-// with focus trapped and the page inert. Never use window.confirm for new prompts: embedded browsers answer it "no" unseen.
-function ConfirmDialog({ title, text, actions, onCancel }: { title: string; text: string; actions: ConfirmAction[]; onCancel: () => void }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const titleId = useId();
-  const textId = useId();
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog || dialog.open) return;
-    dialog.showModal();
-    // showModal focuses the first button; the safe action has to win instead.
-    dialog.querySelector<HTMLElement>("[data-autofocus]")?.focus();
-  }, []);
-
+// One table editor for «Информация» and «Справочник»: onEdit applies one edit to this block's rows, so a column swap is one change and one undo step (D-19).
+function TableBlockEditor({ blockId, rows, onEdit }: { blockId: string; rows: { id: string; key: string; value: string }[]; onEdit: (edit: (rows: { id: string; key: string; value: string }[]) => void) => void }) {
+  const swapColumns = () => onEdit((items) => items.forEach((row) => { [row.key, row.value] = [row.value, row.key]; }));
   return (
-    <dialog
-      ref={dialogRef}
-      className="portia-dialog"
-      role="alertdialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
-      aria-describedby={textId}
-      onClose={() => onCancel()}
-      onClick={(event) => { if (event.target === event.currentTarget) onCancel(); }}
-    >
-      <div>
-        <h2 id={titleId}>{title}</h2>
-        <p id={textId}>{text}</p>
-        <div className="portia-dialog-actions">
-          {actions.map((action) => (
-            <button key={action.label} type="button" className={`${action.tone}-control`} autoFocus={action.autoFocus} data-autofocus={action.autoFocus || undefined} disabled={action.disabled} onClick={action.onClick}>{action.label}</button>
-          ))}
+    <>
+      {rows.length === 0 && <div className="editor-empty compact-empty">Строк пока нет. Добавьте первую кнопкой «+ СТРОКА».</div>}
+      {rows.length > 0 && (
+        <div className="info-table-head">
+          <div data-column="key"><ColumnSwapHandle label="Признак" onSwap={swapColumns} /><span>Признак</span></div>
+          <div data-column="value"><ColumnSwapHandle label="Значение" onSwap={swapColumns} /><span>Значение</span></div>
+          <span className="info-table-head-pad" aria-hidden="true">Удалить строку</span>
         </div>
+      )}
+      {rows.map((row, rowIndex) => (
+        <div className="info-table-row" data-sort-index={rowIndex} key={row.id}>
+          <OrderDragHandle index={rowIndex} label={`строка ${rowIndex + 1}`} onMove={(from, to) => onEdit((items) => moveArrayItem(items, from, to))} />
+          <Field label="Признак"><input maxLength={500} value={row.key} onChange={(event) => onEdit((items) => { if (items[rowIndex]) items[rowIndex].key = event.target.value; })} /></Field>
+          <Field label="Значение"><input maxLength={500} value={row.value} onChange={(event) => onEdit((items) => { if (items[rowIndex]) items[rowIndex].value = event.target.value; })} /></Field>
+          <button type="button" onClick={() => onEdit((items) => { items.splice(rowIndex, 1); })}>Удалить строку</button>
+        </div>
+      ))}
+      <div className="scientist-log-actions">
+        <button className="secondary-control limit-add" type="button" disabled={rows.length >= MAX_TABLE_ROWS} aria-describedby={`limit-rows-${blockId}`} onClick={() => onEdit((items) => { items.push({ id: makeId("row"), key: "", value: "" }); })}>+ СТРОКА</button>
+        <LimitNote id={`limit-rows-${blockId}`} count={rows.length} max={MAX_TABLE_ROWS} />
       </div>
-    </dialog>
+    </>
   );
-}
-
-function EditorGroup({ title, children, stack = false }: { title: string; children: React.ReactNode; stack?: boolean }) {
-  return <section className={`editor-group${stack ? " stack" : ""}`}><h2>{title}</h2><div className="editor-field-grid">{children}</div></section>;
-}
-
-function Field({ label, children, wide = false }: { label: string; children: React.ReactNode; wide?: boolean }) {
-  return <label className={`editor-field${wide ? " wide" : ""}`}><span>{label}</span>{children}</label>;
 }
 
 // Typed text lives here; the stored id is the source of truth, so undo/redo shows the stored video without an effect.
@@ -2305,35 +2462,4 @@ function YoutubeField({ videoId, onChange }: { videoId: string; onChange: (video
     <input value={shown} inputMode="url" autoCapitalize="none" spellCheck={false} placeholder="https://www.youtube.com/watch?v=… или https://youtu.be/…" onChange={(event) => { setTyped(event.target.value); onChange(parseYoutubeId(event.target.value)); }} />
     <small className="editor-media-hint">{videoId ? "Видео распознано" : shown ? "Нужна ссылка на YouTube: youtube.com/watch?v=… или youtu.be/…" : "Принимаются только ссылки YouTube."}</small>
   </label>;
-}
-
-function ImageEditorField({ label, value, placement, maxHint, uploadState = "idle", onChange, onUpload }: {
-  label: string;
-  value: string;
-  placement: ImagePlacement;
-  maxHint: string;
-  uploadState?: "idle" | "uploading" | "error";
-  onChange: (value: string) => void;
-  onUpload?: (file: File) => void;
-}) {
-  const [failedPreviewUrl, setFailedPreviewUrl] = useState("");
-  const previewFailed = Boolean(value) && failedPreviewUrl === value;
-
-  const receiveFile = (file: File | undefined) => {
-    if (file && onUpload) onUpload(file);
-  };
-
-  return <div className={`editor-field wide image-editor-field image-placement-${placement}`}>
-    <span>{label}</span>
-    <input value={value} inputMode="url" autoCapitalize="none" spellCheck={false} placeholder="Вставьте прямую HTTPS-ссылку на изображение или .gif" onChange={(event) => onChange(event.target.value)} onBlur={(event) => onChange(mediaUrlFromText(event.currentTarget.value))} onPaste={(event) => { const text = event.clipboardData.getData("text"); const url = mediaUrlFromText(text); if (url && url !== text) { event.preventDefault(); onChange(url); } }} />
-    <small className="editor-media-hint">{maxHint}. GIF запускается автоматически. Для Tenor используйте ссылку с <b>media.tenor.com</b>, а не адрес страницы просмотра.</small>
-    {onUpload && <label className="editor-dropzone" onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }} onDrop={(event) => { event.preventDefault(); receiveFile(event.dataTransfer.files?.[0]); }}>
-      <input className="sr-only" type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => { receiveFile(event.target.files?.[0]); event.currentTarget.value = ""; }} />
-      <strong>ВЫБРАТЬ ФАЙЛ С КОМПЬЮТЕРА</strong>
-      <small>или перетащите изображение сюда · PNG, JPG, WEBP, GIF · до 4 МБ</small>
-    </label>}
-    <span className={`editor-upload-status ${uploadState}`}>{uploadState === "uploading" ? "ЗАГРУЗКА…" : uploadState === "error" ? "НЕ УДАЛОСЬ ЗАГРУЗИТЬ" : ""}</span>
-    {value && !previewFailed && <figure className={`editor-image-preview ${placement}`}><img src={value} alt={`Предпросмотр: ${label}`} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={() => setFailedPreviewUrl(value)} /></figure>}
-    {value && previewFailed && <span className="editor-media-error">Не удалось открыть ссылку. Нужна прямая HTTPS-ссылка на файл изображения или GIF.</span>}
-  </div>;
 }

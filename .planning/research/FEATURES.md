@@ -1,230 +1,274 @@
-# Feature Landscape: v1.1 «Закрытие замечаний» (review-debt inventory)
+# Feature Research
 
-**Domain:** Fix milestone for an existing Next.js 16.4.2 + Supabase + Netlify app (PORTIA OS). No new features; every item is an open v1.0 review finding.
-**Researched:** 2026-10-19 (code state = working tree at HEAD d40c8b5; `npm test` 202/202 pass)
-**Confidence:** HIGH for status/evidence (each finding re-read against current code), MEDIUM for complexity (estimates), LOW only where marked "not verifiable here" (browser/DB behaviour).
+**Domain:** Gated fan-community site styled as a retro desktop OS (PORTIA OS): nickname access requests, editor-side user management, clearance levels, unified UI style
+**Milestone:** v1.4 «Доступ и единый стиль» (adds to an existing app; existing features not re-researched)
+**Researched:** 2026-11-09
+**Confidence:** MEDIUM overall. Access-workflow and gating patterns are well-established (HIGH on the patterns, MEDIUM on how they fit this stack). Roblox API specifics are MEDIUM (official docs for OAuth, community sources for username lookup). Design-system section is opinionated synthesis (MEDIUM).
 
-## Method and totals
+Owner intent that frames everything (todos 2026-11-07/08): **anti-espionage**. A stranger must learn nothing about the site's content before a nick is typed AND approved by an editor. Nick entry is a gate, not authentication. That distinction drives most decisions below.
 
-Sources: `01-REVIEW`, `03.1-REVIEW`, `03.2-REVIEW`, `03.3-REVIEW`, `05-REVIEW` (+ DISPOSITION files) under `.planning/milestones/v1.0-phases/`. Each finding was checked by reading the cited code. Line numbers below are CURRENT (several reviews cite stale numbers).
+---
 
-- 55 findings listed once each: 01 (7), 03.1 (22), 03.2 (9), 03.3 (8), 05 (9 incl. the deferred WR-05).
-- Status: **1 fixed** (01-CR-01), **3 partly fixed / stale-in-part** (03.1-WR-07, 01-IN-01, 01-IN-02), **5 stale or accept-as-is candidates** (05-IN-01, 05-IN-02, 05-IN-04, 03.2-IN-02, 03.2-IN-03 second half), **46 still present** (remaining rows, incl. 05-IN-05 which is unverifiable here). Details per row.
-- Not in any review file but found while verifying (add to scope or log, your call): `PUT /api/content` does `JSON.parse(raw)` unguarded (`app/api/content/route.ts:42`, bad JSON gives 500, `null` body throws); `POST /api/editors` has the same `request.json()` (`app/api/editors/route.ts:33`). Same fix as 03.1-IN-06.
-- The 03.2 review mentions old WR-02 (`normalizeBroadcasts`), WR-03 (`markQuestsSeen` pruning), IN-02 (date validation) as "not re-reviewed". Verified: `markQuestsSeen` pruning IS fixed (`lib/broadcasts.ts:59-61`, test `broadcasts.test.ts:101`). The other two are the same as 03.1-WR-07 and 03.1-IN-08 and are tracked there. They are not new rows.
+## Feature Landscape
 
-Legend. Severity: reviewer's label (C/W/I). Complexity: S = under 15 lines in one place, M = one file plus a test or two call sites, L = several files, a decision, or untestable without a device/DB. ID format `phase-ID`.
+### A. Nick access request (boot screen)
 
-## Categories (the roadmap grouping)
+#### Table Stakes
 
-| Cat | Name | Findings |
-|-----|------|----------|
-| A | Employee saves (data loss, concurrency) | 03.1-WR-01, WR-02, WR-03, WR-05, WR-06; 03.2-WR-02, WR-03, WR-04; 03.3-WR-02, WR-03, WR-04, IN-01, IN-02 |
-| B | Content sync & normalization | 03.1-WR-04, WR-07, WR-08, WR-09, WR-12, IN-08, IN-03, IN-02; 03.2-WR-01, IN-02, IN-05; 03.3-WR-01 |
-| C | Robustness (crashes, 4xx vs 5xx) | 03.1-WR-10, IN-06, IN-09; 03.3-IN-03 |
-| D | Security | 03.1-WR-11, IN-10, IN-07; 03.3-IN-04 |
-| E | Editor and format panel | 05-WR-01, WR-06, IN-02, IN-05, IN-06; 03.2-IN-04; 01-IN-02 |
-| F | Embedded docs zoom | 01-WR-01, WR-02, WR-03, IN-03 |
-| G | A11y and copy | 01-IN-01; 03.1-IN-04, IN-05; 03.2-IN-01, IN-03 |
-| H | Tests, docs, housekeeping | 03.1-IN-01; 05-IN-01, IN-03, IN-04, WR-05 (deferred); 01-CR-01 (close as fixed) |
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Boot-screen request form: Roblox nick + type («из таблицы» / «не из таблицы») | Owner's explicit ask | LOW | Reuse the boot animation (once per session, `html[data-boot]`). Form is the only thing rendered until a grant exists. |
+| Four-state lifecycle: `pending` / `approved` / `rejected` / `revoked` | Universal in access-request systems (SailPoint, IBM, Robomq all model pending/approved/rejected/revoked) | MEDIUM | Level lives on the approved grant, not on the request. Rejected and revoked are both re-requestable; keep them distinct for editors and audit. |
+| Server-side gate: no content in any response without a valid grant | The whole point; "hidden in UI" is not a boundary | HIGH | Every public read path must check the grant: `/api/content`, `/api/employees`, search, uploads/media, promotion routes, SSR HTML if it embeds content. Today `/api/content` and `/api/employees` are "identical for every visitor" and CDN-cached (purged by tag). That cache model must change (see Dependencies). |
+| Opaque device token (httpOnly cookie) → server grant lookup | Browser has to prove "I am the approved request" without accounts | MEDIUM | Mirror the existing `portia_promo_device_bindings` pattern (token hash stored, nick key unique). Never trust a client-sent nick or level. Revocation is checked server-side on each request, so a stolen cookie dies on revoke. |
+| Pending screen: neutral "Заявка отправлена, ждите решения" + manual/auto re-check | Users must know what happened; reload must not lose the pending state | LOW | Pending shows NO app names, icons, wallpaper, taskbar. Poll status ~10 s while tab visible (same cadence as existing content poll). Survives reload via the device token. |
+| Rejected / revoked screens: neutral text, re-request allowed | Dead-end screens frustrate legitimate users who mistyped | LOW | Re-request after a short cooldown (suggest 1 h–24 h, tunable) with attempt cap; reuse the `portia_promo_attempt_buckets` rate-limit pattern. Reject reason, if any, is editor-only (do not echo to requester). |
+| Nick normalization + one canonical key | "Qloxz", "qloxz", " Qloxz " must be the same person | LOW | Trim, case-fold, Roblox charset (letters/digits/underscore, 3–20). Store original Roblox spelling for display (matches existing "ники вне таблицы в написании Roblox"). |
+| Duplicate/spam control: one live pending request per nick and per device; rate limit per IP bucket | Open anon write endpoint = spam and DoS vector | MEDIUM | Anon insert must go through a server route/RPC, not direct table write. Ties to the todo "revoke anon `portia_promo_register_attempt`". |
+| Table-match indicator for «из таблицы» requests | Editors need to know whether the claimed nick is actually in the 34-slot roster | LOW | Server compares normalized nick (and Roblox id when available) with `employees`. Show as a badge to the approver only. Do NOT auto-approve on match (see Anti-Features). |
+| Impersonation visibility: approver sees conflicts | Someone typing another person's nick is the main threat | MEDIUM | Show "this nick already has an approved grant / a pending request from another device". One active approved grant set per canonical nick; second claimant lands as `pending` with a conflict flag. |
+| Soft Roblox existence check on submit (server-side) | Filters junk nicks, gives approver an avatar + profile link + stable user id | MEDIUM | Roblox username→id lookup (users.roblox.com `usernames/users`, case-insensitive per community sources; verify in the sandbox before relying on it). Must be SOFT: if Roblox is unreachable, accept as "не проверен" and flag it, as the employees code already tolerates Roblox outages. Use Roblox user id as the canonical identity when known (nicks can change). |
+| Logout / "forget this device" | Shared PCs, phones | LOW | Clears the cookie only; the grant stays on the server (the person can return on that device only by token, so after logout they must re-request or re-claim, see below). |
+| Promotion reads nick from the approved grant (employee type) | Owner's explicit ask | MEDIUM | Replace `PromotionIdentityGate` for employee grants with the grant's nick (read-only). Observers («не из таблицы») keep entering a nick manually in Promotion, per owner's words. Promotion's own device binding must agree with the grant nick, not fork a second identity. |
+| Editors/owner bypass the gate | They already authenticate via Supabase | LOW | Treat logged-in approved editors as implicit top level. Do not make editors file nick requests. |
 
-(Cross-listed items sit in their primary category above; the master table is authoritative.)
+#### Differentiators
 
-## Master table
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| In-profile verification code ("put PORTIA-XXXX in your Roblox About") | Real proof of nick ownership; kills impersonation cheaply; common pattern in Roblox Discord bots | MEDIUM | Server fetches the public profile description by user id and compares. Optional per request type, or only offered when a conflict flag exists. Best single upgrade for the anti-espionage goal short of OAuth. |
+| "Sign in with Roblox" (OAuth 2.0/OIDC, scopes `openid profile`, `sub` = user id) | True authentication, zero impersonation | HIGH | Official, documented, but requires registering an app by an ID-verified developer and a callback flow on Netlify. Candidate for a later milestone, not v1.4. |
+| Multi-device per nick with a cap (e.g. 3) and "add this device" approval | Phone + PC is this audience's real usage (PROJECT.md) | MEDIUM | New browser with an approved nick = new request that shows "already approved on another device" so one click approves it. Without this every device change is a full manual re-approval. |
+| Soft grant expiry (sliding ~90 days of inactivity) | Dead grants do not live forever | LOW | Optional. Small closed community: "valid until revoked" is acceptable as the default; sliding expiry is a cheap upgrade. |
+| Flag grants whose employee left the table | Level 2 should not silently outlive roster membership | LOW–MEDIUM | Badge in the editor list ("больше не в таблице"); do not auto-revoke. |
 
-### Phase 01 (7)
+#### Anti-Features
 
-| ID | User-visible effect | Status | Evidence | Sev | Cx | Cat |
-|----|--------------------|--------|----------|-----|----|-----|
-| 01-CR-01 | Dark Reader recolours the site (meta tag not emitted) | **FIXED** (plan 01-03) | `app/layout.tsx:21` `"darkreader-lock": "true"`; built `.next/server/app/index.html` contains the meta (01-03-SUMMARY, and my grep of `.next`) | C | - | H (close, no code) |
-| 01-WR-01 | Ctrl+wheel zoom of «Устав»/«Таблица» stops working once the user clicked inside the document (browser zooms the whole tab) | Present | `portia-desktop.tsx:1496-1503` key listeners on parent `window` only; iframe keys never reach it | W | L (feasibility limit, see F) | F |
-| 01-WR-02 | Holding Win/Cmd raises the overlay that blocks clicks and scrolling in the document | Present | `portia-desktop.tsx:1497` (`ctrlKey \|\| metaKey`), `:1514` | W | S | F |
-| 01-WR-03 | Zoom overlay can stay stuck (lost keyup) and swallows Ctrl+click/scroll | Present | `portia-desktop.tsx:1497-1503`, `:1526` (`ctrlHeld && <div className="document-app-zoom-layer">`), css `portia.css:1535` | W | M | F |
-| 01-IN-01 | Roblox profile link is an unlabelled portrait for mouse users | **Partly fixed**: `aria-label="Профиль Roblox: …"` exists, no `title` tooltip | `portia-desktop.tsx:1195` | I | S | G |
-| 01-IN-02 | Drag handle: quick click does nothing, no hint | **Partly fixed**: keyboard alternative exists (ArrowUp/Down, `aria-keyshortcuts`); no `title`, still 170 ms hold | `portia-editor.tsx:~269` (`aria-keyshortcuts`), `:~290` (`170`), `:~295` | I | S | E |
-| 01-IN-03 | Screen reader never hears the zoom percentage | Present | `portia-desktop.tsx:1531` `aria-label="Сбросить масштаб"` hides `{zoom}%` | I | S | F |
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Auto-approve when the nick is in the employees table | Saves editor clicks | Anyone can type a real employee's nick; this is exactly the espionage case | Show the match badge; require a human click. |
+| Nick-only "login" with no device token (re-type nick to get back in) | Simplest UX | Nick is public knowledge; whoever types it inherits the grant | Device token (+ optional profile code). |
+| Pending users see a "preview" / blurred site | Feels friendlier | Leaks structure, app names, wallpaper: violates the owner's requirement | Neutral waiting screen only. |
+| Revealing "this nick is approved/taken" to the requester | Helpful error text | Lets a stranger enumerate who is in the department | Same neutral response for all outcomes; details only for editors. |
+| Email/password accounts for visitors | "Proper" auth | Overkill for a fan site, new attack surface and Supabase auth changes | Device-bound grants. |
+| Email/Discord notifications to editors in v1.4 | Faster approval | New secrets/integration surface, production-adjacent | In-app pending badge on the editor tab. Defer. |
+| Auto-expire pending requests with cleanup jobs | Tidy table | Needs a scheduler for little value | Filter by age in the editor list; manual bulk-clear. |
 
-### Phase 03.1 (22)
+---
 
-| ID | User-visible effect | Status | Evidence | Sev | Cx | Cat |
-|----|--------------------|--------|----------|-----|----|-----|
-| 03.1-WR-01 | During a Supabase hiccup every visitor sees empty bios and «—» ratings for up to 5 min, and the good local cache is overwritten | Present | `portia-desktop.tsx:419-427` applies and caches any non-empty degraded payload; `portia-employees.ts:77-80` `acceptsRoster` ignores `profilesRead` | W | M | A |
-| 03.1-WR-02 | A save that lacks `biography`/`photoUrl` silently erases the stored bio and photo (API contract inconsistent with ratings) | Present | `portia-employees.ts:437-442` (missing string becomes `""`); no test for it | W | M | A |
-| 03.1-WR-03 | Saving a profile can fail with «Сотрудник не найден» (or time out ~18 s) when Roblox/Sheets are slow, though the employee is valid | Present | `api/employees/route.ts:37-40` calls `loadEmployees` (sheet + Roblox users + thumbnails) just to find the id | W | L | A |
-| 03.1-WR-04 | Every 10 s poll replaces `content`; editor's clean-state sync wipes undo/redo history | Present (same fix as 03.2-WR-01) | `portia-desktop.tsx:362` `setContent(fetched)` with no equal-revision skip | W | S/M | B |
-| 03.1-WR-05 | After the editor fixes a broken photo URL the profile keeps showing the logo until reload | Present | `portia-desktop.tsx:1379-1388` `failed`/`loaded` never reset; parent key is only `selectedEmployee.id` (`:1190`) | W | S | A |
-| 03.1-WR-06 | «СОХРАНЕНО» timer is not cleared: a second save within 1.8 s flips to idle mid-request, employee switch allowed during PATCH, answer overwrites next employee's draft | Present | `portia-editor.tsx:1463` raw `setTimeout`, no ref/cleanup | W | S | A |
-| 03.1-WR-07 | Rich text silently cut at 500 runs / 1000 keys; broadcasts/viruses spread unvalidated (a `title: {}` crashes every visitor) | **Partly fixed**: `infoSections` now fully validated by `normalizeInfoSections` (03.3, `normalize.ts:245`). Still present: caps at `:46` (500 runs) and `:67` (1000 keys), `normalizeBroadcasts` spreads `...item` (`:91`), virus `...virus` (`:176`) | W | M | B |
-| 03.1-WR-08 | Hard-deleting a recycled virus / recycle file leaves orphan `formattedText` keys (count toward the 1000 cap, mislabel diff section) | Present | `portia-editor.tsx:642-648` (`deleteSelectedRecycledVirus`), `:1201` (recycle file delete); `lib/editor-items.ts` has no `removeRecycled*` | W | S | B |
-| 03.1-WR-09 | A news item changed to quest keeps hidden `important:true`, shows «ВАЖНО» on the quest with no way to clear it | Present | editor type handler `portia-editor.tsx:1075-1083` (only sets `type`); checkbox only for news `:1094`; reader `portia-desktop.tsx:1265` shows for any type | W | S | B |
-| 03.1-WR-10 | If the advice list shrinks while the bubble is visible, `undefined` text throws and the whole desktop goes blank | Present | `portia-desktop.tsx:1115` no `?? fallback`; `FormattedText` `:1782-1787` `run.text.length` | W | S | C |
-| 03.1-WR-11 | Editor access trusts JWT email without confirmed-email check; anon RPC tells anyone whether an email is an approved editor; with «Confirm email» off, anyone can sign up as an approved editor | Present (SQL unchanged; no `email_confirmed` anywhere in code) | `supabase/portia_setup.sql:48-97`; `lib/editor-access.ts` | W | L (owner applies SQL) | D |
-| 03.1-WR-12 | Cached content from before `recycledViruses` existed throws in the dossier diff | Present | `lib/editor-changes.ts:76`; `isUsableContent` (`portia-desktop.tsx:147-155`) does not require the field | W | S | B |
-| 03.1-IN-01 | Settings storage key is a literal in 3 places; boot test can't detect drift | Present | `accent-boot.ts:10`, `portia-desktop.tsx:541`, `:682` | I | S | H |
-| 03.1-IN-02 | `//host/x.png` accepted as a "local path" | Present | `portia-employees.ts:437`, `portia-content-normalize.ts:79`, `portia-editor.tsx:~78`, `portia_setup.sql:22` | I | S | B |
-| 03.1-IN-03 | A 35th employee on the sheet is silently dropped | Present | `portia-employees.ts:91` `staffRowsEnd = 35`, `:190` | I | S | B |
-| 03.1-IN-04 | A11y: Escape on toast works only if focused; `role="status"` holds buttons; listbox without option roles | Present (overlaps 03.2-IN-01) | `portia-desktop.tsx:1763`, `:1157` | I | S | G |
-| 03.1-IN-05 | Joke/empty strings in the editor UI | Present | `portia-editor.tsx:1258` («дружок пирожок»), `:1840` («не добавляй всякой фигни ок?»), `:1790` empty `<small>` | I | S | G |
-| 03.1-IN-06 | Bad/`null` JSON to PATCH gives 500 instead of 400 | Present | `api/employees/route.ts:33` | I | S | C |
-| 03.1-IN-07 | Embedded documents have no `sandbox` | Present | `portia-desktop.tsx:1524` (`<iframe src=… referrerPolicy=…>` no sandbox) | I | S | D |
-| 03.1-IN-08 | Quest with end date before start is never active and silently so | Present | `portia-editor.tsx:~1090` only `min=`; `normalize.ts:88-96` no swap/clear | I | S | B |
-| 03.1-IN-09 | Side effects (localStorage, `setWindows`) inside React state updaters | Present (works today because idempotent) | `portia-desktop.tsx:393-415`, `:717` | I | M | C |
-| 03.1-IN-10 | Public table exposes `updated_by`/`nickname`; owner email committed; storage listing open | Present | `portia_setup.sql:49`, `:155-162`, `:243-248` | I | L (owner applies SQL) | D |
+### B. Editor tab «Пользователи»
 
-### Phase 03.2 (9)
+#### Table Stakes
 
-| ID | User-visible effect | Status | Evidence | Sev | Cx | Cat |
-|----|--------------------|--------|----------|-----|----|-----|
-| 03.2-WR-01 | Same as 03.1-WR-04, plus toast effect re-runs and desktop re-renders every 10 s | Present | `portia-desktop.tsx:362` | W | S/M | B |
-| 03.2-WR-02 | A CDN-cached roster without rating keys (or an old degraded copy without `profilesRead`) lets the editor save null ratings over stored ones | Present | `portia-editor.tsx:1421` checks `=== false` only; `profileOf` maps missing to `null` (`portia-employees.ts:~46-55`) | W | S | A |
-| 03.2-WR-03 | Text typed while a save is in flight is discarded | Present | `portia-editor.tsx:1457` `setDraft(profileOf(payload.employee))`; inputs not in a disabled `fieldset` | W | S | A |
-| 03.2-WR-04 | Each save writes all six ratings, so concurrent editors overwrite each other's untouched ratings | Present | `portia-editor.tsx:1446` `changes: draft` | W | M | A |
-| 03.2-IN-01 | Same as 03.1-IN-04 (toast Escape/role) | Present (duplicate fix) | `portia-desktop.tsx:1763` | I | S | G |
-| 03.2-IN-02 | «New quest in 10 s» not guaranteed when CDN purge fails | **Mostly stale**: purge failure is already logged (`lib/portia-cdn.ts:21-26`); only the `shortcut:` comment (`portia-desktop.tsx:38`) lacks one line | I | S | B |
-| 03.2-IN-03 | Toast comment overstates placement; owner sees toast over own editor | **Half stale**: toast-over-editor is an explicit owner decision (STATE: 03.2-07 «toast also shows while the editor is open»). Remaining: soften CSS comment near `portia.css:~474` | I | S | G |
-| 03.2-IN-04 | Undo/redo of a news-to-quest type change leaves the Сводка editor on the wrong tab; card vanishes | Present | `portia-editor.tsx:610-619` `step` does not touch `broadcastEditorTab` (`:544`) | I | S | E |
-| 03.2-IN-05 | First render briefly shows every dated quest as «upcoming» (empty `today`) | Present | `portia-desktop.tsx:276` `useState("")`; `lib/broadcasts.ts:18-21` | I | S | B |
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| New tab visible to all editors by default | Owner's words | LOW | Extend `EditorTab` union (currently `viruses|info|guide|broadcasts|recycle|search|assistant|employees|promo|access`) and the per-tab permission model (`closed_tabs`/`granted_tabs`). Default = open for all; owner can still close it per editor. Do not confuse with the existing `access` tab (that manages editors). |
+| Queue-first list: default filter "Ожидают", newest first, count badge on the tab | Approvers come to clear a queue | LOW | Badge also useful as the only "notification". |
+| Row data: nick (Roblox spelling) + avatar/profile link, claimed type, table-match badge, status, level, requested date, decided by/at | Editor needs every fact to decide | MEDIUM | Avatar via Roblox thumbnail (soft; fall back to initials). |
+| Per-row actions: Approve (with level preselected: 1 observer, 2 table employee, editable), Reject (optional reason), change level, Revoke, Re-open | Spec'd flows | MEDIUM | Decisions are server RPCs, never direct table writes from the client. |
+| Search by nick + filters (status, type, level) | Even 50–200 rows need it once spam arrives | LOW | Client-side filtering is fine at this scale; still paginate/limit (v1.3 "ограничения списков"). |
+| Decision persists; audit on the row: who decided, when, previous level | "И он будет сохраняться"; accountability across several editors | MEDIUM | Store `decided_by` (auth uid) and `decided_at` on the grant, plus an append-only event table (request, approve, reject, revoke, level change: actor, from→to, at). The `portia_promo_audit_events` table is an existing precedent. |
+| Concurrency-safe decisions | Two editors click at once | MEDIUM | Transition RPC with expected-status check ("уже решено: <editor>"). Matches the existing optimistic-save philosophy (revisions). |
+| Same look/layout as other editor tabs | Part of the unified-style requirement | LOW | Build it on the new shared editor-tab layout, not bespoke. |
 
-### Phase 03.3 (8)
+#### Differentiators
 
-| ID | User-visible effect | Status | Evidence | Sev | Cx | Cat |
-|----|--------------------|--------|----------|-----|----|-----|
-| 03.3-WR-01 | Guide content over 50 subsections / 100 blocks / 100 table rows is dropped on save with no warning | Present | `portia-content-normalize.ts:129,144,159` `.slice`; editor has no matching limit (no `infoLimits`) | W | M | B |
-| 03.3-WR-02 | After a failed manual-employee read, those people vanish from the Personnel window and from the device cache | Present (same code path as 03.1-WR-01) | `portia-employees.ts:~358` `complete = … && manual.ok`; `portia-desktop.tsx:419-427` | W | M | A |
-| 03.3-WR-03 | Detail save is non-atomic (profile then details), and a row deleted meanwhile shows «база данных ещё не обновлена» | Present | `api/employees/route.ts:46-52`; `portia-employees.ts:~410-418` zero rows maps to `pending-database` | W | M | A |
-| 03.3-WR-04 | If the roster is empty (sheet down, or last person removed) there is no «+ ВНЕ ТАБЛИЦЫ» button, so nobody can be added | Present | `portia-editor.tsx:~1578` early `return <div className="editor-empty">` before the add button (`~1618`) | W | S/M | A |
-| 03.3-IN-01 | Manual employee shows nickname casing as typed, not Roblox's | Present | `portia-employees.ts` `addManualEmployee`, `RobloxProfile` has no `name` | I | S | A |
-| 03.3-IN-02 | Duplicate `text` helper; `details: {}` wipes title/rank/callsign | Present | `portia-employees.ts:~397`, `~403-409` | I | S | A |
-| 03.3-IN-03 | Bad JSON to POST/DELETE gives 500 | Present | `api/employees/route.ts:69` (POST), `:102` (DELETE) | I | S | C |
-| 03.3-IN-04 | YouTube iframe has no `sandbox`; delete-403 branch matches Russian substring «таблицы» | Present | `portia-desktop.tsx:1245` (no sandbox); `portia-editor.tsx:~1650` `includes("таблицы")` | I | S | D |
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Full per-person history drawer (all events) | Resolve "who let this person in" disputes | LOW (if events table exists) | |
+| Bulk select + bulk reject / bulk level change | Clearing spam waves | MEDIUM | Bulk REJECT is safe. Bulk APPROVE only for explicitly selected rows, never "approve all matched". |
+| "Просмотр как уровень N" preview for editors | Lets editors verify what level 2 actually sees; the best defence against gating mistakes | MEDIUM | Server-side impersonation of a level in the editor session only. High value, since mistakes here leak data. |
+| Conflict panel (same nick, two claimants) with "replace grant" action | Resolves the impersonation case in one view | MEDIUM | |
+| Block list (nick or device) after repeated rejects | Persistent spammers | LOW | A fifth state `blocked`, or a flag on rejected. |
 
-### Phase 05 (9, incl. deferred)
+#### Anti-Features
 
-| ID | User-visible effect | Status | Evidence | Sev | Cx | Cat |
-|----|--------------------|--------|----------|-----|----|-----|
-| 05-WR-01 | Phone: pressing ГОТОВО with no known selection puts a default caret at 0, next ✎ targets the first word | Present | `portia-editor.tsx:1908-1915` `finish()` focuses even when `target.selection` is null | W | S/M | E |
-| 05-WR-06 | The teal underline target cue is faint on the light preview field (~2.1:1) | Present, **needs a visual check** | `portia.css:516` rgba(desktop-glow,.9); light field `portia.css:599` (`#f3f1e9`) | W | S | E |
-| 05-IN-01 | `event order:` tests drive a hand-written event list, not component wiring | Accept-as-is per reviewer; optional boundary test (`at === ownUntil + 400`) | `rich-text-style.test.ts:162-220` | I | S | H |
-| 05-IN-02 | Own-input window can stay open/close early in rare sequences | **Accept** (follows D-05 design; reviewer: "None required") | `rich-text-style.ts:146-151` | I | - | E (close, no code) |
-| 05-IN-03 | Stale CSS comment + two imports from `rich-text-style` | **Half fixed**: comment resolved (`portia.css:515`). Import merge open | `portia-editor.tsx:23-24` | I | S | H |
-| 05-IN-04 | Disposition record says WR-02 plainly «fixed» while the 17 px «M» preset jump is deferred | Doc-only; not a code issue | disposition file; the 17 px jump is the PROJECT.md out-of-scope row «Пресеты размера панели…» | I | S | H (close with note) |
-| 05-IN-05 | `text-decoration` thickness in `::highlight` may fall back to a 1 px hairline in some browsers; none where Highlight API is missing | **Not verifiable here**: owner approved 05-07 steps 1-5 on PC and phone (05-07-SUMMARY) | `portia.css:516` | I | - | E (close with owner approval, or add Safari/Firefox check) |
-| 05-IN-06 | «No fill in marker» guarantee is only a one-off plan check | Present | no test reads the `::highlight` rule; existing CSS tests (`accent-theme.test.ts:8`, `editor-field-look.test.ts:5`) already `readFileSync` portia.css, so adding one is 5 lines | I | S | E |
-| 05-WR-05 (deferred) | `matchMedia("(max-width: 900px)")` duplicated; dragged panel place not re-clamped when storage blocked | Present (duplication confirmed: `portia-editor.tsx:402,875,910,1896,1910,1944,1963`); re-clamp half not verified | W | S/M | H or E (deferred in v1.0; decide in/out) |
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Editors can edit a grant's nick | "Fix typos" | Rewrites identity and breaks audit | Reject and re-request. |
+| Hard-deleting requests | Tidy list | Loses audit trail | Revoked/rejected stay; list filters hide them. |
+| Per-editor approval quorum (2 approvals) | Safer | Process overhead for a tiny team | Audit trail + revoke. |
+| CSV export/import of users | Admin habit | Not needed at this size, privacy surface | Skip. |
 
-## Table stakes for v1.1 (what users must be able to rely on after the milestone)
+---
 
-This is a fix milestone, so «features» are behaviours. Each lists the expected behaviour once fixed.
+### C. Clearance levels 1–5 on content
 
-### A. Employee saves
-| Behaviour | Source | Expected behaviour once fixed |
-|-----------|--------|--------------------------------|
-| Saves never erase untouched fields | 03.1-WR-02, 03.2-WR-04, 03.2-WR-02 | Editor sends only changed keys; server treats a missing key as «unchanged» for bio, photo and ratings alike. A save from an old/degraded cached roster is refused with a clear «Обновите страницу» message |
-| Typing during a save survives | 03.2-WR-03 | Fields are disabled (fieldset) while «СОХРАНЕНИЕ…», or the server copy only replaces the draft if it is unchanged since send |
-| Save does not depend on Roblox/Sheets uptime | 03.1-WR-03, 03.3-WR-03 | A valid employee saves even if Roblox is down; no 404 for a valid id; a deleted-meanwhile row says so; details failure still reports that the profile was saved |
-| «СОХРАНЕНО» timing is safe | 03.1-WR-06 | One save at a time; employee switch blocked until it ends; timer cleared |
-| Outage never blanks the public Personnel window | 03.1-WR-01, 03.3-WR-02 | A degraded answer keeps previously known bios/ratings/photos and manual people and does not overwrite the localStorage cache |
-| Photo URL fix is picked up at once | 03.1-WR-05 | `key={src}` or reset state |
-| Add manual employee even from an empty roster | 03.3-WR-04 | «+ ВНЕ ТАБЛИЦЫ» is visible with no selection |
-| Roblox canonical casing; `details:{}` doesn't clear | 03.3-IN-01/02 | cosmetic / latent |
+#### Table Stakes
 
-### B. Content sync and normalization
-| Behaviour | Source | Expected |
-|-----------|--------|----------|
-| Polling is invisible to the editor | 03.1-WR-04, 03.2-WR-01 | Unchanged revision = no new object: undo/redo survives, no 10 s re-render |
-| Nothing is cut silently | 03.1-WR-07, 03.3-WR-01 | One policy for both: shared limit constants; the editor disables «+» buttons at the limit (50/100/100) and shows rich-text size; server answers 400 over the limit instead of `.slice` |
-| No junk left behind | 03.1-WR-08, WR-09, IN-08 | Permanent delete removes `virus:<id>:*` and `recycle:<id>:content` keys; type change away from news clears `important`; end-before-start is cleared/swapped with a hint |
-| Old cached content doesn't crash | 03.1-WR-12 | `?? []` |
-| Local-path validation exact | 03.1-IN-02 | `/^\/(?!\/)/` in 3 TS places + SQL `not like '//%'` |
-| 35th employee noticed | 03.1-IN-03 | stop at empty number/«Сотрудников:» or log |
-| No first-render quest flicker | 03.2-IN-05 | lazy init of `today` or `questState("")` = active |
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| Level on the grant: observer=1, table employee=2 on approval, editors raise manually up to 5 | Owner's words | LOW | Editors and owner implicitly see everything. Open question for discuss-phase: who may grant 4–5 (any editor vs owner only). |
+| Required level per item in База вирусов, Справочник, Информация, Устав | Owner's words | HIGH | Visible = `user level >= item level`. Default for all existing content on migration: 1 (keeps current behaviour for approved users; owner raises later). Level field must be editable in each of the four editors with one shared control. |
+| Granularity: per whole item (virus record, Справочник card, Информация section/subsection, Устав document) | Cheapest model that matches "select for each piece of information" | MEDIUM | Children inherit the parent's level and may only be equal or higher (a child cannot be more public than its parent). |
+| Enforcement on the server BEFORE data leaves (filter at query/serialization time) | Filter-after-render and client-side hiding are the classic leak (Confluence/SharePoint search-leak bugs) | HIGH | `/api/content` must return a per-level projection. Never ship restricted payloads and hide them in React. |
+| Restricted items are omitted from search, "recent", links lists, previews, counts, and the assistant/«Вивьян» | Titles and snippets in search are the usual leak; counts and "no results" also leak | HIGH | Global search index (Справочник has global search; SRCH work from v1.3) must filter by level before ranking. Include media thumbnails and Корзина (trash) for non-editors: trash is editor-only, check it. |
+| One consistent presentation for restricted items in browse views | Avoid mixed hide/lock UX | LOW | Recommendation: **omit** from search and any aggregate; in plain browse lists/trees show an anonymous locked stub («▒▒ ЗАСЕКРЕЧЕНО · нужен допуск N») with no title, no icon type, no thumbnail. Thematically fits "classified" while leaking only the existence and required level. If the owner wants zero leakage, flip a single switch to omit stubs entirely (see Differentiators). |
+| Deep link to a restricted item shows the lock screen with required level only (no title) | Links shared in chat must not leak | LOW | Same response shape as an unknown id is the stricter option; lock screen is acceptable because ids are random. |
+| Scientist records («записи учёных») become optional | Owner's words | MEDIUM | Not required in validation/normalization (`portia-content-normalize`, `portia-content`), hidden when empty, existing data never deleted. Touches templates and the editor forms. |
+| Level changes take effect immediately and survive CDN caching | A lowered level must not keep serving stale data | HIGH | See Dependencies: cache keying. |
 
-### C. Robustness
-| Behaviour | Source | Expected |
-|-----------|--------|----------|
-| Desktop never white-screens on odd data | 03.1-WR-10, 03.1-WR-07 | fallback tip; `text ?? ""` in `FormattedText`; string coercion in `normalizeBroadcasts` and virus normalize; items without non-empty string `id` dropped |
-| Bad JSON gives 400 | 03.1-IN-06, 03.3-IN-03 (+ content PUT, editors POST) | one helper `readJson(request)` returning null, 400 «Некорректные данные.» |
-| Pure state updaters | 03.1-IN-09 | side effects moved to effects/refs |
+#### Differentiators
 
-### D. Security
-| Behaviour | Source | Expected |
-|-----------|--------|----------|
-| Only confirmed emails can edit | 03.1-WR-11 | SQL helpers join `auth.users` with `email_confirmed_at is not null` (**owner applies SQL**; ship it as a clearly marked migration block in `portia_setup.sql` + a note that «Confirm email» must stay on). In code (verifiable): also reject `user.email_confirmed_at == null` in `getEditorAccess` |
-| No yes/no oracle for anonymous | 03.1-WR-11 | stop granting `portia_editor_is_approved` to `anon` (check what sign-up flow calls it before revoking: dependency, see Pitfalls) |
-| Public tables don't leak internals | 03.1-IN-10 | view or column grants without `updated_by`; drop storage `select` policy if listing unused; owner email not hard-coded (deploy setting) |
-| Embedded pages sandboxed | 03.1-IN-07, 03.3-IN-04 | charter/sheet: `sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"` (no top-navigation); YouTube: `allow-scripts allow-same-origin allow-presentation allow-popups`. Must be checked live that «Таблица» (Google viewer) and «Устав» still load and Ctrl-zoom/+/- still work |
-| No text-matching on error strings | 03.3-IN-04 | 403 body carries `code: "sheet"` |
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Per-block level inside a Справочник card / Информация section (redact only part) | Mixed-clearance pages without duplicating them | HIGH | Defer unless the owner asks; per-item covers the stated need. If done, render a redaction bar for the block (██████), same inheritance rule. |
+| Global "show locked stubs" vs "hide completely" switch | Owner chooses between theme and zero-leak | LOW | Single site setting once projection exists. |
+| Level badge on items in the editor (colored chip) + bulk "set level" on selected items | Editors can audit what is open | MEDIUM | Prevents "forgot to set the level" errors. |
+| "Просмотр как уровень N" (shared with the Users tab) | See above | MEDIUM | |
 
-### E/F. Editor, format panel, embedded zoom
-| Behaviour | Source | Expected |
-|-----------|--------|----------|
-| ГОТОВО on phone never retargets to the first word | 05-WR-01 | with no known selection, no `focus()`, or mark the focus read as not-own |
-| Target cue visible on light field | 05-WR-06 | darker teal (e.g. rgba(0,150,132,.95)) after a look at `preview-light`; guarded by 05-IN-06 test |
-| Undo/redo follows the card | 03.2-IN-04 | `step` switches `broadcastEditorTab` |
-| Drag handle explains itself | 01-IN-02 | `title="Удерживайте и перетащите (или стрелки ↑↓)"` |
-| Ctrl+wheel zoom | 01-WR-01/02/03 | Win/Cmd do not raise the overlay (`ctrlKey` only); overlay cannot get stuck (`onPointerMove` without `ctrlKey` hides it; also hide on `visibilitychange`); Ctrl+click works. **WR-01 has a hard platform limit**: events over a cross-origin iframe never reach the parent, so the reviewer's «pointermove on the overlay» fix cannot work while the pointer is over the frame. Recommend: accept the limitation, document it with a `shortcut:` comment, rely on +/− buttons; optional spike: refocus the parent on `mouseenter` of the frame (steals keyboard-scroll focus from the document, so owner should choose) |
-| Zoom % announced | 01-IN-03 | `aria-label={\`Сбросить масштаб, сейчас ${pct}%\`}` |
+#### Anti-Features
 
-### G. A11y and copy
-Toast: `role="region"` + `aria-label`, Escape listener on `document` while shown (03.1-IN-04 + 03.2-IN-01 one change); drop `role="listbox"` on the virus list or add `option`/`aria-selected`; remove joke copy and the empty `<small>` (03.1-IN-05); `title` on the Roblox portrait link (01-IN-01); soften toast CSS comment (03.2-IN-03).
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Per-field levels (hide just the age, just a photo) | "Maximum control" | Combinatorial editor UI, huge test surface, redaction leaks via layout | Per-item, optional per-block later. |
+| Per-user allow-lists (give person X record Y) | Exceptions | Becomes an ACL system; unmanageable | Raise the person's level. |
+| Hiding only in the UI / blurring images client-side | Cheap | Data is still in the payload | Server projection. |
+| Public "level 0" tier | Some content open to strangers | Contradicts anti-espionage (nothing visible pre-approval) | Level 1 requires an approved nick. |
+| Levels on Сотрудники / Повышение / Рассылки | Consistency | Owner scoped levels to four areas only | Out of scope; revisit later. |
+| Gating the embedded «Устав»/«Таблица» by hiding the iframe only | Quick | The iframe URL is itself the secret and cross-origin docs cannot be partially redacted | Whole-document level; URL only issued by the server to users with enough level. Document that a publicly shared Google link stays a leak outside the site. |
 
-## Differentiators
-None. By definition this milestone adds no user-facing features. The only user-visible «new» things are warnings/limit hints (guide size, quest dates, rich-text size).
+---
 
-## Anti-Features (explicitly do NOT build)
+### D. Unified design style (retro OS)
 
-| Anti-feature | Why avoid | Instead |
-|--------------|-----------|---------|
-| Optimistic revision check for employee edits | PROJECT.md accepts «последняя запись побеждает» (AR-03.2-01) | Reduce collisions by sending only changed keys (03.2-WR-04) |
-| Realtime channel instead of 10 s poll | decided in 03.2-07 | Fix the identity churn only |
-| Error boundary framework / global state rewrite | Disproportionate for the findings | Targeted fallbacks (WR-10, WR-07) |
-| Disabling assistant controls (05 WR-01 old pass, D-19) | Locked decision | n/a |
-| 17 px «M» preset sizes per area | PROJECT.md out of scope for v1.1 (2026-10-19) | n/a |
-| Hiding the quest toast while the editor is open | Owner decision 03.2-07 | Keep; fix comment only |
-| Fixing the unfixable: zoom while iframe focused | Cross-origin platform limit | Document the limit, keep +/− |
+#### Table Stakes
 
-## Feature (finding) dependencies
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| One corner rule, expressed as tokens, applied everywhere | Owner complaint: mixed rounded/sharp | MEDIUM | Tokens: `--r-0` (0), `--r-1` (2px), `--r-2` (4px), `--r-pill`. Containers (windows, panels, tables, inputs, tabs) use one value; the exception class is explicit and documented (e.g. selectable thumbnails/pickers, per owner's own example). |
+| Elevation scale instead of ad-hoc shadows | Flat retro UIs need a deliberate depth system | MEDIUM | 4 steps: flat, raised panel, floating (menu/popover), window (active stronger than inactive). Implement with border + hard offset or bevel, not soft blur, to stay on-brand. |
+| Button variants: primary, secondary, ghost/toolbar, danger, icon-only; states default/hover/active/disabled/focus-visible | Buttons are currently inconsistent between apps and editor tabs | MEDIUM | One shared component/class set; two sizes. Keep `--accent-hue` recolouring (LOOK-01) working through all variants. |
+| Close button flush in the window's exact corner | Owner's complaint | LOW | Titlebar controls occupy full titlebar height, flush right, zero padding; hit area extends to the corner (Fitts's law). Same on mobile full-screen windows. |
+| Maximized windows use the space sensibly | Owner complaint ("Доступные записи" one per row) | MEDIUM–HIGH | Use container queries on the window content (Tailwind 4 has `@container` built in), not viewport media queries, with `repeat(auto-fill, minmax(Npx, 1fr))` grids for record lists. Cap line length for long text. Maximized = no radius, no outer border/shadow, flush to taskbar. |
+| Shared editor-tab layout (header with title/count/primary action, toolbar with search/filters, list/detail, footer actions) used by all tabs incl. «Пользователи» | Owner asks for a uniform tab/app format | MEDIUM | Scope is styling + layout primitives, NOT the "единая система приложений" rebuild (explicitly out of v1.4). |
+| Density: compact (pointer) vs comfortable (touch ≤900px) via a small set of tokens | Phone is a real audience | LOW–MEDIUM | Control heights and spacing as tokens switched at the existing 900px breakpoint; touch targets target 44px. |
+| Six new class icons (all but «Способ распространения») | Owner's ask | MEDIUM | Constraint: propose options to the owner first (PROJECT.md: new SVG needs approval). SVG in `currentColor`. |
+| Direction options for the owner to choose | Owner's ask | MEDIUM | See below; owner has dropped galleries (memory), so present as text + token tables, or a `data-ui-style` switch on localhost. |
+| Fix shortcut layout at 521–900px and axe findings | Already listed in Active | MEDIUM | Do after tokens exist so fixes are not redone. |
+
+#### Direction options to put before the owner (recommendation first)
+
+1. **C. Hybrid by meaning (recommended):** sharp containers (windows, panels, inputs, tables, tabs), rounded only for selectable tiles/thumbnails/pickers and pills. Matches the owner's own wording and the «Электрофорез» terminal/gel identity. Lowest rework.
+2. **A. Fully sharp terminal:** radius 0 everywhere except avatars/radios; bevel/line borders. Most coherent retro-OS read, harshest against the existing gel/web art.
+3. **B. Soft OS:** windows 8px, controls 4px, pills for chips; closest to modern macOS-like feel, weakest "lab terminal" character.
+
+Implement all as one token set so switching directions is a variable change, not a rewrite (this is also what makes "show 2–3 options" cheap).
+
+#### Differentiators
+
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Token-driven style switch (`html[data-ui-style]`) for trying options on localhost | Owner picks by seeing, not reading | LOW once tokens exist | Dev-only; remove or freeze after the decision. |
+| Titlebar states (active/inactive window) tied to elevation + accent | Sells the "real OS" feel | LOW | |
+| Window "snap to half" for maximize/restore parity | OS feel | MEDIUM | Defer unless cheap. |
+
+#### Anti-Features
+
+| Feature | Why Requested | Why Problematic | Alternative |
+|---------|---------------|-----------------|-------------|
+| Full component library / Storybook | "Proper design system" | Solo-owner site; big scope | Tokens + ~6 shared primitives. |
+| User-selectable corner style in Settings | Customisation | Doubles every visual test, conflicts with "one rule" | Single decided style. |
+| Per-app themes | Variety | Contradicts the unification goal | Accent hue only (exists). |
+| Rebuilding the app registry/windows ("единая система приложений") | Natural neighbour | Explicitly excluded from v1.4 | Separate milestone. |
+| Re-drawing all seven class icons | Consistency | Owner likes «Способ распространения» | Keep it; match the other six to it. |
+| SVG spider / new animations without approval | Polish | Owner vetoed before | Ask first. |
+
+---
+
+## Feature Dependencies
 
 ```
-03.1-WR-02 (server: missing key = unchanged)
-   -> 03.2-WR-04 (client sends only changed keys)   [design together; do NOT make the server 400 on a missing
-                                                     biography/photoUrl as the review suggests, or partial sends break]
-   -> 03.2-WR-02 (reject payload without profilesRead === true)
-03.1-WR-01 + 03.3-WR-02: one fetchEmployees merge; server must expose why it is degraded
-   (today `degraded = !complete` conflates profiles-failed, roblox-failed, manual-failed; add `manualRead` flag or send the three booleans)
-03.1-WR-03 + 03.3-WR-03: both rework PATCH in api/employees/route.ts; do in one plan (resolve id without Roblox; keep `source` knowledge for details)
-03.1-WR-04 = 03.2-WR-01 (one change closes both)
-03.1-WR-07 + 03.3-WR-01 (+ 03.1-WR-08 shrink the key count): shared limits in lib/portia-content.ts, then normalizer + editor + tests
-03.1-IN-04 = 03.2-IN-01 (one change)
-03.1-IN-06 = 03.3-IN-03 (+ content PUT, editors POST): one helper
-03.1-IN-07 = 03.3-IN-04a (+ charter/sheet frame): sandbox for 3 iframes at once
-03.1-IN-02 touches TS (3 places) and SQL (owner-applied)
-03.1-WR-11 / IN-10 / IN-02(SQL) : single SQL migration block; owner applies; lands last, independent of code
-05-WR-06 -> 05-IN-06 (write the css test with the new color)
-01-IN-03, WR-02, WR-03 : same component (EmbeddedDocument), one plan
+Device-token grant + gate (A)
+    ├──requires──> server-side projection of /api/content, /api/employees, search, uploads
+    │                   └──requires──> CDN cache change (per-level cache key or no-store)
+    ├──requires──> anon write path via server route/RPC with rate limit (revoke anon portia_promo_register_attempt)
+    └──requires──> approved/revoked state check on every request
+
+Users tab (B) ──requires──> grants + events tables, decision RPCs, EditorTab/permission extension
+Access levels (C) ──requires──> grant.level (A, B) AND projection layer
+    └──requires──> per-item level field in content model + normalization + editor control in 4 editors
+Promotion nick reuse ──requires──> grant lookup (A); ──conflicts──> promotion's own device binding if not reconciled
+Scientist records optional ──independent──> (touches content normalize/validation only)
+Design tokens (D) ──precedes──> shared editor-tab layout ──precedes──> Users tab UI, level controls, axe/521–900px fixes
+New class icons ──requires──> owner approval of options
+"Просмотр как уровень N" ──enhances──> B and C; strongly recommended before shipping C
 ```
 
-## MVP recommendation (priority for the roadmap)
+### Dependency Notes
 
-1. **Employee-save data loss** (A): 03.1-WR-02, 03.2-WR-04/WR-02/WR-03, 03.1-WR-06, 03.1-WR-01 + 03.3-WR-02, 03.1-WR-03 + 03.3-WR-03, 03.1-WR-05, 03.3-WR-04. This is the milestone's stated first priority (data loss). Mostly `lib/portia-employees.ts`, `api/employees/route.ts`, `portia-editor.tsx` employee tab, `fetchEmployees`.
-2. **Content sync and normalization** (B) + **robustness** (C): WR-04/03.2-WR-01 (small, high value), WR-07/03.3-WR-01 (policy), WR-08/09/12, IN-08, IN-02, IN-03, 03.2-IN-05, WR-10, IN-06/03.3-IN-03, IN-09.
-3. **Security** (D): sandbox, `getEditorAccess` confirmed-email check, SQL migration block for the owner.
-4. **Editor/format panel + embedded zoom** (E, F): 05-WR-01, WR-06 (+ test IN-06), 03.2-IN-04, 01 zoom trio; needs device checks (phone ГОТОВО, light-field contrast, sandboxed frames).
-5. **A11y/copy and tests/housekeeping** (G, H): mostly S items; include the closure-without-code list (below).
+- **CDN caching is the biggest hidden dependency.** `/api/content` and `/api/employees` are currently identical for all visitors, cached on Netlify's CDN and purged by tag. Per-level responses require either `no-store` (simplest; audience is small) or cache-key variation by a level cookie via `Netlify-Vary: cookie=<name>` (Netlify guidance: vary on named cookies, not the whole Cookie header; `Netlify-CDN-Cache-Control` keeps browser caches out). With 5 levels, keyed caching is feasible but the tag purge must clear all variants. Unauthenticated requests must never get a cached content response.
+- **Storage:** the `portia-media` bucket listing is an accepted public risk (IN-10-storage). Images belonging to leveled items remain fetchable by URL; either accept and document, or serve leveled media via signed URLs. Decide in discuss-phase.
+- **Embedded Google docs (Устав, Таблица):** protected only as far as the URL stays server-side.
+- **Anon RLS:** the milestone adds grant tables and revokes `portia_promo_register_attempt` from anon. All of it needs `supabase-rls-reviewer` and an isolated test project; production untouched (project hard rules).
+- **Promotion:** `PromotionIdentityGate`, `/api/promotion/status|requests`, and `portia_promo_device_bindings` must read the grant. Observers keep manual entry.
+- **Users tab depends on D** only for layout; the logic can be built before restyling but should adopt the shared layout in the same phase to avoid a second pass.
+- **Editors vs levels:** existing per-tab permissions (`closed_tabs`/`granted_tabs`) stay orthogonal; levels apply to readers.
 
-### Closed with a note, no code (per milestone goal)
-- 01-CR-01 (fixed in 01-03, verified in built HTML).
-- 05-IN-02 (accepted by design), 05-IN-04 (record note), 05-IN-05 (owner-approved on devices; reopen only if Safari/Firefox are in scope), 05-IN-01 (accepted; the optional boundary test is 3 lines if wanted).
-- 03.2-IN-03 second half (owner decision), 03.2-IN-02 mostly (logging exists; add one comment line).
+## MVP Definition
 
-Counts for REQUIREMENTS: code work in ~46 findings that collapse into roughly 25 distinct changes (see dependency groups); 8-9 are closures with a note or comment-only.
+### Launch With (v1.4)
+
+- [ ] Boot-screen nick request, 4-state lifecycle, device token, neutral pending/rejected/revoked screens
+- [ ] Server-side gate across all read paths, with the cache decision made
+- [ ] Table-match badge, conflict flag, soft Roblox check, rate limiting
+- [ ] «Пользователи» tab: queue, approve/reject/revoke/level change, who/when on row, concurrency-safe RPCs, event log
+- [ ] Levels 1–5 on grants; per-item required level in 4 areas; server projection; omit-from-search; locked stub; scientist records optional
+- [ ] Promotion uses the grant nick for employees
+- [ ] Token-based radius/elevation/button/density system, corner close button, container-query maximized layouts, shared editor-tab layout, owner-approved direction and icons
+
+### Add After Validation (v1.4.x)
+
+- [ ] Profile-code verification (when impersonation actually happens)
+- [ ] Multi-device "add this device" flow and sliding expiry
+- [ ] "Просмотр как уровень N", bulk level change, hide/stub switch
+
+### Future Consideration
+
+- [ ] Sign in with Roblox (OAuth) as real authentication
+- [ ] Per-block levels inside a page
+- [ ] Editor notifications (Discord/email)
+
+## Feature Prioritization Matrix
+
+| Feature | User Value | Implementation Cost | Priority |
+|---------|------------|---------------------|----------|
+| Server-side gate + grant lifecycle | HIGH | HIGH | P1 |
+| Users tab with audit | HIGH | MEDIUM | P1 |
+| Per-item levels + projection + search filtering | HIGH | HIGH | P1 |
+| Scientist records optional | MEDIUM | MEDIUM | P1 |
+| Promotion reuses grant nick | HIGH | MEDIUM | P1 |
+| Design tokens + corner/close/maximized fixes | HIGH | MEDIUM | P1 |
+| Shared editor-tab layout | MEDIUM | MEDIUM | P1 |
+| New class icons | MEDIUM | MEDIUM | P1 (needs owner approval) |
+| "Просмотр как уровень N" | HIGH (safety) | MEDIUM | P2, pull to P1 if budget allows |
+| Profile-code verification | HIGH | MEDIUM | P2 |
+| Multi-device approval | MEDIUM | MEDIUM | P2 |
+| Bulk actions | LOW | MEDIUM | P3 |
+| Per-block levels | LOW | HIGH | P3 |
+| Roblox OAuth | HIGH | HIGH | P3 |
+
+## Comparable Patterns
+
+| Feature | Reference pattern | Our approach |
+|---------|-------------------|--------------|
+| Access states | SailPoint / IBM PIM / Robomq: pending, approved, rejected, revoked, expired | 4 states, no expiry by default |
+| Restricted content in search | Confluence/SharePoint leak bugs; guidance to filter before ranking; KB tools hide restricted titles by default | Filter before ranking; omit from search; anonymous stub in browse only |
+| Roblox identity | Discord bots verify via profile code; OAuth gives `sub` = user id | Soft lookup now, profile code next, OAuth later |
+| Retro OS UI tokens | ryOS exposes border width, radius, titlebar height as CSS variables per theme; 98.css square-cornered bevels | Single token set, swap by `data-ui-style` |
 
 ## Sources
 
-- `.planning/milestones/v1.0-phases/PORTIA-01-ispravlenie-bagov/01-REVIEW.md`, `01-03-SUMMARY.md`
-- `.../PORTIA-03.1-stabilizatsiya/03.1-REVIEW.md`, `03.1-REVIEW-DISPOSITION.md`
-- `.../PORTIA-03.2-sotrudniki-i-svodka/03.2-REVIEW.md`
-- `.../PORTIA-03.3-.../03.3-REVIEW.md`, `03.3-REVIEW-DISPOSITION.md`
-- `.../PORTIA-05-oformlenie-teksta/05-REVIEW.md`, `05-REVIEW-DISPOSITION.md`, `05-07-SUMMARY.md`, `05-06-PLAN.md`
-- Current code at repo root: `components/portia-desktop.tsx`, `components/portia-editor.tsx`, `lib/portia-employees.ts`, `lib/portia-content-normalize.ts`, `lib/editor-items.ts`, `lib/editor-changes.ts`, `lib/broadcasts.ts`, `lib/portia-cdn.ts`, `lib/editor-access.ts`, `app/api/{employees,content,editors}/route.ts`, `app/layout.tsx`, `app/portia.css`, `supabase/portia_setup.sql` (all read directly; confidence HIGH). `npm test`: 202 pass.
-- Browser/DB runtime behaviour (sandboxed frames, `::highlight` thickness, RLS effects) not run here: MEDIUM/LOW until checked on a device or in Supabase.
+- Project: `.planning/PROJECT.md`; todos `2026-11-07-nick-access-request`, `2026-11-08-access-levels`, `2026-11-07-desktop-visual-overhaul` (HIGH, owner's words)
+- Codebase facts (HIGH): `supabase/migrations/20261101000000_portia_baseline.sql` (`portia_editors` closed/granted tabs, `portia_promo_device_bindings`, `portia_promo_attempt_buckets`, `portia_promo_audit_events`, anon `portia_promo_register_attempt`); `components/portia-editor.tsx` (`EditorTab` union); `components/portia-promotion.tsx` (`PromotionIdentityGate`); `app/api/content/route.ts`, `app/api/employees/route.ts` (public, CDN-cached, tag-purged)
+- Access request state models: SailPoint, IBM Security PIM, Robomq, BU CCURE portal docs (MEDIUM)
+- [Permission-aware global search design (AppMaster)](https://appmaster.io/blog/permission-aware-global-search-design) and [Permissions before retrieval](https://alpeshnakrani.com/books/rag-that-survives/permissions-before-retrieval/) (MEDIUM)
+- [Confluence CONF-32105: restricted content appears in search](https://jira.atlassian.com/browse/CONF-32105); [UW KB "Hide Restricted Documents from Search"](https://kb.wisc.edu/remote-instruction/12074) (MEDIUM)
+- [Roblox OAuth 2.0 reference](https://create.roblox.com/docs/cloud/auth/oauth2-reference) and [app implementation](https://create.roblox.com/docs/cloud/auth/oauth2-develop): `openid`/`profile` scopes, `sub` = user id, developer ID-verification required (HIGH)
+- Roblox username lookup (`/v1/usernames/users`, case-insensitivity) via [roblox-api crate](https://docs.rs/roblox-api/0.1.8/src/roblox_api/api/users/v1.rs.html) and community sources (LOW–MEDIUM: verify in sandbox)
+- [Netlify caching overview](https://docs.netlify.com/build/caching/caching-overview) and [cache key variations](https://www.netlify.com/blog/netlify-cache-key-variations/): `Netlify-Vary: cookie=` (HIGH)
+- ryOS and 98.css as retro-OS token references ([98.css topic](https://redirect.github.com/topics/windows98), [ryOS ui-design-styling](https://playbooks.com/skills/ryokun6/ryos/ui-design-styling)) (LOW–MEDIUM); radius/elevation/density recommendations are synthesis, not sourced
+
+---
+*Feature research for: PORTIA OS v1.4 access control and unified style*
+*Researched: 2026-11-09*

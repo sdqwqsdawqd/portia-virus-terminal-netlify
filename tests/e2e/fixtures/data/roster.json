@@ -1,0 +1,40 @@
+{
+  "schema": "portia-phase15-actor-roster-v1",
+  "revision": "phase16-actors-2026-11-01",
+  "target": {
+    "status": "BLOCKED",
+    "safeMarker": "runtime-attestation-required"
+  },
+  "actors": [
+    {
+      "id": "visitor",
+      "role": "visitor",
+      "lifecycleOwner": "test-runner",
+      "cleanup": "isolated browser context only"
+    },
+    {
+      "id": "participant-fixture",
+      "role": "participant",
+      "lifecycleOwner": "phase-16-isolated-fixture",
+      "cleanup": "Phase 16 only: delete namespaced Promotion rows and device binding"
+    },
+    {
+      "id": "editor-fixture",
+      "role": "editor",
+      "lifecycleOwner": "phase-16-isolated-fixture",
+      "cleanup": "Phase 16 only: revoke editor grant and delete disposable auth user"
+    },
+    {
+      "id": "promo-reviewer-fixture",
+      "role": "promo-reviewer",
+      "lifecycleOwner": "phase-16-isolated-fixture",
+      "cleanup": "Phase 16 only: release claims, revoke promo grant and delete disposable auth user"
+    },
+    {
+      "id": "owner-fixture",
+      "role": "owner",
+      "lifecycleOwner": "phase-16-isolated-fixture",
+      "cleanup": "Phase 16 isolated target only: disposable account with the canonical owner email from portia_owner_email(), created with the portia_run marker and deleted by run cleanup; never created, modified or deleted on production"
+    }
+  ]
+}

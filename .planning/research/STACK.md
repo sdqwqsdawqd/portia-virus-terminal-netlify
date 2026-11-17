@@ -1,228 +1,170 @@
 # Stack Research
 
-**Domain:** Subsequent milestone v1.1 «Закрытие замечаний» (review-debt fixes) on an existing Next.js 16 + Supabase + Netlify app
-**Researched:** 2026-10-19
-**Confidence:** HIGH for "no new dependencies" and the code-level mechanisms; MEDIUM for the Supabase auth edge cases and the iframe `sandbox` behaviour of Google/YouTube pages (needs one manual check in the browser)
+**Domain:** Visitor access gate (nickname request, approval, levels 1-5) and a unified design system on an existing Next.js + Supabase + Netlify desktop-OS site
+**Researched:** 2026-11-09
+**Scope:** Only additions/changes for milestone v1.4. Existing validated stack (Next 16, React 19, Tailwind 4, `@supabase/ssr`, Netlify CDN with tag purge) is not re-researched.
+**Confidence:** HIGH on identity and DB approach (derived from the repo's own proven promotion pattern plus Supabase docs); MEDIUM on Netlify edge behaviour (verify on a deploy preview); MEDIUM on the Next 16.4.5 bump (from a Netlify advisory page).
 
-## Verdict
+## Headline: add no runtime dependencies
 
-**Add nothing. Bump nothing.** Every open finding (WR and IN, phases 01, 03.1, 03.2, 03.3, 05) is fixable with platform features and libraries already installed. Run `npm install` for nothing; `package.json` and `package-lock.json` stay untouched except for what the fixes themselves do not need to touch.
-
-The only things that are "new" are:
-
-1. Three small SQL edits in `supabase/portia_setup.sql` (the owner applies them in the SQL Editor).
-2. One tiny pure helper in `lib/` (JSON body parsing) so five route handlers share one 400 path.
-3. One string constant for `sandbox` shared by three `<iframe>`s.
-4. Optionally one file, `app/error.tsx`.
+Every new capability fits the existing stack: `node:crypto` HMAC tokens, Postgres `SECURITY DEFINER` RPCs, plain CSS custom properties, and `node:test`. The work is a pattern change (public CDN-cached reads become per-visitor `no-store` reads) plus SQL, not a library change.
 
 ## Recommended Stack
 
-### Core Technologies (already installed; keep exactly as is)
+### Identity before approval
 
-| Technology | Version | Purpose | Why keep / what it gives the fixes |
-|------------|---------|---------|------------------------------------|
-| next | 16.4.2 (exact pin; `latest` on npm as of 2026-10-15) | App Router, route handlers, `app/error.tsx` | Decision 03.1-06 pins it exactly. Route handlers get the Web `Request`, so `request.json()` / `request.text()` need no helper library. `error.tsx` in 16.3+ has a stable `retry` prop. |
-| react / react-dom | 19.2.6 | UI | `sandbox`, `key={src}`, refs and effects cover WR-05, WR-06, WR-04, IN-07, IN-09 with no extra library. |
-| @supabase/supabase-js | 2.117.3 installed (2.118.0 exists) | Auth + PostgREST | Do **not** bump: no finding needs 2.118. `User.email_confirmed_at?: string` is already in the installed auth-js types, which is what the app-level confirmed-email check uses. |
-| @supabase/ssr | 0.12.7 | Cookie-based server client | Unchanged. |
-| typescript | 5.9.3 | `tsc --noEmit` | Unchanged. |
-| node:test (Node >=22.13) | built in | `npm test` = `node --experimental-strip-types --test lib/*.test.ts` | All new tests must live in `lib/*.test.ts` and import only relative `./x.ts` files (no `@/` alias, no `next/*`), exactly like the existing tests. |
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Opaque random device token in a new HttpOnly cookie (e.g. `portia_access`) | n/a (`node:crypto`, already used) | Holds the visitor's identity while the request is pending, and after approval | Reuses `lib/portia-device-binding.ts` (`createDeviceToken`, `keyedDigest`, `buildDeviceCookie`, `readDeviceToken`, `coarseIpBucket`). The server HMACs the token with `PORTIA_PROMOTION_DEVICE_SECRET` and passes only the digest to Postgres. No new env var; use a distinct HMAC domain label (`access:` instead of `device:`) so the two token spaces cannot be confused. |
+| Postgres `SECURITY DEFINER` RPCs granted to `anon`, keyed by `p_token_hash` | Postgres on Supabase | Submit request, poll status, resolve level, read gated content | This is exactly how the promotion flow already works (`portia_promo_resolve_device`, `portia_promo_bind_device`): tables are `revoke all ... from anon, authenticated`; only definer functions with `set search_path = ''` touch them. The digest is unforgeable without the server secret, so the browser cannot call the RPCs for someone else. |
+| Live lookup on every read (status/level read from the DB each time) | n/a | Revocation and level changes take effect at once | An editor who rejects or downgrades a person must cut access on the next poll. A signed self-contained token (JWT/iron-session) cannot be revoked without a DB lookup anyway, so it adds a dependency and no benefit. |
 
-### Fix mechanisms (finding -> tool). This is the part the roadmap needs.
+**Decision: do NOT use Supabase anonymous sign-ins.** (Supabase docs, verified 2026-11-09.)
+- Anonymous users get the `authenticated` role, not `anon`. Docs say to review all existing RLS policies before enabling them; this repo has many `to anon, authenticated` grants and `authenticated`-scoped policies, so every visitor would silently count as signed in. The whole RLS surface would need re-review for no gain.
+- Default limit of 30 sign-ins per hour per IP. A squad sharing one NAT or school network would hit it. The docs advise CAPTCHA (Turnstile/hCaptcha), a new third-party dependency.
+- No automatic cleanup: every visit creates an `auth.users` row you must prune.
+- `proxy.ts` deliberately excludes `/` and the content/employee GETs so they stay cookie-free and CDN-cacheable. Anonymous sessions need refresh there, reversing a decision made for resilience.
+- You still need your own approval/level table, so the built-in JWT buys nothing the RPC pattern does not.
 
-| Finding(s) | Mechanism | Where | Notes |
-|------------|-----------|-------|-------|
-| 03.1 WR-11 (confirmed email) | **Two layers.** (a) App: `getEditorAccess` returns `noAccess` unless `user.email_confirmed_at` is set. (b) SQL: new helper `portia_email_confirmed()` ANDed into `portia_is_owner()` and `portia_can_edit()`. | `lib/editor-access.ts`, `supabase/portia_setup.sql` | See "Supabase email confirmation" below. No JWT claim can do this job. |
-| 03.1 IN-06, 03.3 IN-03, WR-02/IN-02 (PATCH shape) | `parseJsonObject(text): Record<string, unknown> \| null` in a new `lib/json-body.ts`; handlers answer 400 «Некорректный запрос.» on `null`. | `app/api/employees` (PATCH, POST, DELETE), `app/api/editors` POST, `app/api/content` PUT | Pure string function, so it is testable under `node --test`. Also fixes two real bugs the review did not name: `editors` POST has no try/catch at all, and `content` PUT turns bad JSON into 500 via the outer catch. |
-| 03.1 IN-07, 03.3 IN-04a (sandbox) | One constant `embedSandbox`, used by all three `<iframe>`s (Sheets `htmlview`, GitHub Pages charter, `youtube-nocookie`). | `components/portia-desktop.tsx` (~lines 1245, 1524) | See "iframe sandbox" below. |
-| 03.1 IN-02 (protocol-relative URL) | Regex `/^\/(?!\/)/` in three TS places; SQL `photo_url like '/%' and photo_url not like '//%'`. | lib + editor + SQL | SQL needs `alter table ... drop constraint if exists portia_employee_profiles_photo_url_check; add constraint ... check (...) not valid;` because `create table if not exists` never changes an existing table. `not valid` keeps old rows from blocking the script. |
-| 03.1 WR-04, 03.2 WR-01 (history wipe) | Plain ref guard in `fetchContent`: skip `setContent` when `contentApplied.current && fetchedRevision === knownRevision.current`. | `components/portia-desktop.tsx` | No state library. Keep the equal-revision acceptance for first apply and after the 409 reset. |
-| 03.1 WR-05 | `key={src}` on `<EmployeeImage>`. | desktop | |
-| 03.1 WR-06 | `useRef<number>` timer + cleanup effect (same pattern as the desktop's `saveStateTimer`). | editor | |
-| 03.1 WR-07, 03.3 WR-01 (silent truncation) | Shared constants (e.g. `infoLimits`) exported from `lib/portia-content.ts`, used by the normalizer `.slice()` calls **and** the editor's `disabled=` on add buttons. For rich text, either raise the run/key caps or make `PUT` reject over-limit input with 400. | `lib/portia-content*.ts`, editor | Coerce strings explicitly in `normalizeBroadcasts` / `infoSections` (`typeof x === "string" ? x : ""`), same style as the existing `asText` helper. No schema library. |
-| 03.1 WR-08 | `removeRecycledVirus` / `removeRecycleFile` in `lib/editor-items.ts` (delete `formattedText` keys with prefix `virus:${id}:` / `portiaTextKey.recycle(id)`), tests next to `removeBroadcast`. | lib | |
-| 03.1 WR-09 | `item.type = type; if (type !== "news") item.important = false;` (optionally gate reader on `type === "news"`). | editor | |
-| 03.1 WR-10, WR-12 | `?? "..."` / `?? []`; `text ?? ""` inside `FormattedText`. | desktop, `lib/editor-changes.ts` | |
-| 03.1 WR-01, 03.3 WR-02 (degraded roster) | Merge-on-degraded in `fetchEmployees` (keep prior profile fields / prior `source === "manual"` rows) and do not write the degraded payload to `localStorage`. | desktop | |
-| 03.1 WR-03 | PATCH resolves the employee from the sheet only (accept client `id` if it is `roblox-\d+` or matches the sheet nickname id); no Roblox call on save. | `app/api/employees`, `lib/portia-employees.ts` | |
-| 03.2 WR-02/03/04 | Editor rejects roster unless `profilesRead === true`; `<fieldset disabled={state === "saving"}>`; send only changed keys. | editor | `<fieldset disabled>` is native HTML, no library. |
-| 03.3 WR-03 | Distinct `not-found` result for "zero rows", plus try/catch around `updateManualEmployee`. | `lib/portia-employees.ts`, route | |
-| 03.3 WR-04 | Move the early `return` so the list aside + add form render with an empty roster. | editor | |
-| 03.3 IN-04b | Machine-readable `code: "sheet"` in the 403 body instead of `includes("таблицы")`. | route + editor | |
-| 05 WR-06 (contrast) | Change the one CSS rule to `text-decoration: underline solid rgba(0,130,114,.95) 3px;` | `app/portia.css:516` | Computed WCAG contrast (own calculation, field colours from `portia.css`): current `rgba(0,188,166,.9)` = **2.0:1** on `#f3f1e9`; the reviewer's `rgba(0,150,132,.95)` = 3.08:1 (borderline); `rgba(0,130,114,.95)` = **3.88:1 light / ~3.7:1 dark** (dark bg approximated from `oklch(.168 …)`). One colour works on both previews. Re-check on the other `preview-light` areas (`--paper`, `#eeeee9`) when eyeballing. |
-| 05 IN-05 | No code. `::highlight()` accepts `text-decoration` "and its associated properties"; the Custom Highlight API is Baseline "newly available" since March 2026 (MDN). Thickness inside `::highlight` is not named explicitly, so it stays a one-time visual check. | | |
-| 05 IN-06 | Source-reading test in `lib/` (see Development Tools). | `lib/portia-css.test.ts` | |
-| 05 WR-01 | Pure logic, no stack: skip `field.focus()` when `target.selection` is null (or send the focus read as non-own). | editor | |
-| 05 IN-01/IN-02, 03.1 IN-04, 03.2 IN-01/IN-04, a11y, copy, labels | Plain ARIA attributes / text edits. `window` Esc listener while toast shown, `role="region"` + `aria-label`, `role="option"` + `aria-selected` or drop `listbox`. | desktop | |
-| 03.1 IN-01 (storage key) | Export `settingsStorageKey` from `lib/accent-boot.ts`; test asserts the requested key. | lib | |
-| 03.1 IN-08 | Clear/swap `endsAt < startsAt` in `normalizeBroadcasts` + one hint in the editor. ISO `YYYY-MM-DD` strings compare correctly with `<`, no date library. | lib/editor | |
-| 03.1 IN-09 | Move the `localStorage` write out of the `setEmployees` updater into an effect keyed on `employees`; keep the z counter in a `useRef`. | desktop | |
+Editors and the owner keep Supabase Auth unchanged. `getEditorAccess()` returning `canEdit` is treated as "full access" (level 5) and bypasses the nickname gate. `/owner-login` stays reachable without the gate.
 
-### Supabase email confirmation (WR-11): exact approach
+### Database: making content unreadable to `anon`
 
-**Why the JWT cannot do it.** The Supabase access-token field list (docs "JWT Fields") has `email`, `phone`, `is_anonymous`, `aal`, `amr`, `app_metadata`, `user_metadata`, but no `email_confirmed_at` / `email_verified`. `user_metadata` is writable by the signed-in user themself, so it must never gate authorization. Therefore the only trustworthy server-side source is `auth.users.email_confirmed_at`.
+| Change | Purpose | Why |
+|--------|---------|-----|
+| Drop the "Public can read ..." SELECT policies and `grant select ... to anon` on `portia_content`, `portia_employee_profiles`, `portia_manual_employees`; add `to authenticated using (public.portia_can_edit())` read policies | Anonymous publishable-key reads return nothing | Today anyone with the publishable key can `select *` from `portia_content` directly (baseline `Public can read PORTIA content ... using (true)`). Hiding the UI is not enough; this is the real anti-espionage cut. |
+| New tables (RLS on, all privileges revoked from `public, anon, authenticated`), e.g. `portia_access_people`, `portia_access_devices`, `portia_access_audit` | Requests, status (`pending/approved/rejected/revoked`), kind (`table`/`observer`), level 1-5 | Same shape and revoke block as the `portia_promo_*` tables. Level is a `smallint` with `check (level between 1 and 5)`. |
+| `portia_visitor_content(p_token_hash)` (definer) returning payload, revision, updated_at, level for an approved visitor, nothing otherwise; same for employee profiles | The only read path for non-editors | Single choke point, mirrors `portia_promo_public_status`. |
+| Editor RPCs gated by `portia_can_edit_tab('users')`: list people/requests, decide, set level, revoke | Backs the «Пользователи» tab | Same style as `portia_promo_reviewer_state` / `portia_promo_reject_request` with an audit row per action. |
+| Explicit `revoke execute ... from public, anon` on every new editor-only function, and on `portia_promo_register_attempt` | Closes the carried-over v1.4 item | The app has no caller of `register_attempt` outside tests (grep of `lib/` and `app/`), so revoking is safe; any future caller must be inside another definer function. Follow `20261101000100_portia_explicit_grants.sql` and keep the fingerprint file in `supabase/fingerprint/expected/` in step. |
 
-**SQL (owner applies; idempotent):**
+**Per-item access level: store in the JSONB, redact in one pure TS function. Do not try column + RLS or views.**
+- `PortiaContent` is ONE row (`portia_content.id = 'main'`) holding arrays of viruses, info sections, guide sections/cards. Row-level security cannot filter items inside a JSONB document; a view over `jsonb_array_elements` would work for the arrays but is a second implementation of the redaction rules.
+- Add an optional `minLevel` (1-5, missing = 1 so nothing existing becomes hidden) to `Virus`, `InfoSection`, `GuideSection`/`GuideCard` and clamp it in `normalizePortiaContent` (`lib/portia-content-normalize.ts`) with limits in `lib/content-limits.ts`.
+- `GET /api/content` calls `portia_visitor_content(digest)`, then `redactContentForLevel(content, level)` in `lib/` (a new pure, unit-tested module like the rest of `lib/`).
+- **Critical leak vector:** rich text for hidden items lives OUTSIDE the item, in `formattedText`, keyed by `portiaTextKey` (`virus:<id>:...`, `info:<id>:body`, `info-block:<blockId>:text`, `guide-block:<blockId>:text`). Redaction must drop those keys too, and also drop `recycledViruses`, `recycleFiles` and editor-only outline sections for non-editors. Add a test that serializes the redacted result and asserts no hidden item id, title or text substring remains.
+- Security note: the RPC returns the full payload to the server runtime, which trims it. This is acceptable because the digest cannot be produced without `PORTIA_PROMOTION_DEVICE_SECRET`. If you later want defence in depth, add a SQL `portia_redact_content(jsonb, int)` that does the same trimming, but only with a shared test-vector fixture so the TS and SQL versions cannot drift.
+- Writes are unchanged: editors PUT the full document; keep the existing compare-and-swap on `revision`. An editor never receives a redacted document, so there is no risk of a redacted copy being saved back. Never let `PUT` accept a payload that came from a gated read.
 
-```sql
--- true only when the caller's own account has a confirmed address
-create or replace function public.portia_email_confirmed()
-returns boolean
-language sql
-stable
-security definer
-set search_path = ''
-as $$
-  select exists (
-    select 1 from auth.users
-    where id = (select auth.uid()) and email_confirmed_at is not null
-  );
-$$;
-revoke all on function public.portia_email_confirmed() from public, anon, authenticated;
-```
+Alternative considered for flat tables (employees): RLS with the digest passed as a request header (`createClient(url, key, { global: { headers: { 'x-portia-visitor': digest } } })` and `current_setting('request.headers', true)::json ->> 'x-portia-visitor'` inside the policy). It keeps `.from(...).select()` code unchanged but introduces a second mechanism next to RPCs. Not recommended; one mechanism is easier to review.
 
-Then add `public.portia_email_confirmed() and` in front of the existing expressions in `portia_is_owner()` and `portia_can_edit()` (keep their `security definer` and `set search_path = public`; keep every `grant`/`revoke` already in the script).
+### CDN / cache layer (Netlify)
 
-- `security definer` is required because `authenticated` has no privilege on `auth.users`. `search_path` must be pinned (Supabase lint 0011 and the advisories flag definer functions without it); `auth.users` is schema-qualified so `''` is safe.
-- The inner helper needs **no** grant to `anon`/`authenticated`: it is called from inside other definer functions, which run with the definer's rights (same pattern the script already uses for `portia_owner_email()`).
-- Policies already call `(select public.portia_can_edit())`, so every table, storage and RPC check inherits the fix with zero policy edits.
+| Change | Purpose | Why |
+|--------|---------|-----|
+| `GET /api/content` and `GET /api/employees`: replace `publicCacheHeaders(...)` with `noStoreHeaders` (`Cache-Control: no-store`, `Netlify-CDN-Cache-Control: no-store`); drop `Netlify-Cache-Tag` on these | Per-visitor responses must never be shared | Today they ship `public, durable, s-maxage=300/600, stale-while-revalidate=86400`, so a shared copy is served to everyone and survives a day stale. Both new status/gate endpoints are `no-store` too. Netlify docs: `no-store` and `private` mean the shared cache does not store the response. |
+| Never use `Netlify-Vary: cookie=...` on a level or role cookie | Prevents cache-key forgery | Netlify's cache sits in front of your function, so a cached "level 4" variant keyed by a client-supplied value would be served to anyone sending that value without the function validating it. (Keying on the raw random token is safe but useless.) Cache nothing gated. |
+| `app/page.tsx`: stop passing `defaultPortiaContent`; pass a content-free skeleton | The HTML/RSC payload and JS chunks are CDN-cached and public | `Home()` currently serializes the whole seed (viruses like "МОРОК", etc.) into the document. Move the seed into a server-only module (used by the `/api/content` fallback) and add a post-build guard that greps `.next/static` and prerendered HTML for a seed marker string. Check that `lib/portia-content.ts` is not pulling the seed into client chunks via the desktop's imports (types and `findInfo`/`findGuide` live in the same file). |
+| Bump localStorage keys `portia-content-last-success-v1` and `portia-employees-last-success-v1` to `-v2`, delete the `-v1` keys at startup, stop reading them before the gate has said "approved", clear them on reject/revoke/401 | First paint currently seeds from a local copy; a revoked visitor would keep reading | These caches are part of the leak surface. The seed-from-cache path (desktop ~lines 520-535) must move behind the gate state. |
+| Owner-run step at cutover: `purgeCacheTag("portia-content")` and `("portia-employees")` | Stale shared copies can persist up to 86400 s via stale-while-revalidate | Netlify says a redeploy clears earlier-deploy cached content in the same deploy context, but purge explicitly and verify with the `Cache-Status` response header. Production steps stay owner-run per CLAUDE.md hard rules. |
+| Keep route handlers `export const dynamic = "force-dynamic"`; set the visitor cookie with an explicit `Set-Cookie` header on the (no-store) gate response, as `app/api/promotion/requests/route.ts` already does | Cookie is issued only on uncacheable responses | Netlify docs do not state how `Set-Cookie` interacts with the cache; avoid the question by never combining it with cache headers. |
 
-**App layer (works the moment it ships, before the owner touches SQL):** in `lib/editor-access.ts` change the first line to `if (!user?.email || !user.email_confirmed_at) return noAccess;`. `user` comes from `supabase.auth.getUser()`, which the Auth server validates, so the field is trustworthy (unlike a decoded cookie session).
+**Gaps the gate cannot close (flag to the roadmap):**
+- «Устав» is an iframe of `https://sdqwqsdawqd.github.io/S.E-Portia/` and «Таблица» is a public Google Sheet. Hiding the window protects nothing; the URLs are public. A per-level «Устав» only works if the charter text moves into `portia_content` (then drop `github.io` from CSP `frame-src` in `next.config.ts`) or the owner accepts that it is UI-only.
+- `portia-media` is a public bucket with an open file listing (accepted risk IN-10-storage). Media URLs inside hidden items are unguessable (`recycle/<uuid>.ext`) but listable. Dropping the broad SELECT policy on `storage.objects` for that bucket should close listing while public-URL fetches keep working (public buckets are served without a SELECT policy; confirm on the isolated staging project before relying on it).
+- Roblox nicknames cannot be proven by the visitor. Editors approving by name is the only check; "in the table" can be shown as a hint by comparing to the sheet roster that `loadEmployees` already fetches (compute at display time in the Users tab; do not store a client-supplied "in table" flag in an anon-callable RPC).
 
-**Critical caveat for the plan (MEDIUM confidence, inference + Supabase JS reference):** with **"Confirm email" turned OFF** the Auth server hands out a session straight from `signUp`, and the user is treated as confirmed, so `email_confirmed_at` is set and *both* layers above become a no-op. The real control is the dashboard switch **Authentication -> Providers -> Email -> Confirm email = ON** (default on hosted projects). So the deliverable is: (1) the two code/SQL layers as defence in depth, (2) a comment in `portia_setup.sql` and a line in the phase checklist telling the owner to verify the switch. The repo cannot prove the switch state. With the switch ON, `signUp` returns `session: null`, which `editorSignUp` already handles (`if (data.user && data.session)`).
+### Next.js / platform
 
-**Do not** try to also close the `portia_editor_is_approved` anon oracle in this milestone. It is deliberately anon-callable (pre-signup approval check). Removing the pre-check means any stranger creates `auth.users` rows; making it private needs a service-role key (a new secret on Netlify). Recommend closing the finding as an accepted risk: it only answers yes/no for one address at a time, and with Confirm email ON the oracle can no longer be turned into access.
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| `next` + `eslint-config-next` | bump exact pin 16.4.2 -> **16.4.5** | Security fixes | Netlify's 2026-11-03 advisory lists seven Next.js CVEs fixed in 16.4.5, including 16.4+ shared-shell cache poisoning on Netlify. This milestone puts cache correctness at the centre. Keep the project's exact-pin rule (no `^`, no `audit fix --force`). Netlify also asks for the OpenNext adapter `@netlify/plugin-nextjs` >= 5.16.6 (auto-installed; confirm in the deploy log). |
+| `proxy.ts` | no change | Keep the matcher as is | The visitor cookie is read in route handlers with the existing `readDeviceToken` style. Do not run the gate in `proxy.ts`: the proxy runs before routing, adds latency to every request, and the repo deliberately keeps the public shell independent of Supabase availability. |
 
-### Supabase SQL for the other IN items
+### Design system (Tailwind 4)
 
-| Item | Recommendation | Why |
-|------|----------------|-----|
-| IN-10 `updated_by` readable by anon | **Close as accepted/won't fix.** | The clean fix is a table-level `revoke select` + column-level `grant select (cols…)`. Supabase docs: restricted roles cannot use `*` on that table. `lib/portia-employees.ts:238` deliberately uses `.select("*")` so a missing column cannot fail the read; switching to a column list re-introduces that failure mode and the roster breaks if SQL lags the code. `updated_by` is an opaque UUID of an editor; low value. |
-| IN-10 storage `select` policy lists all objects | **Replace** `"Public can read PORTIA media"` (anon+authenticated, `bucket_id = …`) with the same policy `to authenticated using (bucket_id = 'portia-media' and (select public.portia_can_edit()))`. | Public-bucket URLs (`getPublicUrl`) are served without a storage policy; only `list` needs it. `app/api/uploads/route.ts` uses `upload(..., { upsert: false })`, which needs only the insert policy. The authenticated-editor policy is kept so a future move/replace (needs select) still works. MEDIUM confidence: confirm in the browser that an uploaded image still loads after the SQL is applied. |
-| IN-10 owner email in committed script | **Close as accepted.** | The same address is already in `PROJECT.md` and is the owner's public contact. A deploy-time value in Postgres means a settings table or a database-level GUC set from the dashboard: more moving parts than the finding is worth. |
+| Technology | Version | Purpose | Why |
+|------------|---------|---------|-----|
+| Plain CSS custom properties in `:root` (new token block next to the existing palette in `app/portia.css`, or `app/tokens.css` imported from `globals.css`) | n/a, Tailwind 4.2.1 already installed | Radius, spacing, control height, border width, shadow, focus ring tokens | The site is styled by ~280 KB of hand-written semantic CSS (865 `var(--` uses; `--panel`, `--line`, `--teal` palette driven by `--accent-hue`), not by Tailwind utilities. Tailwind's own docs: use `@theme` only when a value should generate utility classes; use `:root` otherwise. Using `@theme` here would create utilities nobody uses, and unused theme variables are not emitted unless declared `@theme static`. |
+| Variant switching via `html[data-style="..."]` blocks that only override token values | n/a | The "owner chooses from reference variants" step | Token overrides make each candidate style a few lines. Fits the existing `data-accent` / `data-motion` attribute pattern. |
+| A `node:test` conformance test (e.g. `lib/design-tokens.test.ts`) | n/a | Enforce the one-radius rule | Current state: 129 `border-radius` declarations, ~15 distinct literals (7px x31, 4px x17, 10px x12, 6px x11, 3px x11, 5px x10, 8px x9, 9px x7, 14px, 19px, ...). The test reads `app/portia.css`, fails if a literal radius appears outside the token definitions (allow `0`, `50%`, `999px`) and uses a ratchet baseline so the count can only fall during migration. Matches the repo's existing file-scanning tests; no new tooling. |
 
-### iframe sandbox (IN-07, 03.3 IN-04a)
+Token naming: use role names (`--radius-control`, `--radius-panel`, `--radius-window`, `--space-1..6`, `--ctl-h`). Avoid `--radius-sm/md/lg/xl` and do not redefine `--spacing`, `--color-*`, `--font-*`: those are Tailwind's theme namespaces and shadowing them causes confusion if utilities are ever used. Migrate by component family (buttons, panels, editor tabs, apps), not by one giant search-and-replace, and verify with the existing Playwright visual lanes.
 
-One constant, three uses:
+### Supporting libraries
 
-```tsx
-// Cross-origin documents only. allow-scripts + allow-same-origin together would let a
-// same-origin page remove its own sandbox, which is harmless for docs.google.com,
-// github.io and youtube-nocookie.com.
-const embedSandbox = "allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox";
-// <iframe sandbox={embedSandbox} … />
-```
+None required. Explicitly considered and rejected below.
 
-| Flag | Keep? | Why |
-|------|-------|-----|
-| `allow-scripts` | yes | Google `htmlview` widget and the YouTube player are JS apps. |
-| `allow-same-origin` | yes | Without it the frame gets an opaque origin: no cookies/storage, YouTube player and Google viewer break. Safe because all three are cross-origin to PORTIA. |
-| `allow-popups` + `allow-popups-to-escape-sandbox` | yes | Links inside the sheet/charter and the YouTube logo open new tabs. Without "escape", the opened tab inherits the sandbox and e.g. Google sign-in or YouTube pages misbehave. |
-| `allow-top-navigation*`, `allow-forms`, `allow-modals`, `allow-downloads`, `allow-pointer-lock` | **no** | This is the whole point of IN-07: the embedded page must not navigate the PORTIA tab. |
-| `allow-presentation` | no | Only for the Presentation API/cast. Fullscreen is governed by the existing `allowFullScreen` attribute, not by `sandbox`. |
-
-React 19 accepts `sandbox` as a plain string attribute, so no typings change. The existing Ctrl+wheel overlay and `onLoad` loader are unaffected. Existing `referrerPolicy`/`allow` attributes stay. **Verify manually** (localhost:3123): Sheet loads and scrolls, charter loads and its links open in a new tab, a YouTube block plays and goes fullscreen. If the charter page uses a form or a download, add only that single flag.
-
-Optional regression guard (6 lines, fits `npm test`): a `lib/iframe-sandbox.test.ts` that reads `components/portia-desktop.tsx` and asserts every `<iframe` has `sandbox=`.
-
-### Route-handler JSON (IN-06 and friends): exact approach
-
-```ts
-// lib/json-body.ts — no imports, so node --test can load it
-export function parseJsonObject(text: string): Record<string, unknown> | null {
-  try {
-    const value: unknown = JSON.parse(text);
-    return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
-  } catch { return null; }
-}
-```
-
-Handlers: `const body = parseJsonObject(await request.text().catch(() => ""));` then `if (!body) return Response.json({ error: "Некорректный запрос." }, { status: 400 });`. `content` PUT already reads `request.text()` for its 2 MB size guard, so it just swaps `JSON.parse(raw) as …` for the helper. A one-line variant `await request.json().catch(() => null)` would also work, but it returns `null`/arrays/primitives unchecked (`null.id` is the original crash), so the shared helper is the smaller *complete* fix.
-
-Test (`lib/json-body.test.ts`): `""`, `"{"`, `"null"`, `"[]"`, `"1"` -> `null`; `'{"a":1}'` -> object.
-
-### Optional: error boundary (WR-07 / WR-10 defence in depth)
-
-`app/error.tsx` wraps `page.tsx` in a React error boundary; the review notes twice that one bad item unmounts the whole desktop. Next 16.4.2 file convention: `"use client"`, props `{ error, retry }` (`retry` stable since 16.3.0; `reset` still exists; `unstable_retry` was the 16.2 name). Render one message in Russian plus a retry button using existing CSS classes; do not add Sentry/`react-error-boundary`. Recommended only if the roadmap wants "desktop does not crash" to hold against *unknown* bad data; the targeted fixes (`?? ""`, string coercion, item filtering) are the real cure and are mandatory.
-
-### Development Tools
+### Development tools
 
 | Tool | Purpose | Notes |
 |------|---------|-------|
-| `npm test` (`node --test`, strip-types) | Unit tests for every new pure function | `lib/json-body.test.ts`, extended `editor-items.test.ts`, `portia-employees.test.ts` (PATCH without `biography` -> `null`), `portia-content-normalize.test.ts` (limits, string coercion, quest period), `accent-theme.test.ts` (settings key), `editor-changes` with missing `recycledViruses`. |
-| Source-reading tests | Guard CSS/markup invariants without a DOM | `lib/portia-css.test.ts`: `readFileSync(new URL("../app/portia.css", import.meta.url), "utf8")`, take the `::highlight(portia-format)` rule, assert `underline` present and no `background`. Works because `package.json` has `"type": "module"`. |
-| `npx tsc --noEmit`, `npm run lint`, `npm run build` | Existing `npm run check` | Run after the `app/api` edits, since route files import via `@/`. |
-
-## Supporting Libraries
-
-**None to add.** Table intentionally empty.
+| `node --experimental-strip-types --test` | Unit tests for token digest helpers, `redactContentForLevel`, nickname normalization, level clamping, token conformance | Existing `npm test`; put new tests beside the modules. |
+| Staging live-test lane (`npm run test:staging-live`, `lib/portia-*-live.test.ts`) | Prove anon cannot `select` the three tables, cannot call editor RPCs, level 1 token never sees level 3 items | Isolated test project only; per CLAUDE.md, RLS/role execution stays BLOCKED until a phase proves it. Run the `supabase-rls-reviewer` agent on the new migration. |
+| Playwright + `@axe-core/playwright` (installed) | Gate screen, pending state, approved state, narrow-viewport checks | Add a "no content before approval" assertion: with no cookie, network responses contain no seed text. |
 
 ## Installation
 
 ```bash
-# Nothing. No new packages, no version changes.
-# (Do not run `npm audit fix --force` - Key Decision 03.1-06.)
+# Core: nothing new to install for the feature work.
+
+# Security patch (exact pins, per project policy)
+npm install --save-exact next@16.4.5 eslint-config-next@16.4.5
 ```
+
+New migration file goes in `supabase/migrations/` (forward-only, `set search_path = ''`, explicit grants/revokes), plus an owner-run apply to production after staging proof.
 
 ## Alternatives Considered
 
-| Recommended | Alternative | When the alternative is better |
-|-------------|-------------|--------------------------------|
-| Hand-written `parseJsonObject` + existing `sanitize*` functions | `zod` / `valibot` | Only if the API surface grows to dozens of endpoints. Here 5 handlers and sanitizers already exist; a schema library would duplicate them and add supply-chain surface (the project pins exact versions for that reason). |
-| `auth.users.email_confirmed_at` via definer helper | Reading `email_verified` from `user_metadata` / JWT | Never for authorization: not a JWT claim, and `user_metadata` is user-editable. |
-| App check + SQL check + dashboard switch | Supabase Auth Hook "before user created" (Postgres function) to reject unapproved emails | If the owner later wants unapproved addresses to be unable to create accounts at all. Needs hook configuration in the dashboard; out of scope for a debt milestone. |
-| Column list stays `select("*")`; IN-10 closed as accepted | Column-level grants / a public view | If more sensitive columns are added to `portia_employee_profiles`. Then also move the read to an explicit column list. |
-| Source-reading tests in `node:test` | jsdom / Testing Library / Playwright for 05 IN-01 | The review itself says "if a DOM test runner is ever added". A new test runner is a toolchain change; the one-line wiring risk is covered by the owner's device check. |
-| `fieldset disabled` + changed-keys-only PATCH | Optimistic locking with revision column | Already an accepted risk (AR-03.2-01, last write wins); do not expand scope. |
+| Recommended | Alternative | When to Use Alternative |
+|-------------|-------------|-------------------------|
+| Opaque device-token cookie + definer RPCs | Supabase anonymous sign-ins | If visitors needed direct browser-to-Supabase access with per-user RLS (they do not; all reads go through route handlers) and you were willing to add CAPTCHA. |
+| Opaque token + live DB lookup | Signed JWT/session cookie (`jose`, `iron-session`) | If you wanted stateless verification at the edge. Revocation and instant level changes need the DB anyway. |
+| TS redaction of one JSONB document | Normalize content into per-item tables with a `level` column and real RLS | If the content model were being rebuilt. It would rewrite the editor, revision CAS, history reducer and 1700+ tests; far outside a "minimal full diff". |
+| `no-store` per-visitor reads | Per-level CDN cache variants | Only with an edge function that validates the signed cookie before cache lookup (Netlify Edge Functions). Not worth it for this audience size; 10-second polling of a small JSON read is cheap. |
+| Plain `:root` tokens | Tailwind `@theme` tokens / Style Dictionary / shadcn-style theming | If the site were moving to Tailwind utility classes. It is not in scope for v1.4. |
 
 ## What NOT to Use
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| Any new npm dependency (validation, sanitizer, a11y, state, i18n, test runner) | Zero are needed; project policy pins exact versions and avoids `audit fix --force`; ponytail scope | Existing `lib/` helpers + platform features above |
-| `sandbox="allow-scripts allow-same-origin"` on same-origin or `srcdoc` content | Lets the framed page strip its own sandbox | Fine only for the three cross-origin embeds listed |
-| `allow-top-navigation` / `-by-user-activation` on embeds | Exactly the IN-07 hole | Omit; links open via `allow-popups` |
-| `user_metadata` or any JWT claim as proof of confirmed email | Not present / user-writable | `auth.users.email_confirmed_at` through a definer helper, plus server `getUser()` |
-| `security definer` without `set search_path` | Search-path hijack; Supabase advisor warning | `set search_path = ''` + schema-qualified names |
-| Granting the new helper to `anon` | Needless exposure of a definer function | `revoke all … from public, anon, authenticated` (called only from other definer functions) |
-| Column-level `revoke`/`grant` on `portia_employee_profiles` | Breaks `select("*")` and the "missing column cannot fail the read" design | Close IN-10 (first bullet) as accepted |
-| `Response.json` 500 for bad client input | Misreports client errors as server faults, noisy logs | 400 via `parseJsonObject` |
-| Bumping `next` / `@supabase/*` "while we are here" | Not required; each bump re-opens the supply-chain review | Keep 16.4.2 / 2.117.3 / 0.12.7 |
-| Bare `await request.json().catch(() => null)` as the only guard | Leaves `null` / arrays / primitives unchecked | The shared `parseJsonObject` |
+| `@supabase/supabase-js` `signInAnonymously()` | `authenticated` role for visitors, IP rate limit, CAPTCHA, user-table growth | Device-token cookie + RPCs |
+| Service-role key in the runtime | Violates the hard rule and removes RLS as a backstop | Definer RPCs granted to `anon` by digest |
+| `next-auth` / Auth.js, Clerk, Auth0 | A second identity system next to Supabase Auth for ~tens of people | Existing pattern |
+| `Netlify-Vary: cookie=` on level/role, or any `s-maxage` on gated JSON | Cache serves content without validating the visitor | `noStoreHeaders` |
+| Gating in `proxy.ts` or Edge middleware | Runs on every request; ties the public shell to DB availability; Next/Netlify edge-cookie CVE history | Gate in route handlers + client gate screen |
+| Supabase Realtime / WebSockets for "waiting for approval" | Needs RLS-readable rows for anon; extra moving part | Poll `GET /api/gate` every 5-10 s (same as content polling) |
+| Upstash/Redis rate limiting | New service for one endpoint | Reuse the attempt-bucket pattern (`coarseIpBucket`, `portia_promo_attempt_buckets` design) in a small access-attempt table |
+| `stylelint` + plugins, `tailwind-variants`, `clsx`/`cva`, Style Dictionary | Heavy, supply-chain surface (the repo pins versions exactly), and the problem is a handful of values | `:root` tokens + a `node:test` check |
+| Motion/`framer-motion` for the restyle | Not needed; existing CSS animations carry the aesthetic | Keep CSS |
+| Storing the visitor's raw token or nickname-level in `localStorage` | JS-readable, survives logout | HttpOnly cookie; UI learns state from `GET /api/gate` |
 
 ## Stack Patterns by Variant
 
-**If the owner confirms "Confirm email" is ON (expected, hosted default):**
-- Ship the app-level check + SQL helper as defence in depth; no behaviour change for existing users (their addresses are already confirmed).
-- Because existing editors who signed up before the switch was ON could have `email_confirmed_at = null`, list them first: `select email from auth.users where email_confirmed_at is null;` and confirm or re-invite them *before* applying the SQL, or they lose editor access.
+**If the owner wants hidden items shown as locked placeholders (lock icon + required level) rather than absent:**
+- Have `redactContentForLevel` replace the item with a stub `{ id, title, minLevel, locked: true }` and strip all body fields and `formattedText` keys.
+- Because showing titles discloses existence; decide this with the owner before the schema is fixed.
 
-**If "Confirm email" is OFF:**
-- The code/SQL layers do not protect; turning the switch ON is the fix. Existing unconfirmed users must be confirmed manually in Dashboard -> Authentication -> Users first.
+**If a person loses the cookie or uses a second device:**
+- Key people by `nickname_key` (lower-cased, like the promotion `nickname_key`), with device rows attached; a new device for an existing nickname creates a pending "new device" request instead of auto-granting.
+- Because the nickname is unauthenticated: the first device binds it (the promotion `nickname-bound` rule), and editors approve additions. This also stops someone typing a known employee's nick to inherit level 2.
 
-**If the SQL is not yet applied when the code ships:**
-- App-level check already blocks unconfirmed users in the site; direct PostgREST writes stay governed by the old policies until the owner runs the script. The script is idempotent, so order is not critical.
+**If promotion should use the approved nick:**
+- `lib/portia-promotion-api.ts` (`promotionStatus`, `submit_request`) should take the nickname from `portia_access_resolve(digest)` on the server, ignoring any client-sent value for gated visitors. Keep `portia_promo_device` as a separate cookie so a promotion device reset does not log the visitor out.
+
+**Editor tab «Пользователи»:**
+- Add `{ id: "users", label: "Пользователи", kind: "regular" }` to `tabRegistry` in `lib/editor-tabs.ts`. A `regular` tab is open to all editors unless the owner closes it (matches "у всех редакторов изначально"); a `trusted` tab would need a grant. `portia_can_edit_tab('users')` already works for any tab id. Mind `parseTabLists`, which validates against the registry.
 
 ## Version Compatibility
 
-| Package A | Compatible With | Notes |
-|-----------|-----------------|-------|
-| next@16.4.2 | react@19.2.6 | Pinned pair; `error.tsx` `retry` prop needs >=16.3.0. |
-| node >=22.13 <23 (Netlify `NODE_VERSION = 22.13.0`) | `node --experimental-strip-types --test` | Local machine runs Node 24.21; strip-types syntax limits are the same (no enums, no parameter properties); keep new lib files to plain type annotations and `.ts` import extensions. |
-| @supabase/supabase-js@2.117.3 | auth-js `User.email_confirmed_at?: string` | Optional field: use `!user.email_confirmed_at`, not a `Date` parse. |
-| Postgres on Supabase | `create or replace function`, `alter table … add constraint … not valid`, `drop policy if exists` | All idempotent, safe for "run the script again". |
+| Package | Compatible With | Notes |
+|---------|-----------------|-------|
+| `next@16.4.5` | `react@19.2.6`, `@supabase/ssr@0.12.7` (latest per npm registry, 2026-11-09) | Patch bump only; run the full `/portia-check` and the e2e smoke lane after. |
+| `@supabase/supabase-js@^2.117.3` | Locked, no change needed | No new Supabase client API is used (only `.rpc()`). |
+| `@netlify/functions@6.0.2` (lock) | Latest on npm is 6.1.1 | Only `purgeCache` is used; no bump required. |
+| `tailwindcss@4.2.1` / `@tailwindcss/postcss@4.2.1` | n/a | No change; tokens are plain CSS. |
+| Netlify OpenNext adapter | >= 5.16.6 | Auto-installed unless pinned; confirm in the deploy log. |
 
 ## Sources
 
-- Supabase JWT field reference https://supabase.com/docs/guides/auth/jwt-fields - claim list has no `email_confirmed_at` (HIGH, official, fetched 2026-10-19)
-- Supabase column-level security https://supabase.com/docs/guides/database/postgres/column-level-security - restricted roles cannot use `*` (HIGH, official)
-- Supabase Auth email docs https://supabase.com/docs/guides/auth/auth-email - "Confirm email" default on hosted projects, off locally/self-hosted (HIGH); behaviour of `email_confirmed_at` under auto-confirm is inferred from the JS `signUp` reference (session returned when confirmations are off) (MEDIUM)
-- Definer-function pattern (definer + pinned `search_path` + revoke from anon) https://vibe-eval.com/checklists/supabase/ and https://apify.com/renzomacar/supabase-security-auditor (MEDIUM, secondary; matches what the repo's script already does for `portia_owner_email()`)
-- Next.js `error.js` reference https://nextjs.org/docs/app/api-reference/file-conventions/error - `retry` stable in 16.3.0, `unstable_retry` 16.2.0 (HIGH, official, page dated 2026-10-15)
-- MDN `::highlight()` https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Selectors/::highlight - allowed properties include `text-decoration` and associated properties; Baseline 2026 newly available (HIGH for properties, MEDIUM for "thickness renders everywhere")
-- npm registry (`npm view next dist-tags.latest` = 16.4.2; `@supabase/supabase-js` latest 2.118.0; `@supabase/ssr` 0.12.7; `@netlify/functions` 6.0.2), checked 2026-10-19 (HIGH)
-- Repo files read: `supabase/portia_setup.sql`, `lib/editor-access.ts`, `app/api/{content,editors,employees,uploads,access}/route.ts`, `app/owner-login/actions.ts`, `components/portia-desktop.tsx` (iframes), `package.json`, `netlify.toml`, the five v1.0 REVIEW files and dispositions (HIGH)
-- WCAG contrast numbers: own calculation with the `portia.css` field colours (HIGH for the light field `#f3f1e9`; the dark-field figure uses an sRGB approximation of `oklch(.168 .014 hue)`, so MEDIUM)
+- Supabase Auth, Anonymous sign-ins: https://supabase.com/docs/guides/auth/auth-anonymous (role is `authenticated`, 30/hour/IP default, CAPTCHA advice, no auto cleanup, review RLS first) - HIGH (official docs)
+- Netlify caching overview: https://docs.netlify.com/build/caching/caching-overview/ (`private`/`no-store`, `Netlify-CDN-Cache-Control`, `Netlify-Vary` cookie keys, durable cache, tag purge limits; `Set-Cookie` handling NOT documented) - HIGH for what it states, gap flagged
+- Netlify changelog 2026-11-03 Next.js security vulnerabilities: https://www.netlify.com/changelog/2026-11-03-nextjs-security-vulnerabilities/ (fix in 16.4.5, adapter 5.16.6) - MEDIUM (read through a page summarizer; re-read the CVE list before bumping)
+- Tailwind CSS theme docs: https://tailwindcss.com/docs/theme (`@theme` vs `:root`, namespaces, `static`, `inline`) - HIGH (official docs)
+- npm registry latest: `next` 16.4.5, `@supabase/ssr` 0.12.7, `@netlify/functions` 6.1.1 - HIGH
+- Repo evidence (read-only): `lib/portia-device-binding.ts`, `lib/portia-cdn.ts`, `app/api/content/route.ts`, `app/api/employees/route.ts`, `app/page.tsx`, `proxy.ts`, `lib/editor-tabs.ts`, `lib/portia-content.ts`, `supabase/migrations/20261101000000_portia_baseline.sql`, `app/portia.css`, `next.config.ts` - HIGH
+- Context7 was unavailable this session; Supabase storage behaviour for public buckets without a SELECT policy is from prior knowledge and is LOW until proven on staging.
 
 ---
-*Stack research for: v1.1 review-debt fixes (Next.js 16.4.2 + Supabase + Netlify)*
-*Researched: 2026-10-19*
+*Stack research for: PORTIA OS v1.4 access gate and design tokens*
+*Researched: 2026-11-09*
