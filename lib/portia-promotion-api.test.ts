@@ -474,7 +474,8 @@ test("the qualification test route projection is a closed allowlist that drops e
   const start = source.indexOf("function safeProjection");
   const end = source.indexOf("async function current", start);
   assert.ok(start > 0 && end > start);
-  const safeProjection = new Function(`${stripTypeScriptTypes(source.slice(start, end))}; return safeProjection;`)() as (value: Record<string, unknown>) => Record<string, unknown>;
+  const { qualificationRulesText } = await import("./portia-qualification-rules.ts");
+  const safeProjection = new Function("qualificationRulesText", `${stripTypeScriptTypes(source.slice(start, end))}; return safeProjection;`)(qualificationRulesText) as (value: Record<string, unknown>) => Record<string, unknown>;
   const row = {
     attemptId: "a-1", status: "active", deadlineAt: "2026-10-27T00:15:00.000Z", clientMode: "desktop", percent: 50, result: "failed",
     nickname: "Alice", titleId: "academic", tokenHash: "h", answerKey: "k", reviewerId: "r-1", internalNote: "n", technicalFailure: "x",
@@ -483,7 +484,15 @@ test("the qualification test route projection is a closed allowlist that drops e
   };
   const first = safeProjection(row);
   assert.deepEqual(safeProjection(row), first);
-  assert.deepEqual(Object.keys(first).sort(), ["attemptId", "clientMode", "deadlineAt", "percent", "question", "result", "status"]);
+  assert.deepEqual(Object.keys(first).sort(), ["attemptId", "clientMode", "deadlineAt", "percent", "question", "result", "rulesText", "status"]);
+  // Quick 261117-px5: the prepared projection also carries the question count and the transition rules, as text and bounded.
+  assert.equal(first.rulesText, "");
+  const prepared = safeProjection({ ...row, status: "prepared", questionCount: 5, rulesText: "  Правила\r\nпроверки ", question: null });
+  assert.equal(prepared.questionCount, 5);
+  assert.equal(prepared.rulesText, "Правила\nпроверки");
+  assert.equal(prepared.question, null);
+  assert.equal(safeProjection({ ...row, questionCount: -1 }).questionCount, undefined);
+  assert.equal(safeProjection({ ...row, rulesText: "a".repeat(4001) }).rulesText, "");
   assert.deepEqual(Object.keys(first.question as object).sort(), ["id", "index", "options", "text", "total", "type"]);
   assert.deepEqual((first.question as { options: string[] }).options, ["a", "b"]);
   const text = JSON.stringify(first);

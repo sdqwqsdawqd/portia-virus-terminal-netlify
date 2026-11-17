@@ -132,3 +132,26 @@ test("the participant projection never carries keys, reviewer marks, other quest
   assert.equal(reviewed.result, "passed");
   assert.ok(!JSON.stringify(reviewed).includes("answerKey"));
 });
+
+test("the candidate starts the check himself: the start POST lives only in the button handler and the lock needs an active attempt", () => {
+  const starts = participant.split('action: "start"').length - 1;
+  assert.equal(starts, 1, "exactly one start request in the runner");
+  assert.ok(participant.indexOf('action: "start"') > participant.indexOf("const startTest = async"), "the start request comes after the startTest handler declaration");
+  assert.ok(participant.indexOf('action: "start"') < participant.indexOf("const submit = async"), "the start request is inside startTest, not in a later effect");
+  assert.match(participant, /onClick=\{\(\) => void startTest\(\)\}/);
+  assert.ok(participant.includes("НАЧАТЬ ПРОВЕРКУ"));
+  assert.match(participant, /const qualificationLocked = !terminal && test\?\.status === "active";/);
+  assert.match(participant, /\/api\/promotion\/test\?attemptId=\$\{encodeURIComponent\(attemptId\)\}`, \{ cache: "no-store" \}/);
+  assert.match(participant, /test\.status === "prepared" \|\| finishedRef\.current/);
+});
+
+test("a failed start or load never fails the attempt and the rules reach the screen only as text", () => {
+  assert.ok(participant.includes("promotion-qualification-prestart"));
+  assert.ok(participant.includes("ПРАВИЛА ПРОВЕРЯЮЩЕГО"));
+  assert.ok(participant.includes("ПОВТОРИТЬ"));
+  const loadAttempt = participant.slice(participant.indexOf("const [loadNonce"), participant.indexOf("const startTest = async"));
+  const startTest = participant.slice(participant.indexOf("const startTest = async"), participant.indexOf("useEffect(() => {\n    if (test?.status !== \"active\" || terminal || !visible) return;"));
+  assert.ok(!loadAttempt.includes("setTerminal") && !startTest.includes("setTerminal"), "load and start failures never set terminal");
+  assert.ok(!participant.includes("dangerouslySetInnerHTML"));
+  assert.match(styles, /\.promotion-prestart-rules p\s*\{[^}]*white-space:\s*pre-wrap/);
+});

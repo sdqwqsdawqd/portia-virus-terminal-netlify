@@ -451,6 +451,9 @@ test.describe("[STAB-A11Y-01] modal qualification window", () => {
       question: { id: "q-1", type: "single", text: "Какой вариант верный?", options: ["Первый вариант", "Второй вариант"], index: 0, total: 1 },
     };
     const finishedProjection = { attemptId, status: "finished", clientMode: "desktop", deadlineAt, question: null, result: "passed", percent: 100 };
+    // Quick 261117-px5: the candidate starts the check himself. The mount reads the attempt (GET with ?attemptId=, which the
+    // glob below does not match) and gets a prepared projection; nothing runs until the button is pressed.
+    const preparedProjection = { attemptId, status: "prepared", clientMode: "desktop", deadlineAt: null, question: null, questionCount: 1, rulesText: "" };
     const posts: { action: unknown }[] = [];
     await page.route("**/api/promotion/status**", async (route) => {
       if (new URL(route.request().url()).searchParams.has("nickname")) {
@@ -459,6 +462,10 @@ test.describe("[STAB-A11Y-01] modal qualification window", () => {
         return;
       }
       await route.fallback();
+    });
+    await page.route((url) => url.pathname === "/api/promotion/test", async (route) => {
+      if (route.request().method() !== "GET") { await route.fallback(); return; }
+      await route.fulfill({ status: 200, contentType: "application/json", headers: { "cache-control": "no-store" }, body: JSON.stringify(preparedProjection) });
     });
     await page.route("**/api/promotion/test", async (route) => {
       if (route.request().method() !== "POST") { await route.fallback(); return; }
@@ -477,13 +484,6 @@ test.describe("[STAB-A11Y-01] modal qualification window", () => {
     await promotion.open();
     await promotion.nickname.fill(nickname);
     await promotion.checkNickname.click();
-    const runner = promotion.window.locator(".promotion-qualification-runner");
-    await expect(runner).toBeVisible();
-    await expect(runner.getByRole("heading", { name: "Какой вариант верный?" })).toBeVisible();
-    await expect(runner.getByRole("radio")).toHaveCount(2);
-    await settle(page);
-
-    // (1) shortcuts and taskbar entries are inert (themselves or through an ancestor)
     const inertReport = () => page.evaluate(() => {
       const report = (selector: string) => {
         const elements = Array.from(document.querySelectorAll<HTMLElement>(selector));
@@ -491,6 +491,19 @@ test.describe("[STAB-A11Y-01] modal qualification window", () => {
       };
       return { shortcuts: report("[data-shortcut]"), taskbar: report("[data-taskbar-app]") };
     });
+    const prestart = promotion.window.locator(".promotion-qualification-prestart");
+    await expect(prestart).toBeVisible();
+    const beforeStart = await inertReport();
+    expect(beforeStart.shortcuts.notInert.length, "before the start button nothing is locked: no shortcut is inert").toBe(beforeStart.shortcuts.total);
+    expect(posts.filter((entry) => entry.action === "start"), "no start request before the button").toEqual([]);
+    await prestart.getByRole("button", { name: "НАЧАТЬ ПРОВЕРКУ" }).click();
+    const runner = promotion.window.locator(".promotion-qualification-runner");
+    await expect(runner).toBeVisible();
+    await expect(runner.getByRole("heading", { name: "Какой вариант верный?" })).toBeVisible();
+    await expect(runner.getByRole("radio")).toHaveCount(2);
+    await settle(page);
+
+    // (1) shortcuts and taskbar entries are inert (themselves or through an ancestor)
     const locked = await inertReport();
     expect(locked.shortcuts.total, "the desktop has shortcuts to check").toBeGreaterThan(0);
     expect(locked.taskbar.total, "the taskbar has entries to check").toBeGreaterThan(0);

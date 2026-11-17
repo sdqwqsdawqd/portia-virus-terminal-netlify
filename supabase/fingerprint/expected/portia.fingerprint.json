@@ -1115,6 +1115,14 @@
         "notnull": true,
         "type": "integer"
       },
+      "public.portia_promo_qualification_banks.rules_text": {
+        "acl": null,
+        "default": null,
+        "generated": "",
+        "identity": "",
+        "notnull": false,
+        "type": "text"
+      },
       "public.portia_promo_qualification_banks.single_count": {
         "acl": null,
         "default": "0",
@@ -2082,6 +2090,11 @@
         "type": "p",
         "validated": true
       },
+      "portia_promo_qualification_banks.portia_promo_qualification_banks_rules_text_check": {
+        "def": "CHECK (((rules_text IS NULL) OR ((length(rules_text) >= 1) AND (length(rules_text) <= 4000))))",
+        "type": "c",
+        "validated": true
+      },
       "portia_promo_qualification_banks.portia_promo_qualification_banks_single_count_check": {
         "def": "CHECK (((single_count >= 0) AND (single_count <= 100)))",
         "type": "c",
@@ -2858,7 +2871,7 @@
         "kind": "f",
         "returns": "jsonb",
         "secdef": true,
-        "src_sha256": "65950dce7411d59f1be2e31eb9016db377cfcab37750e1f46453f239e60379dd",
+        "src_sha256": "ecabc734bcd2a8707d86e77d10e955501e713c3a903cdd7979533d061688e8b5",
         "volatility": "v"
       },
       "public.portia_promo_bind_device(p_nickname_key text, p_token_hash text, p_risk_bucket text)": {
@@ -2953,7 +2966,7 @@
         "kind": "f",
         "returns": "jsonb",
         "secdef": true,
-        "src_sha256": "64ceaf49805357f9596e7a5a32871d18fe9f0a8d33ca30d97eb704a12685a71b",
+        "src_sha256": "330e941cfc645b8309973dd4a459287b021af73612443609a727328337004820",
         "volatility": "v"
       },
       "public.portia_promo_delete_request(p_kind text, p_request_id uuid)": {
@@ -3169,6 +3182,19 @@
         "returns": "jsonb",
         "secdef": true,
         "src_sha256": "6268ffb636e3d3b8b3cf91a9f11c3c1ab3fe725d3f00618a891dfb06ecfcfa30",
+        "volatility": "v"
+      },
+      "public.portia_promo_save_qualification_rules(p_transition_id text, p_rules_text text)": {
+        "acl": [
+          "authenticated:EXECUTE"
+        ],
+        "config": [
+          "search_path=\"\""
+        ],
+        "kind": "f",
+        "returns": "uuid",
+        "secdef": true,
+        "src_sha256": "2d10d50e2be9cae4694b79238a4a9f697f547dc349f63a1117430e5005a1244f",
         "volatility": "v"
       },
       "public.portia_promo_secure_answer_question(p_access_hash text, p_attempt_id uuid, p_question_id uuid, p_expected_question_index integer, p_answer jsonb, p_nonce text, p_token_hash text, p_issued_at bigint, p_signature text)": {

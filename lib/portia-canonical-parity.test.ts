@@ -44,6 +44,10 @@ const migrationHashes: Record<string, string> = {
   // Phase 25 contract migration (plan 25-04): removes the anonymous read of content and employees and the media listing. Pinned the day
   // it was written; the owner applies it by hand only after the server-read code is live (D-06, 25-OWNER-CHECKLIST.md).
   "20261115000100_portia_closure_contract.sql": "98599c12c4d0bc9cea40211cdbc28aa6466c84f267f3fbe3b74321b883777cd7",
+  // Quick 261117-px5: rules text per qualification transition and a candidate-started check. Pinned the day it was written;
+  // applied nowhere, the owner applies it by hand (ОЖИДАЕТ ВЛАДЕЛЬЦА). Any later change needs a new forward-only migration,
+  // unless the independent review requires a fix before it is applied anywhere (then re-pin in that fix commit).
+  "20261117000000_portia_qualification_rules.sql": "eb885d7d4b1a1c15bff18ccc2ae2b716fcc50dbef2908e03f49053de9d4ab3cb",
 };
 
 const baselineName = "20261101000000_portia_baseline.sql";

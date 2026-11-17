@@ -2,6 +2,7 @@ import { noStoreHeaders } from "@/lib/portia-cdn";
 import { deviceTokenDigest, promotionDeviceSecret, readDeviceToken } from "@/lib/portia-device-binding";
 import { conservativeQualificationClientMode, validateQualificationAnswer, type QualificationQuestion } from "@/lib/portia-qualification";
 import { findPromotionRosterEntry, loadPromotionRoster } from "@/lib/portia-promotion-sheet";
+import { qualificationRulesText } from "@/lib/portia-qualification-rules";
 import { parseLimitedJsonObject } from "@/lib/request-json";
 import { promotionParticipantResponse, resolvePromotionParticipant, type PromotionParticipant } from "@/lib/promotion-participant";
 import { signPromotionTest, type PromotionTestAction } from "@/lib/access-identity";
@@ -25,6 +26,8 @@ function safeProjection(value: Record<string, unknown>) {
     status: value.status,
     deadlineAt: value.deadlineAt ?? null,
     clientMode: value.clientMode,
+    ...(typeof value.questionCount === "number" && Number.isInteger(value.questionCount) && value.questionCount >= 0 ? { questionCount: value.questionCount } : {}),
+    rulesText: qualificationRulesText(value.rulesText) ?? "",
     ...(value.terminalReason === "timeout" || value.terminalReason === "technical" ? { terminalReason: value.terminalReason } : {}),
     question: question ? { id: question.id, type: question.type, text: question.text, options: Array.isArray(question.options) ? question.options.filter((item) => typeof item === "string") : [], index: question.index, total: question.total } : null,
     ...(typeof value.result === "string" ? { result: value.result } : {}),

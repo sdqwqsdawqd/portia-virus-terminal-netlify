@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { parseRetakeLedger, updateRetakeLedger, type RetakeLedger, type RetakeNotification } from "@/lib/portia-promotion-notifications";
 import { promotionAvailabilityText } from "@/lib/portia-promotion";
 import { QUALIFICATION_HEARTBEAT_MS } from "@/lib/portia-qualification";
+import { qualificationPreStartLines } from "@/lib/portia-qualification-rules";
 import { statusPollOutcome } from "@/lib/portia-promotion-poll";
 import { PortiaTemplateBuilder } from "@/components/portia-template-builder";
 
@@ -21,7 +22,7 @@ type PublicTask = { id: string; text: string; sortOrder: number };
 type ActiveState = { status: string; targetTitleId: string | null; attemptId?: string; availableAt?: string; percent?: number; tasks?: PublicTask[] } | null;
 type PublicResult = { kind: RequestKind; outcome: string; createdAt: string };
 type QualificationQuestion = { id: string; type: "single" | "multiple" | "free-text"; text: string; options: string[]; index: number; total: number };
-type QualificationTest = { attemptId: string; status: string; clientMode: "desktop" | "phone"; deadlineAt: string | null; question: QualificationQuestion | null; result?: "passed" | "failed"; percent?: number };
+type QualificationTest = { attemptId: string; status: string; clientMode: "desktop" | "phone"; deadlineAt: string | null; question: QualificationQuestion | null; result?: "passed" | "failed"; percent?: number; questionCount?: number; rulesText?: string };
 type PromotionStatus = { nickname: string; promotionRecord: null; workflowAvailable: false } | {
   nickname: string;
   promotionRecord: { currentTitle: { id: string; label: string }; nextTitle: { id: string; label: string } | null };
@@ -66,6 +67,12 @@ function QualificationRunner({ attemptId, visible, onLockChange, onFinished }: {
   const [test, setTest] = useState<QualificationTest | null>(null);
   const [answer, setAnswer] = useState<string | number | number[]>("");
   const [busy, setBusy] = useState(true);
+  // Before the candidate presses «НАЧАТЬ ПРОВЕРКУ» nothing runs: no start request, no timer, no heartbeat, no failure listener, no lock.
+  const [fallback, setFallback] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState("");
+  const startingRef = useRef(false);
   const [now, setNow] = useState(() => Date.now());
   const [terminal, setTerminal] = useState<"timeout" | "offline" | "hidden" | "blur" | "page-exit" | null>(null);
   const [announcement, setAnnouncement] = useState("");
@@ -73,14 +80,14 @@ function QualificationRunner({ attemptId, visible, onLockChange, onFinished }: {
   const finishedRef = useRef(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
-  const qualificationLocked = !terminal && (test === null || test.status === "active");
+  const qualificationLocked = !terminal && test?.status === "active";
   useEffect(() => {
     onLockChange(qualificationLocked);
     return () => onLockChange(false);
   }, [onLockChange, qualificationLocked]);
 
   useEffect(() => {
-    if (!test || test.status === "active" || finishedRef.current) return;
+    if (!test || test.status === "active" || test.status === "prepared" || finishedRef.current) return;
     finishedRef.current = true;
     onFinished();
   }, [onFinished, test]);
@@ -102,18 +109,40 @@ function QualificationRunner({ attemptId, visible, onLockChange, onFinished }: {
     }).catch(() => undefined);
   }, [attemptId]);
 
+  // The mount only READS the attempt (GET). A reload during a running test resumes it through this projection; nothing is started here.
+  const [loadNonce, setLoadNonce] = useState(0);
   useEffect(() => {
     let cancelled = false;
-    void fetch("/api/promotion/test", {
-      method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
-      body: JSON.stringify({ action: "start", attemptId }),
-    }).then(async (response) => {
-      const body: unknown = await response.json();
-      if (!cancelled && (!response.ok || !acceptProjection(body))) setTerminal("offline");
-    }).catch(() => { if (!cancelled) setTerminal("offline"); })
+    void fetch(`/api/promotion/test?attemptId=${encodeURIComponent(attemptId)}`, { cache: "no-store" })
+      .then(async (response) => {
+        const body: unknown = await response.json().catch(() => null);
+        if (cancelled) return;
+        // A refused read (404 for a phone before the database update) shows the fixed lines only: nothing was started, nothing was handed over.
+        if (response.ok && acceptProjection(body)) setLoadFailed(false);
+        else setFallback(true);
+      })
+      .catch(() => { if (!cancelled) setLoadFailed(true); })
       .finally(() => { if (!cancelled) setBusy(false); });
     return () => { cancelled = true; };
-  }, [acceptProjection, attemptId]);
+  }, [acceptProjection, attemptId, loadNonce]);
+
+  const retryLoad = () => { setLoadFailed(false); setBusy(true); setLoadNonce((value) => value + 1); };
+
+  // The ONLY start request of the runner: pressed by the candidate. A failed start never fails the attempt.
+  const startTest = async () => {
+    if (startingRef.current) return;
+    startingRef.current = true; setStarting(true); setStartError("");
+    try {
+      const response = await fetch("/api/promotion/test", {
+        method: "POST", headers: { "Content-Type": "application/json" }, cache: "no-store",
+        body: JSON.stringify({ action: "start", attemptId }),
+      });
+      const body: unknown = await response.json().catch(() => null);
+      if (!response.ok || !acceptProjection(body)) setStartError(publicError(body, "Не удалось начать проверку. Попробуйте ещё раз."));
+      else setFallback(false);
+    } catch { setStartError("Не удалось начать проверку. Попробуйте ещё раз."); }
+    finally { startingRef.current = false; setStarting(false); }
+  };
 
   useEffect(() => {
     if (test?.status !== "active" || terminal || !visible) return;
@@ -203,7 +232,21 @@ function QualificationRunner({ attemptId, visible, onLockChange, onFinished }: {
   };
 
   if (terminal) return <section className="promotion-qualification-terminal" role="alert"><span aria-hidden="true">×</span><h3>{terminal === "timeout" ? "ВРЕМЯ ИСТЕКЛО" : "ПОПЫТКА ЗАВЕРШЕНА"}</h3><p>{terminal === "timeout" ? "Время истекло. Проверка передана проверяющему." : terminal === "offline" ? "Соединение прервано. Попытка передана проверяющему." : "Выход из проверки. Попытка передана проверяющему."}</p></section>;
-  if (busy && !test) return <div className="promotion-test-loading" role="status">Загружаем текущий вопрос…</div>;
+  if (busy && !test) return <div className="promotion-test-loading" role="status">Загружаем проверку…</div>;
+  if (!test && loadFailed) return <section className="promotion-qualification-terminal" role="alert"><h3>ПРОВЕРКА НЕДОСТУПНА</h3><p>Не удалось загрузить проверку. Она не начата.</p><button className="promotion-action" type="button" onClick={retryLoad}>ПОВТОРИТЬ</button></section>;
+  if (test?.status === "prepared" || (!test && fallback)) {
+    const mode = test?.clientMode === "desktop" || test?.clientMode === "phone" ? test.clientMode : null;
+    const lines = qualificationPreStartLines({ clientMode: mode, questionCount: typeof test?.questionCount === "number" ? test.questionCount : null });
+    const rules = typeof test?.rulesText === "string" ? test.rulesText : "";
+    return <section className="promotion-qualification-prestart">
+      <span className="promotion-eyebrow">ПРАВИЛА ПРОВЕРКИ</span>
+      <h3>ПРОВЕРКА ГОТОВА К НАЧАЛУ</h3>
+      <ul className="promotion-prestart-lines">{lines.map((line) => <li key={line.id} className={line.current ? "is-current" : undefined}>{line.text}{line.current ? " — ваше устройство" : ""}</li>)}</ul>
+      {rules && <div className="promotion-prestart-rules"><h4>ПРАВИЛА ПРОВЕРЯЮЩЕГО</h4><p>{rules}</p></div>}
+      {startError && <p className="promotion-error" role="alert">{startError}</p>}
+      <button className="promotion-action" type="button" disabled={starting} onClick={() => void startTest()}>{starting ? "НАЧИНАЕМ…" : "НАЧАТЬ ПРОВЕРКУ"}</button>
+    </section>;
+  }
   if (!test) return <section className="promotion-qualification-terminal"><h3>ПРОВЕРКА НЕДОСТУПНА</h3><p>Обновите состояние позже.</p></section>;
   if (test.result || test.status === "passed" || test.status === "failed") return <section className={`promotion-qualification-result ${test.result ?? test.status}`}><span className="promotion-eyebrow">ИТОГ КВАЛИФИКАЦИИ</span><h3>{(test.result ?? test.status) === "passed" ? "ПРОВЕРКА ПРОЙДЕНА" : "ПРОВЕРКА НЕ ПРОЙДЕНА"}</h3>{Number.isInteger(test.percent) && <p>Процент: <strong>{test.percent}%</strong></p>}<p>Подробности ответов участнику не показываются.</p></section>;
   if (test.status === "submitted" || !test.question) return <section className="promotion-qualification-result"><span className="promotion-eyebrow">ОЖИДАНИЕ РЕШЕНИЯ</span><h3>ОТВЕТЫ ПЕРЕДАНЫ</h3></section>;
@@ -259,7 +302,7 @@ function activeCopy(kind: RequestKind, active: NonNullable<ActiveState>) {
   if (active.status === "claimed") return "Проверяющий уже взял запрос в работу.";
   if (active.status === "assigned") return "Задания назначены. Выполните их и ожидайте решения проверяющего.";
   if (active.status === "awaiting-sheet-change" || active.status === "approved") return "Ожидается изменение звания в таблице.";
-  if (active.status === "testing") return "Квалификационная проверка начата.";
+  if (active.status === "testing") return "Квалификационная проверка выдана. Правила и ход проверки — ниже.";
   if (active.status === "grading") return "Ответы переданы проверяющему.";
   if (active.status === "passed") return "Квалификация пройдена. Теперь отдельно запросите задания на повышение.";
   if (active.status === "failed") return promotionAvailabilityText(active.availableAt, new Date()) ?? "Повторная проверка будет доступна по решению проверяющего.";
@@ -305,7 +348,7 @@ function PromotionStatusCard({ kind, active, eligibility, busy, stale, next, fee
     {!active && !canRequest && <span className="promotion-reason-label">Почему сейчас нельзя</span>}
     <p className="promotion-status-copy">{active ? activeCopy(kind, active) : eligibilityCopy(kind, eligibility)}</p>
     {feedback.phase !== "idle" && <p ref={feedbackRef} tabIndex={-1} role={feedback.phase === "error" ? "alert" : "status"} className={`promotion-submit-feedback ${feedback.phase}`}>{feedback.message}</p>}
-    {!ordinary && active && !active.attemptId && (active.status === "claimed" || active.status === "approved") && <div className="promotion-test-warning"><strong>15 МИНУТ ПОСЛЕ РАЗРЕШЕНИЯ</strong><p>После разрешения проверяющего начнутся 15 минут.</p><p className="promotion-mode-warning">ПК. {desktopModeWarning}</p><p className="promotion-mode-warning">Телефон. {phoneModeWarning}</p></div>}
+    {!ordinary && active && !active.attemptId && (active.status === "claimed" || active.status === "approved") && <div className="promotion-test-warning"><strong>15 МИНУТ ПОСЛЕ НАЧАЛА</strong><p>Когда проверяющий подтвердит набор вопросов, здесь появятся правила и кнопка «НАЧАТЬ ПРОВЕРКУ». 15 минут пойдут только после её нажатия.</p><p className="promotion-mode-warning">ПК. {desktopModeWarning}</p><p className="promotion-mode-warning">Телефон. {phoneModeWarning}</p></div>}
     {!ordinary && active?.attemptId && <QualificationRunner attemptId={active.attemptId} visible={visible !== false} onLockChange={onQualificationLockChange ?? (() => undefined)} onFinished={onQualificationFinished ?? (() => undefined)} />}
     {tasks.length > 0 && <div className="promotion-tasks"><h3>Назначенные задания</h3><ol className="promotion-task-list">{tasks.map((task) => <li key={task.id}><span>{String(task.sortOrder).padStart(2, "0")}</span><div><p>{task.text}</p></div></li>)}</ol></div>}
     {canRequest && <button className="promotion-action" type="button" disabled={busy || stale} onClick={() => onRequest(kind)}>{busy ? "ОТПРАВЛЯЕМ…" : ordinary ? "ПОДАТЬ ЗАЯВКУ НА ЗАДАНИЯ" : "ЗАПРОСИТЬ КВАЛИФИКАЦИЮ"}</button>}

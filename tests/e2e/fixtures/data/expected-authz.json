@@ -14,9 +14,10 @@
     "20261113000000_portia_access_promotion.sql",
     "20261114000000_portia_access_closure_default_on.sql",
     "20261115000000_portia_server_read_expand.sql",
-    "20261115000100_portia_closure_contract.sql"
+    "20261115000100_portia_closure_contract.sql",
+    "20261117000000_portia_qualification_rules.sql"
   ],
-  "generated_from": "all supabase/migrations SQL text replayed in version order (grant/revoke/policy/raise lines); not from observed behavior. Phase 21 adds the portia_access_* functions and tables (migration 20261109000000_portia_access_foundation.sql). Phase 23 adds approved-request Promotion RPC wrappers (offline evidence only). Phase 23 (23-10) turns site closure ON by default (20261114000000_portia_access_closure_default_on.sql restates the grants of portia_access_closure_enabled unchanged). Phase 25 (25-01) adds the server-signed read functions portia_content_read and portia_employees_read (20261115000000_portia_server_read_expand.sql, additive expand; offline evidence only). Phase 25 (25-04) contract 20261115000100_portia_closure_contract.sql removes the anonymous select grant and the public read policies of portia_content, portia_employee_profiles and portia_manual_employees and the public read policy of the media bucket (offline evidence only; the anonymous refusal and the listing are BLOCKED until an isolated staging project proves them).",
+  "generated_from": "all supabase/migrations SQL text replayed in version order (grant/revoke/policy/raise lines); not from observed behavior. Phase 21 adds the portia_access_* functions and tables (migration 20261109000000_portia_access_foundation.sql). Phase 23 adds approved-request Promotion RPC wrappers (offline evidence only). Phase 23 (23-10) turns site closure ON by default (20261114000000_portia_access_closure_default_on.sql restates the grants of portia_access_closure_enabled unchanged). Phase 25 (25-01) adds the server-signed read functions portia_content_read and portia_employees_read (20261115000000_portia_server_read_expand.sql, additive expand; offline evidence only). Phase 25 (25-04) contract 20261115000100_portia_closure_contract.sql removes the anonymous select grant and the public read policies of portia_content, portia_employee_profiles and portia_manual_employees and the public read policy of the media bucket (offline evidence only; the anonymous refusal and the listing are BLOCKED until an isolated staging project proves them). Quick 261117-px5 adds portia_promo_save_qualification_rules and redefines portia_promo_current_test and portia_promo_bank_state (20261117000000_portia_qualification_rules.sql, additive; offline evidence only, applied nowhere).",
   "roles": {
     "anon": {
       "session": false
@@ -2132,6 +2133,45 @@
         "owner": {
           "outcome": "allow",
           "source": "supabase/migrations/20261101000000_portia_baseline.sql:1606"
+        }
+      }
+    },
+    {
+      "key": "public.portia_promo_save_qualification_rules(p_transition_id text, p_rules_text text)",
+      "name": "portia_promo_save_qualification_rules",
+      "identity": "p_transition_id text, p_rules_text text",
+      "args": {
+        "p_transition_id": "probe",
+        "p_rules_text": ""
+      },
+      "creates_rows": false,
+      "kind": "reviewer",
+      "cells": {
+        "anon": {
+          "outcome": "42501",
+          "source": "supabase/migrations/20261117000000_portia_qualification_rules.sql:119"
+        },
+        "outsider": {
+          "outcome": "forbidden",
+          "source": "supabase/migrations/20261117000000_portia_qualification_rules.sql:106"
+        },
+        "editor-full": {
+          "outcome": "forbidden",
+          "source": "supabase/migrations/20261117000000_portia_qualification_rules.sql:106"
+        },
+        "editor-restricted": {
+          "outcome": "forbidden",
+          "source": "supabase/migrations/20261117000000_portia_qualification_rules.sql:106"
+        },
+        "promo-reviewer": {
+          "outcome": "P0001",
+          "source": "supabase/migrations/20261117000000_portia_qualification_rules.sql:120",
+          "message": "invalid-transition"
+        },
+        "owner": {
+          "outcome": "P0001",
+          "source": "supabase/migrations/20261117000000_portia_qualification_rules.sql:120",
+          "message": "invalid-transition"
         }
       }
     },

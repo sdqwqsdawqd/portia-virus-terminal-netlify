@@ -30,7 +30,8 @@ test("the contract file exists, is named like a migration and sorts after the ex
   assert.match(name, /^\d{14}_portia_[a-z0-9_]+\.sql$/u);
   assert.ok(name.slice(0, 14) > "20261115000000");
   const files = readdirSync(dir).filter((file) => file.endsWith(".sql")).sort();
-  assert.equal(files[files.length - 1], name, "the contract is the last migration");
+  // Later quick tasks may add newer migrations; no other Phase 25 migration may sort after the contract.
+  assert.equal(files.filter((file) => file.startsWith("20261115")).pop(), name, "the contract is the last Phase 25 migration");
 });
 
 test("the first executable statement is the guard DO block (D-06), before any revoke or drop policy", () => {
