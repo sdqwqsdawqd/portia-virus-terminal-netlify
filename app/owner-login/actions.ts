@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
+import { signInErrorParam, signUpErrorParam, signUpReturnedExistingAccount } from "@/lib/owner-login-errors";
 
 export async function ownerLogin(formData: FormData) {
   const email = String(formData.get("email") ?? "").trim();
@@ -12,7 +13,8 @@ export async function ownerLogin(formData: FormData) {
 
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) redirect(error.code === "email_not_confirmed" ? "/owner-login?error=unconfirmed" : "/owner-login?error=invalid");
+  // "email_not_confirmed" → error=unconfirmed; a wrong password and a rate limit get their own lines (lib/owner-login-errors.ts).
+  if (error) redirect(`/owner-login?error=${signInErrorParam(error.code)}`);
   // Confirm email off or an admin-created account: the session exists but the email was never confirmed.
   if (!data.user?.email_confirmed_at) {
     await supabase.auth.signOut();
@@ -39,7 +41,9 @@ export async function editorSignUp(formData: FormData) {
   if (!approved) redirect("/owner-login?error=not-approved");
 
   const { data, error } = await supabase.auth.signUp({ email, password });
-  if (error) redirect("/owner-login?error=signup");
+  if (error) redirect(`/owner-login?error=${signUpErrorParam(error.code)}`);
+  // An already registered email: say so instead of «Аккаунт создан», which sent no letter.
+  if (signUpReturnedExistingAccount(data.user)) redirect("/owner-login?error=exists");
 
   if (data.user && data.session) {
     const access = await getEditorAccess(supabase, data.user);
