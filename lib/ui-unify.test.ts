@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 import { lf } from "./component-source.ts";
 
@@ -850,4 +850,30 @@ test("UI-06 / D-02: no maximized rule stretches a control and the caps are 640/8
       }
     }
   }
+});
+
+// UAT 2026-11-16 gap 9: the native <dialog> opened by showModal() is centred by the browser through `margin: auto`, but the Tailwind 4
+// preflight resets margin on every element, so the confirmation dialog stuck to the top-left corner of the screen. `.image-framing-dialog`
+// already restored it; the shared class `.portia-dialog` did not.
+test("UI-03 (UAT 2026-11-16): native confirm dialogs sit in the centre of the screen", () => {
+  assert.equal(lastDeclaration(cascadeCss, ".portia-dialog", "margin"), "auto");
+  const DIALOG_ROOTS = [".portia-dialog", ".users-bulk-dialog", ".users-action-dialog", ".image-framing-dialog"];
+  for (const rule of rulesOf(cascadeCss)) {
+    for (const selector of rule.selectors.filter((entry) => DIALOG_ROOTS.includes(entry))) {
+      for (const [name, value] of declarations(rule.body)) {
+        if (name === "margin" || name.startsWith("margin-")) assert.equal(value, "auto", `${selector} { ${name}: ${value} } would move the dialog off the centre`);
+      }
+    }
+  }
+  // Every native dialog of the components carries the shared class, so the one rule centres all of them.
+  const componentsDir = new URL("../components/", import.meta.url);
+  let dialogs = 0;
+  for (const file of readdirSync(componentsDir).filter((name) => name.endsWith(".tsx"))) {
+    const source = lf(readFileSync(new URL(file, componentsDir), "utf8"));
+    for (const match of source.matchAll(/<dialog\b([^>]*)>/gu)) {
+      dialogs += 1;
+      assert.match(match[1], /className="[^"]*\bportia-dialog\b[^"]*"/u, `${file}: a <dialog> without the portia-dialog class`);
+    }
+  }
+  assert.ok(dialogs >= 4, `the scan found ${dialogs} native dialogs, expected at least 4`);
 });
