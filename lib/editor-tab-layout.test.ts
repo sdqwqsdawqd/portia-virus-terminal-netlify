@@ -372,6 +372,30 @@ test("UAT 2026-11-16 gap 4: the open add-section form takes a whole row of the b
   assert.equal(declared(".editor-section-create[hidden]", "display"), "none", "a closed form stays hidden");
 });
 
+test("UAT 2026-11-16 gap 10: the recycle button stands in the record head beside the dossier tabs", () => {
+  const form = editorSlice('<div className="editor-form virus-editor-form etab-detail">', ') : draft.viruses.length ? <EditorEmptyDetail />');
+  const head = form.indexOf('<div className="virus-editor-head">');
+  const tabs = form.indexOf("<DossierTabs active={dossierTab} changed={liveDossierChanged} onSelect={selectDossierTab} />");
+  const button = form.indexOf('<button className="danger-control" type="button" onClick={() => setDialog("recycle")}>ПЕРЕМЕСТИТЬ В КОРЗИНУ</button>');
+  const headEnd = form.indexOf("</div>", button);
+  const firstGroup = form.indexOf('{dossierTab === "main" &&');
+  assert.ok(head >= 0 && tabs > head && button > tabs && headEnd > button && firstGroup > headEnd, "the head holds the tabs and then the button, before the first group");
+  assert.ok(form.slice(0, head).trim().endsWith('<div className="editor-form virus-editor-form etab-detail">'), "the head is the first line of the form");
+  assert.equal(form.split("ПЕРЕМЕСТИТЬ В КОРЗИНУ").length - 1, 1, "one recycle button in the markup of the tab; none stays below the groups");
+  assert.ok(form.indexOf("setDialog(") === form.indexOf('setDialog("recycle")'), "the same handler opens the confirmation dialog (T-26-40)");
+  assert.equal(declared(".virus-editor-head", "display"), "flex");
+  assert.equal(declared(".virus-editor-head", "flex-wrap"), "wrap");
+  assert.equal(declared(".virus-editor-head", "align-items"), "center");
+  assert.equal(declared(".virus-editor-head", "justify-content"), "space-between");
+  assert.equal(declared(".virus-editor-head", "gap"), "8px");
+  assert.equal(declared(".virus-editor-head", "margin-bottom"), "16px");
+  assert.equal(declared(".virus-editor-head > .dossier-tabs", "flex"), "1 1 auto");
+  assert.equal(declared(".virus-editor-head > .dossier-tabs", "min-width"), "0");
+  assert.equal(declared(".virus-editor-head > .dossier-tabs", "margin"), "0");
+  assert.equal(declared(".virus-editor-head > .danger-control", "flex"), "none");
+  assert.notEqual(declared(".virus-editor-head > .danger-control", "width"), "100%");
+});
+
 test("D-13b: only the action bar is sticky; the old add bar and section tabs have no sticky layer or top offset of their own", () => {
   for (const selector of [".editor-section-tabs", ".editor-section-addbar", ".editor-section-addbar + .editor-section-tabs"]) {
     for (const context of [undefined, PHONE, "width > 900px"]) {
