@@ -333,10 +333,43 @@ test("A2: the «Справочник» body is the TOC on the left (only when it
   const form = detail.indexOf('<div className="editor-form flat-editor-form editor-card-columns">');
   const hint = detail.indexOf('<p className="editor-guidance">Справочник на рабочем столе');
   const empty = detail.indexOf("Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».");
-  const columns = detail.indexOf("<SectionColumns items={draft.guideSections} render={(section, index) => section.id === activeGuideSection && (");
+  const columns = detail.indexOf('<div className="editor-section-single">{draft.guideSections.map((section, index) => section.id === activeGuideSection && (');
   assert.ok(form > 0 && hint > form && empty > hint && columns > empty, "detail = the form, its hint (h-41), the empty state (h-43), the active section");
   assert.match(body, /<\/div>\n\s*\} \/>\n\s*\)\}/, "the detail closes after the form");
   assert.match(shell, /export function EditorTabBody/);
+});
+
+test("UAT 2026-11-16 gap 4: the active section spans the whole form", () => {
+  for (const [tabStart, tabEnd, list, active] of [['{tab === "info" && (', '{tab === "guide" && (', "infoSections", "activeInfoSection"], ['{tab === "guide" && (', '{tab === "broadcasts" && (', "guideSections", "activeGuideSection"]]) {
+    const body = editorSlice(tabStart, tabEnd);
+    assert.ok(body.includes(`<div className="editor-section-single">{draft.${list}.map((section, index) => section.id === ${active} && (`), `${list}: the active section stands in the single-section wrapper`);
+    assert.ok(body.includes("          ))}</div>"), `${list}: the wrapper closes after the card`);
+    assert.ok(!body.includes("<SectionColumns"), `${list}: no column grid for one section`);
+  }
+  const recommendations = stripComments(editor).split("<SectionColumns items=").length - 1;
+  assert.equal(recommendations, 1, "SectionColumns stays only for the recommendations, which show all their cards");
+  assert.equal(declared(".editor-section-single", "grid-column"), "1 / -1");
+  assert.equal(declared(".editor-section-single", "min-width"), "0");
+  assert.equal(declared(".editor-section-single", "display"), "grid");
+  assert.equal(declared(".editor-section-single", "gap"), "10px");
+  assert.equal(declared(":root", "--editor-card-width") ?? "340px", "340px", "the card width of the grids is not touched (D-19)");
+  assert.match(styles, /--editor-card-width: 340px;/);
+});
+
+test("UAT 2026-11-16 gap 4: the open add-section form takes a whole row of the bar", () => {
+  const OPEN = ":has(> .editor-section-create:not([hidden]))";
+  assert.equal(declared(`.etab-nav:has(> .editor-section-addbar > .editor-section-create:not([hidden]))`, "flex-wrap"), "wrap", "the bar's nav wraps while the form is open");
+  assert.equal(declared(`.etab-nav > .editor-section-addbar${OPEN}`, "flex"), "1 0 100%", "the add bar takes the whole row while the form is open");
+  assert.equal(declared(".etab-nav > .editor-section-addbar", "flex"), "none", "the closed form keeps the old rule");
+  const open = ".etab-nav .editor-section-create:not([hidden])";
+  assert.equal(declared(open, "display"), "flex");
+  assert.equal(declared(open, "flex-wrap"), "wrap");
+  assert.equal(declared(open, "align-items"), "end");
+  assert.equal(declared(open, "gap"), "8px");
+  assert.equal(declared(".etab-nav .editor-section-create", "width"), "auto", "no 320px cap on the form");
+  assert.equal(declared(".etab-nav .editor-section-create .editor-field", "flex"), "1 1 320px");
+  assert.equal(declared(".etab-nav .editor-section-create .editor-field", "max-width"), "var(--field-max)");
+  assert.equal(declared(".editor-section-create[hidden]", "display"), "none", "a closed form stays hidden");
 });
 
 test("D-13b: only the action bar is sticky; the old add bar and section tabs have no sticky layer or top offset of their own", () => {
@@ -401,7 +434,7 @@ test("A2: «Информация» and «Сводка» bodies are the TOC on th
   const info = editorSlice('{tab === "info" && (', '{tab === "guide" && (');
   assert.ok(info.includes("<EditorTabBody list={infoTocItems.length >= 5 && <EditorToc items={infoTocItems} onJump={jumpInfo} onAll={(open) => setAllOpen(infoCardIds, open)} />} detail={"));
   const infoDetail = info.slice(info.indexOf("detail={"));
-  const order = ['<div className="editor-form flat-editor-form editor-card-columns">', "<EditorGroup title={levelCopy.appsGroup}>", '<p className="editor-guidance">Каждый блок становится', "Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».", "<SectionColumns items={draft.infoSections}"];
+  const order = ['<div className="editor-form flat-editor-form editor-card-columns">', "<EditorGroup title={levelCopy.appsGroup}>", '<p className="editor-guidance">Каждый блок становится', "Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».", '<div className="editor-section-single">{draft.infoSections.map((section, index) => section.id === activeInfoSection && ('];
   order.reduce((last, piece) => { const at = infoDetail.indexOf(piece, last); assert.ok(at > last, `info detail: ${piece}`); return at; }, 0);
   const broadcasts = editorSlice('{tab === "broadcasts" && (', '{tab === "recycle" && (');
   assert.ok(broadcasts.includes("<EditorTabBody list={broadcastTocItems.length >= 5 && <EditorToc items={broadcastTocItems} onJump={(id) => { openBroadcast(id); jumpToCard(id); }} onAll={(open) => setAllOpen(broadcastTocItems.map((item) => item.id), open)} />} detail={"));
