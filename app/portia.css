@@ -1970,13 +1970,26 @@ html[data-motion="full"] .desktop-assistant.is-offended .assistant-button img { 
 html[data-motion="full"] .desktop-assistant.is-recovering .assistant-button img { animation: vivian-recover 780ms var(--ease-out) both; }
 html[data-motion="full"] .assistant-bubble { transform-origin: 100% 85%; animation: vivian-bubble 360ms var(--ease-out) both; }
 html[data-motion="reduced"] .assistant-bubble { animation: fade-in var(--motion-fast) var(--ease-out) both !important; }
-/* Vivian under «Анимации: Уменьшены»: no hops or shakes, but she still answers a click and fades between moods, all within --motion-fast. Under «Выключены» the global rule makes every expression change instant. */
-html[data-motion="reduced"] .desktop-assistant[data-mood][data-squish="a"]:not(.is-offended) .assistant-button img { animation: vivian-soft-a var(--motion-fast) var(--ease-out) !important; }
-html[data-motion="reduced"] .desktop-assistant[data-mood][data-squish="b"]:not(.is-offended) .assistant-button img { animation: vivian-soft-b var(--motion-fast) var(--ease-out) !important; }
-html[data-motion="reduced"] .desktop-assistant:is(.is-offended, .is-recovering) .assistant-button img { animation: fade-in var(--motion-fast) var(--ease-out) both !important; }
+/* Vivian under «Анимации: Уменьшены» (quick 261117-bi1): без прыжков и тряски, но она отвечает на клик, автоматическую фразу, обиду и возвращение
+   маленьким подпрыгиванием — только individual-свойство translate (до 4px вверх), не дольше --motion-base (240ms), без провала прозрачности и без
+   появления из нуля. Click чередует два одинаковых keyframes (data-squish a/b), как в полном режиме; правило клика стоит после фразы, чтобы клик выигрывал.
+   Обида: она сразу в позе «отвернулась, серая» и лишь слегка оседает на 4px; поза держится статично. */
+html[data-motion="reduced"] .desktop-assistant.is-speaking[data-auto]:not(.is-offended) .assistant-button img { animation: vivian-bounce var(--motion-base) var(--ease-out) !important; }
+html[data-motion="reduced"] .desktop-assistant[data-mood][data-squish="a"]:not(.is-offended) .assistant-button img { animation: vivian-bounce-a var(--motion-base) var(--ease-out) !important; }
+html[data-motion="reduced"] .desktop-assistant[data-mood][data-squish="b"]:not(.is-offended) .assistant-button img { animation: vivian-bounce-b var(--motion-base) var(--ease-out) !important; }
+html[data-motion="reduced"] .desktop-assistant.is-offended .assistant-button img { animation: vivian-sink var(--motion-base) var(--ease-out) both !important; }
+html[data-motion="reduced"] .desktop-assistant.is-recovering .assistant-button img { animation: vivian-bounce var(--motion-base) var(--ease-out) !important; }
 html[data-motion="reduced"] .assistant-button img { transition-duration: var(--motion-fast); }
-@keyframes vivian-soft-a { 50% { opacity: .72; scale: .97; } }
-@keyframes vivian-soft-b { 50% { opacity: .72; scale: .97; } }
+@keyframes vivian-bounce { 40% { translate: 0 -4px; } 75% { translate: 0 1px; } 100% { translate: 0 0; } }
+@keyframes vivian-bounce-a { 40% { translate: 0 -4px; } 75% { translate: 0 1px; } 100% { translate: 0 0; } }
+@keyframes vivian-bounce-b { 40% { translate: 0 -4px; } 75% { translate: 0 1px; } 100% { translate: 0 0; } }
+@keyframes vivian-sink { 0% { translate: 0 0; } 60% { translate: 0 6px; } 100% { translate: 0 4px; } }
+/* Under «Анимации: Выключены» (quick 261117-bi1) Vivian does not move at all: no keyframes on the figure or the bubble, no lean on hover, focus or press.
+   The hover glow (filter) and the static sulking pose stay: they show state, they do not move. */
+html[data-motion="off"] .desktop-assistant .assistant-button img, html[data-motion="off"] .assistant-bubble { animation: none !important; }
+html[data-motion="off"] .assistant-button:hover img,
+html[data-motion="off"] .assistant-button:focus-visible img,
+html[data-motion="off"] .assistant-button:active img { transform: none; }
 @keyframes vivian-hop {
   0% { scale: 1; translate: 0 0; animation-timing-function: ease-out; }
   16% { scale: 1.08 .88; translate: 0 2px; animation-timing-function: cubic-bezier(.2, .6, .35, 1); }

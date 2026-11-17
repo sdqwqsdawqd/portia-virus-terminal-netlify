@@ -345,7 +345,7 @@ test("animations are full by default; reduced and off only by the saved setting,
 // quick 261117-bi1 (R4): Vivian under «Уменьшены» answers with a small translate-only bounce (no opacity dip, no fade from zero);
 // under «Выключены» she does not move at all (no keyframes, no hover/focus/press lean). The static sulking pose still shows the state.
 type MotionRule = { selectors: string[]; body: string };
-const motionRules = (mode: "reduced" | "off"): MotionRule[] => [...css.matchAll(new RegExp(`(?:^|\\n)(html\\[data-motion="${mode}"\\][^{}\\n]*)\\{([^{}]*)\\}`, "g"))]
+const motionRules = (mode: "reduced" | "off"): MotionRule[] => [...css.matchAll(new RegExp(`(?:^|\\n)(html\\[data-motion="${mode}"\\][^{}]*)\\{([^{}]*)\\}`, "g"))]
   .map((match) => ({ selectors: match[1].split(",").map((selector) => selector.trim()), body: match[2] }));
 const keyframeBody = (name: string) => css.match(new RegExp(`@keyframes ${name}\\s*\\{((?:[^{}]*\\{[^{}]*\\})*)\\s*\\}`))?.[1];
 const keyframeProperties = (body: string) => new Set([...body.matchAll(/([a-z-]+)\s*:/g)].map((match) => match[1]).filter((property) => property !== "animation-timing-function"));
