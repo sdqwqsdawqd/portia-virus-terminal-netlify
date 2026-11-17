@@ -238,7 +238,10 @@ test.describe("access-levels backstop (mocked /api/**)", () => {
       await hint.first().scrollIntoViewIfNeeded();
       await expect(hint.first()).toBeVisible();
 
-      const option = hint.first().locator("xpath=ancestor::fieldset[contains(@class,'access-level-picker')]").locator(".access-level-option").first();
+      // UAT 2026-11-16 gap 6: the plates open behind the small «who sees it» button of the same group.
+      const group = hint.first().locator("xpath=ancestor::fieldset[contains(@class,'access-level-picker')]");
+      await group.locator(".access-level-toggle").click();
+      const option = group.locator(".access-level-option").first();
       await option.scrollIntoViewIfNeeded();
       const box = await option.boundingBox();
       expect(box, "level option has a box").not.toBeNull();

@@ -21,6 +21,8 @@ export const levelCopy = {
   docDenied: (current: number, required: number) => `Текущий уровень: ${current}. Для чтения этого документа требуется уровень ${required}.`,
   pickerLegend: "Нужен допуск",
   pickerOption: (level: number) => `Допуск ${level}`,
+  // UAT 2026-11-16 gap 6: the closed picker is one small button that says who sees the record.
+  pickerSummary: (level: number) => (level <= 1 ? "Видят все" : level >= 5 ? "Видят только допуск 5" : `Видят с допуска ${level}`),
   parentHint: (level: number) => `Не ниже раздела: ${level}`,
   parentTitle: (level: number) => `не ниже раздела: ${level}`,
   raisedSubsections: (level: number, count: number) => `Уровень подразделов поднят до ${level}: изменено ${count}.`,
