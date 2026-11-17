@@ -1,25 +1,23 @@
 ---
 phase: PORTIA-26
 review: 26-REVIEW.md
+scope: incremental, gap plans 26-15..26-20 (28fdbce..HEAD)
 critical: 0
-warning: 6
+warning: 3
 info: 3
-open: 3
-fixed: 6
+open: 6
+fixed: 0
 ---
 
-# Phase 26: судьба замечаний ревью кода
+# Phase 26: судьба замечаний ревью кода (инкрементальное ревью 26-15…26-20)
 
-Ревью справочное, фазу не блокирует. WR-01…WR-06 исправлены (коммиты 16d2a05, edea8f9, 084a37a, b537777, cd4a0f4, d3848e7; см. 26-REVIEW-FIX.md). IN-01…IN-03 остаются `open`.
+Ревью справочное, фазу не блокирует. Прежняя таблица (WR-01…WR-06 исправлены, IN-01…IN-03 открыты, ревью 26-01…26-14) осталась в истории git, коммит перед `112d896`. Все замечания этого ревью пока `open`. Исправить их можно через `/gsd-code-review PORTIA-26 --fix`.
 
 | ID | Важность | Файл | Суть | Судьба |
 |----|----------|------|------|--------|
-| WR-01 | warning | components/portia-editor.tsx:1215 | Без `editor-save-chip` на вкладках users/promo/access не видно несохранённых правок общего черновика, сохранить нельзя | fixed |
-| WR-02 | warning | components/portia-desktop-shortcuts.tsx, app/portia.css | Дробная ширина 520–521px (масштаб 125%): CSS телефона и JS перетаскивания расходятся | fixed |
-| WR-03 | warning | components/portia-users-tab.tsx:569 | `load()` не отличает вытесненный запрос от ошибки: после решения деталь пустеет, фокус теряется | fixed |
-| WR-04 | warning | components/portia-promotion-editor-main.tsx:123, app/portia.css | Все сообщения «Повышения» с `tone="error"`; `.editor-save-status.error` ломает `nowrap` панели на телефоне | fixed |
-| WR-05 | warning | components/portia-editor.tsx:1705, components/portia-editor-tab-shell.tsx:458 | Две живые области озвучивают один статус сохранения | fixed |
-| WR-06 | warning | components/portia-users-tab.tsx:719, app/portia.css | Липкая плашка устаревших данных уходит под `.etab-bar` (вывод по CSS) | fixed |
-| IN-01 | info | components/portia-users-tab.tsx | Двойной `.etab-detail` у пустой детали | open |
-| IN-02 | info | components/portia-editor-tab-shell.tsx | Одинаковые `aria-label` у section и nav | open |
-| IN-03 | info | lib/shortcut-layout.ts | Расстановка не учитывает помощника и кнопку формата; касание смешивает прокрутку и перетаскивание | open |
+| WR-01 | warning | components/portia-editor.tsx:1390, :1448 | Ручка перетаскивания у карточки активного раздела в `.editor-section-single` не перетаскивает: в обёртке одна карточка, свопать не с чем. Работают только стрелки | open |
+| WR-02 | warning | components/portia-editor.tsx:288-291, components/portia-editor-dossier.tsx:187-212 | Ручка вкладки раздела в горизонтальной полосе: клавиши только ArrowUp/Down, автоскролл вертикальный, у каждого раздела два tab-стопа. Кнопки ←/→ убраны | open |
+| WR-03 | warning | components/portia-level-picker.tsx:25-48 | Список уровней закрывается по `onBlur`/`relatedTarget`. В Safari и Firefox на macOS он не закрывается кликом вне, а при фокусе внутри выбор теряется. Нужно закрывать по pointerdown вне, как в `lib/start-menu.ts` | open |
+| IN-01 | info | app/portia.css:1169, :1367 | `100cqw` уже считается от content-box, а формула ещё раз вычитает padding. Шрифт названий классов мельче возможного | open |
+| IN-02 | info | app/portia.css | Мёртвые и дублирующие объявления: двойной `gap`, `border-color` после `border: 0`, дубли `.template-card-preview .class-cell*` | open |
+| IN-03 | info | app/portia.css:2688-2689 | В развёрнутом «Повышении» строка загрузки оставляет пустую колонку 72px слева | open |
