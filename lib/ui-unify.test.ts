@@ -723,6 +723,7 @@ function assertPromotionFillsWindow() {
 
 const MAXIMIZED_WINDOWS: { app: string; outcome: "fixed" | "already conformant"; check: () => void }[] = [
   { app: "search", outcome: "fixed", check: () => {
+    // «Доступные записи» — все при развёрнутом окне (план 26-15, UAT 2026-11-16 gap 3).
     assert.equal(lastDeclaration(portiaCss, at(".global-search-results"), "grid-template-columns", DESKTOP), R1_COLUMNS);
     assert.equal(lastDeclaration(portiaCss, at(".global-search-box"), "max-width", DESKTOP), "var(--field-max)");
     assertFillsWindow(".global-search-app");
@@ -730,10 +731,16 @@ const MAXIMIZED_WINDOWS: { app: string; outcome: "fixed" | "already conformant";
   { app: "archive", outcome: "fixed", check: () => {
     assert.equal(lastDeclaration(portiaCss, at(".archive-grid"), "grid-template-columns", DESKTOP), LIST_COLUMN);
     assertFillsWindow(".archive-grid");
-    // The record is the shared 1060px paper (D-55, also the template builder) and the scientist document an 820px paper:
-    // both are measures that the window size does not change, so no maximized rule reaches inside them.
+    // UAT 2026-11-16 gap 3 — владелец: запись и документ учёного в узкой колонке. In a maximized window the record and the
+    // scientist document take the whole pane; the 1060px paper of a normal window and of the template builder (D-55) and the
+    // 820px paper stay as they are.
     assert.equal(lastDeclaration(portiaCss, ".record-document", "width"), "min(1060px, 100%)");
     assert.equal(lastDeclaration(portiaCss, ".archive-document-paper", "width"), "min(820px, calc(100% - 42px))");
+    assert.equal(lastDeclaration(portiaCss, at(".archive-grid .record-document"), "width", DESKTOP), "auto");
+    assert.equal(lastDeclaration(portiaCss, at(".archive-document-paper"), "width", DESKTOP), "calc(100% - 42px)");
+    for (const rule of rulesOf(cascadeCss)) {
+      for (const selector of rule.selectors) assert.ok(!(selector.includes("is-maximized") && selector.includes("template-card-preview")), selector);
+    }
   } },
   { app: "employees", outcome: "fixed", check: () => {
     assert.equal(lastDeclaration(portiaCss, at(".personnel-app"), "grid-template-columns", DESKTOP), LIST_COLUMN);
@@ -757,8 +764,10 @@ const MAXIMIZED_WINDOWS: { app: string; outcome: "fixed" | "already conformant";
   { app: "guide", outcome: "fixed", check: () => {
     assert.equal(lastDeclaration(portiaCss, at(".guide-grid"), "grid-template-columns", DESKTOP), guideR1);
     assert.equal(lastDeclaration(portiaCss, at(".guide-grid"), "gap", DESKTOP), "8px");
-    // The open article is already an 820px reading column.
+    // UAT 2026-11-16 gap 3 — владелец: статья в узкой колонке. The open article takes the whole pane of a maximized window;
+    // a normal window keeps the 820px reading column.
     assert.equal(lastDeclaration(portiaCss, ".guide-page", "max-width"), "820px");
+    assert.equal(lastDeclaration(portiaCss, at(".guide-page"), "max-width", DESKTOP), "none");
     assertFillsWindow(".guide-app");
   } },
   { app: "promotion", outcome: "fixed", check: () => {
@@ -775,14 +784,18 @@ const MAXIMIZED_WINDOWS: { app: string; outcome: "fixed" | "already conformant";
     assertFillsWindow(".promotion-app");
   } },
   { app: "settings", outcome: "fixed", check: () => {
-    // R3 on the pane that carries the background: two columns of at most 648px each (24px gap) = the 1320px form, so the
-    // background and the scroll bar still reach the window edge.
-    assert.equal(lastDeclaration(portiaCss, at(".settings-app"), "display", R3), "grid");
-    assert.equal(lastDeclaration(portiaCss, at(".settings-app"), "grid-template-columns", R3), "repeat(2, minmax(0, 648px))");
-    assert.equal(lastDeclaration(portiaCss, at(".settings-app"), "column-gap", R3), "24px");
+    // UAT 2026-11-16 gap 3 — владелец: пустая правая треть «Настроек». The groups are a grid of up to 3 columns over the whole
+    // pane (it carries the background, so the background and the scroll bar reach the window edge); the old 2 x 648px is gone.
+    assert.equal(lastDeclaration(portiaCss, at(".settings-app"), "display", DESKTOP), "grid");
+    assert.equal(lastDeclaration(portiaCss, at(".settings-app"), "grid-template-columns", DESKTOP), "repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 48px) / 3)), 1fr))");
+    assert.equal(lastDeclaration(portiaCss, at(".settings-app"), "column-gap", DESKTOP), "24px");
+    assert.equal(lastDeclaration(portiaCss, at(".settings-app"), "align-content", DESKTOP), "start");
     for (const whole of ["header", ".content-control-entry", ".settings-footer"]) {
-      assert.equal(lastDeclaration(portiaCss, at(`.settings-app > ${whole}`), "grid-column", R3), "1 / -1", whole);
+      assert.equal(lastDeclaration(portiaCss, at(`.settings-app > ${whole}`), "grid-column", DESKTOP), "1 / -1", whole);
     }
+    assert.equal(lastDeclaration(portiaCss, at(".settings-app"), "grid-template-columns", R3), undefined, "no R3 rule is left on the settings pane");
+    assert.doesNotMatch(portiaCss, /minmax\(0, 648px\)/u);
+    assert.equal(lastDeclaration(portiaCss, ".settings-app", "grid-template-columns", PHONE), undefined, "the phone is not touched");
     assertFillsWindow(".settings-app");
   } },
   { app: "broadcasts", outcome: "fixed", check: () => {
@@ -865,14 +878,17 @@ test("UI-06 / D-19: two columns only for flat forms; editor cards keep their 340
   }
 });
 
-test("UI-06 / D-02: no maximized rule stretches a control and the caps are 640/820/1320px", () => {
+test("UI-06 / D-02: no maximized rule stretches a control and the caps are 640/820/1320px or none for the guide article", () => {
   for (const [file, css] of ALL_STYLESHEETS) {
     for (const rule of rulesOf(css)) {
       if (!rule.selectors.some((selector) => selector.includes("is-maximized"))) continue;
       for (const [name, value] of declarations(rule.body)) {
         const stretches = (name === "width" && /^100%/u.test(value)) || (/^flex(?:-grow)?$/u.test(name) && /^[1-9]/u.test(value));
         assert.ok(!stretches, `${file}: ${rule.selectors.join(", ")} { ${name}: ${value} }`);
-        if (name === "max-width") assert.match(value, /^(?:var\(--field-max\)|820px|1320px)$/u, `${file}: ${rule.selectors.join(", ")} cap`);
+        if (name === "max-width" && value === "none") {
+          // UAT 2026-11-16 gap 3: the open article of «Справочник» is the only column that a maximized window releases.
+          assert.deepEqual(rule.selectors, [at(".guide-page")], `${file}: only the guide article may drop its cap`);
+        } else if (name === "max-width") assert.match(value, /^(?:var\(--field-max\)|820px|1320px)$/u, `${file}: ${rule.selectors.join(", ")} cap`);
       }
     }
   }
