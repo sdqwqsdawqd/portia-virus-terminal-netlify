@@ -703,7 +703,7 @@ test("quick 261117-bi1 R1: a maximized window is flush with the work area and sq
 
 // quick 261117-bi1 (R3): only in a maximized editor window on a PC, the list column of the page-scrolling list/detail tabs is a sticky column
 // as tall as the visible area, under a bar of one row. The 218px is the sum of the stylesheet's own heights, proved below.
-const ONE_ROW_BAR = ".content-editor:not(:has(.etab-draft)):not(:has(.etab-banner)):not(:has(.editor-section-create:not([hidden])))";
+const ONE_ROW_BAR = ".content-editor:not(:has(.etab-draft-label)):not(:has(.etab-banner)):not(:has(.editor-section-create:not([hidden])))";
 const FULL_LISTS = [
   `${MAXIMIZED} ${ONE_ROW_BAR} > .etab-body:not(.employee-editor-layout) > .etab-list`,
   `${MAXIMIZED} ${ONE_ROW_BAR} > .users-tab > .etab-body > .etab-list`,
