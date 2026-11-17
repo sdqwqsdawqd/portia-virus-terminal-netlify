@@ -93,6 +93,19 @@ test("an active qualification locks the desktop to one immovable promotion windo
   assert.match(styles, /\.qualification-focus-backdrop\s*\{[^}]*pointer-events:\s*auto/);
 });
 
+test("on a phone the locked check window fills the screen instead of being centred and shifted up by translate(-50%, -50%)", () => {
+  // Phone windows sit in the page flow (position: relative); the desktop centring of the locked window moved them up by half their height.
+  const phoneBlocks = [...styles.matchAll(/@media \(max-width: 900px\) \{([\s\S]*?)\n\}/g)].map((match) => match[1]).join("\n");
+  const rule = phoneBlocks.match(/\.app-window\.promotion-window\.is-modal-locked\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.match(rule, /position:\s*fixed\s*!important/, "the locked window is fixed to the screen on a phone");
+  assert.match(rule, /inset:\s*0\s*!important/, "it covers the whole screen");
+  assert.match(rule, /transform:\s*none\s*!important/, "no centring shift on a phone");
+  assert.match(rule, /width:\s*auto\s*!important/);
+  assert.match(rule, /height:\s*auto\s*!important/);
+  // It must come after the desktop rule so the equal-specificity !important declarations win.
+  assert.ok(styles.lastIndexOf(".app-window.promotion-window.is-modal-locked {") > styles.indexOf(".app-window.promotion-window.is-modal-locked {"));
+});
+
 const draft: QualificationAttempt = {
   id: "attempt", status: "prepared", clientMode: "desktop", startedAt: null, deadlineAt: null, technicalFailure: null, finalDecision: null,
   questions: [

@@ -1340,6 +1340,10 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .mobile-app-open .desktop-icons { display: none; }
   .app-window, .archive-window, .global-search-window { position: relative; inset: auto !important; width: 100% !important; height: auto !important; min-height: calc(100svh - 98px); transform: none !important; border-radius: var(--radius-window); }
   .mobile-app-open .app-window:not(.is-active) { display: none !important; }
+  /* During a qualification check the window covers the whole phone screen. The desktop centring above (top/left 50% + translate -50%)
+     shifted an in-flow phone window up by half its height and narrowed it; here it is pinned to the screen and scrolls inside .promotion-app. */
+  .app-window.promotion-window.is-modal-locked { position: fixed !important; inset: 0 !important; width: auto !important; height: auto !important; min-height: 0 !important; transform: none !important; border-radius: 0; }
+  .app-window.promotion-window.is-modal-locked .promotion-app { height: calc(100% - 42px); overscroll-behavior: contain; }
   /* The window fills the phone screen, so Vivian would cover its content: she steps out while a window is open and returns when it is minimised or closed (D-16, 18-MOTION-APPROVAL item 8). */
   .workspace.mobile-app-open ~ .desktop-assistant { display: none; }
   .window-titlebar { grid-template-columns: 1fr auto; height: 42px; padding: 0 0 0 11px; }
