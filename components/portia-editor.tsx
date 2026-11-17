@@ -10,6 +10,7 @@ import { columnMajor } from "@/lib/editor-columns";
 import {
   trimRecommendationSections,
 } from "@/lib/editor-outline";
+import { compressImageForUpload } from "@/lib/image-compress";
 import { uploadRefusal } from "@/lib/image-upload";
 import { dropFields, mergeFragments, removeFragmentAt } from "@/lib/format-fragments";
 import { historyReducer, initHistory, type EditorHistory, type HistoryAction } from "@/lib/editor-history";
@@ -920,10 +921,12 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
     setUploadMessage("");
     // A refusal never calls onUploaded, so the field and the draft keep their value (D-16).
     const refuse = (message: string) => { setUploadMessage(message); setUploadState("error"); };
+    // Shrinks the picture in the browser before sending; any failure inside sends the original file.
+    const prepared = await compressImageForUpload(file);
     let response: Response;
     try {
       const body = new FormData();
-      body.set("file", file);
+      body.set("file", prepared);
       response = await fetch("/api/uploads", { method: "POST", body });
     } catch {
       refuse(uploadRefusal.network);

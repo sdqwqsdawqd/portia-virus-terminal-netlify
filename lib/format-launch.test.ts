@@ -1024,6 +1024,22 @@ function applyRecycleButtonHunk(text: string): string {
   return replaceOnce(next, `\n\n              ${RECYCLE_BUTTON_LINE}\n            </div>\n`, `\n            </div>\n`, "recycle button: the old place out");
 }
 
+// Сжатие картинки в браузере перед загрузкой (владелец, 2026-11-17): импорт и подготовленный файл в теле запроса.
+function applyUploadCompressHunk(text: string): string {
+  const next = replaceOnce(
+    text,
+    'import { uploadRefusal } from "@/lib/image-upload";\n',
+    'import { compressImageForUpload } from "@/lib/image-compress";\nimport { uploadRefusal } from "@/lib/image-upload";\n',
+    "upload compress: import",
+  );
+  return replaceOnce(
+    next,
+    '    let response: Response;\n    try {\n      const body = new FormData();\n      body.set("file", file);\n',
+    '    // Shrinks the picture in the browser before sending; any failure inside sends the original file.\n    const prepared = await compressImageForUpload(file);\n    let response: Response;\n    try {\n      const body = new FormData();\n      body.set("file", prepared);\n',
+    "upload compress: prepared file",
+  );
+}
+
 /** Реестр одобренных правок (D-64): `apply` — порядок применения к образцу; `normalizeActual` — что вырезается из текущего файла перед сравнением. */
 const approvedEditorEdits: readonly { id: string; apply: (text: string) => string; normalizeActual?: (text: string) => string }[] = [
   { id: "D-57", apply: applyLaunchButtonHunk },
@@ -1044,6 +1060,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26-G05", apply: applySectionDragHunk },
   { id: "PORTIA-26-G04", apply: applySectionWidthHunk },
   { id: "PORTIA-26-G10", apply: applyRecycleButtonHunk },
+  { id: "UPLOAD-COMPRESS", apply: applyUploadCompressHunk },
 ];
 
 function expectedEditor(sample: string): string {
