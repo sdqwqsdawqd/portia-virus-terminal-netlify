@@ -290,8 +290,27 @@ test("D-13a: section tabs mark the current section with aria-current, not aria-p
   assert.ok(tabs.includes('{section.title || "Без названия"}'), "an empty title still reads «Без названия» (T-26-14)");
   assert.ok(tabs.includes("<nav aria-label={label} ref={navRef}>"), "the nav holds a ref");
   assert.match(tabs, /useEffect\(\(\) => \{\n\s*navRef\.current\?\.querySelector<HTMLElement>\('\[aria-current="true"\]'\)\?\.scrollIntoView\(\{ block: "nearest", inline: "nearest", behavior: document\.documentElement\.dataset\.motion === "full" \? "smooth" : "auto" \}\);\n\s*\}, \[activeId\]\);/, "the current item is scrolled into view on change, instantly unless motion is full");
-  assert.ok(tabs.includes('aria-label="Порядок разделов"'), "the order buttons stay beside the tabs");
+  assert.ok(!tabs.includes('aria-label="Порядок разделов"'), "UAT 2026-11-16 gap 5: the arrow buttons beside the tabs are gone, the drag handle of every tab does their work");
   assert.doesNotMatch(tabs, /dangerouslySetInnerHTML/);
+});
+
+test("UAT 2026-11-16 gap 5: every section tab carries the drag handle of the subsections", () => {
+  const tabs = editorSlice("function SectionTabs(", "function GuidePhotoLayoutEditor(");
+  assert.match(tabs, /sections\.map\(\(section, index\) => <span key=\{section\.id\} className="editor-section-tab" data-sort-index=\{index\}>/, "a tab is a span with its source index, a child of the nav (the shared parent the handle swaps within)");
+  assert.ok(tabs.includes('<OrderDragHandle index={index} label={section.title || "раздел"} onMove={onMove} />'), "the same handle as the subsections: no itemId, no move across lists");
+  assert.ok(tabs.indexOf("<OrderDragHandle") < tabs.indexOf("<button"), "the handle stands before the tab button");
+  assert.ok(tabs.includes('onClick={() => onSelect(section.id)}') && tabs.includes('aria-current={section.id === activeId ? "true" : undefined}'), "the tab button keeps selecting and aria-current");
+  assert.ok(tabs.includes('{section.title || "Без названия"}'), "an empty title still reads «Без названия»");
+  assert.ok(!tabs.includes("Переместить раздел") && !tabs.includes("activeIndex"), "no arrow buttons and no active-index bookkeeping");
+  assert.ok(tabs.includes("<nav aria-label={label} ref={navRef}>"), "the nav keeps its ref and the scroll effect");
+  assert.equal(declared(".editor-section-tabs nav > .editor-section-tab", "display"), "inline-flex");
+  assert.equal(declared(".editor-section-tabs nav > .editor-section-tab", "flex"), "none");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "width"), "24px");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "min-width"), "24px");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "padding"), "0");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "width", PHONE), "var(--tap-target)");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "min-width", PHONE), "var(--tap-target)");
+  assert.doesNotMatch(styles, /editor-section-tab-order/, "the dead arrow group has no rule left");
 });
 
 test("D-13a: «Справочник» switches sections in the nav slot of the bar: the add button first, then the section tabs", () => {
