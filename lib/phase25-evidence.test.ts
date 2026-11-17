@@ -39,6 +39,9 @@ const sha = (path: string) => createHash("sha256").update(readFileSync(new URL(`
 const versionOf = (text: string) => /(\d{14})_/.exec(text)?.[1] ?? "";
 const EXPAND = "20261115000000_portia_server_read_expand.sql";
 const CONTRACT = "20261115000100_portia_closure_contract.sql";
+// The checklist covers the migrations up to the Phase 25 contract; a later quick-task migration (for example
+// 20261117000000, quick 261117-px5) is recorded in the matrix and the review, not in this apply order.
+const PHASE25_LAST = "20261115000100";
 const EMERGENCY = "supabase/emergency/20261115000200_portia_emergency_restore_anon_read.sql";
 
 const checklist = read("25-OWNER-CHECKLIST.md");
@@ -57,7 +60,7 @@ test("Phase 25 owner checklist: the agent applied nothing, no PASS, no key prefi
 });
 
 test("Phase 25 owner checklist: apply order equals the tracked migrations after Phase 16, the emergency file is not in it", () => {
-  const versions = tracked("supabase/migrations", ".sql").map(versionOf).filter((version) => version > "20261101000200").sort();
+  const versions = tracked("supabase/migrations", ".sql").map(versionOf).filter((version) => version > "20261101000200" && version <= PHASE25_LAST).sort();
   assert.ok(versions.length >= 10);
   const listed = section(checklist, "Порядок применения").split("\n")
     .map((line) => /^\d+\. `(\d{14})_[a-z0-9_]+\.sql`/.exec(line)?.[1]).filter((version): version is string => Boolean(version));
@@ -85,7 +88,7 @@ test("Phase 25 owner checklist: pinned sha256 of expand and contract equal the p
 });
 
 test("Phase 25 owner checklist: one status row per migration and for the emergency file; staging BLOCKED, production waits for the owner", () => {
-  const versions = tracked("supabase/migrations", ".sql").map(versionOf).filter((version) => version > "20261101000200").sort();
+  const versions = tracked("supabase/migrations", ".sql").map(versionOf).filter((version) => version > "20261101000200" && version <= PHASE25_LAST).sort();
   const rows = tableRows(section(checklist, "Статус"), ["Файл", "Проверка"]);
   const fileRows = rows.filter((row) => row[0].includes(".sql"));
   const emergencyRow = fileRows.filter((row) => row[0].includes("emergency_restore_anon_read"));
@@ -266,7 +269,7 @@ test("Phase 25 review: a named reviewer, a 40-hex reviewed commit equal to the m
   assert.match(reviewedCommit, /^[0-9a-f]{40}$/);
   assert.ok(securityMatrix.split("\n").slice(0, 8).join("\n").includes(`Проверяемый commit: \`${reviewedCommit}\``), "the matrix commit must equal the reviewed commit");
   assert.match(rlsReview, /Open critical: \*\*0\*\*\. Open high: \*\*0\*\*\./);
-  const rounds = [...rlsReview.matchAll(/^## Round (\d+) \(25-10\)[^\n]*\n\nRound commit: `([0-9a-f]{40})`/gm)];
+  const rounds = [...rlsReview.matchAll(/^## Round (\d+) \((?:25-10|quick \d{6}-[a-z0-9]{3})\)[^\n]*\n\nRound commit: `([0-9a-f]{40})`/gm)];
   assert.ok(rounds.length >= 1 && rounds.length <= 3, "one to three rounds");
   assert.equal(rounds[rounds.length - 1][2], reviewedCommit, "the last round is the reviewed commit");
   const outcomes = [...rlsReview.matchAll(/Итог раунда: открытых critical (\d+), открытых high (\d+)/g)];
