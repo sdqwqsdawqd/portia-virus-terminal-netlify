@@ -59,7 +59,7 @@ test("the picker CSS lives in the access-levels block, sharp, static and wrappin
   assert.ok(pickerCss.length > 0 && pickerCss.includes(".access-level-option"), "the picker rules are outside the block");
   const before = css.slice(0, css.indexOf("/* access-levels:start"));
   assert.ok(!before.includes(".access-level-"), "no picker rule outside the access-levels block");
-  assert.match(pickerCss, /\.access-level-option \{[^}]*width: 40px; height: 40px;/);
+  assert.match(pickerCss, /\.access-level-option \{[^}]*width: 32px; height: 32px;/);
   assert.match(pickerCss, /@media \(max-width: 900px\) \{\s*\.access-level-option \{ width: 44px; height: 44px; \}/);
   assert.match(pickerCss, /\.access-level-options \{[^}]*flex-wrap: wrap; gap: 4px;/);
   assert.match(pickerCss, /\.access-level-picker \{[^}]*min-width: 0;/);
@@ -67,6 +67,41 @@ test("the picker CSS lives in the access-levels block, sharp, static and wrappin
   assert.match(pickerCss, /input:focus-visible \+ \.access-level-digit \{ outline: 2px solid var\(--teal\); outline-offset: 2px; \}/);
   assert.match(pickerCss, /:has\(input:checked\) \{[^}]*border-color: var\(--teal-dim\); background: var\(--teal-soft\); box-shadow: inset 0 0 0 1px var\(--teal-dim\)/);
   assert.match(pickerCss, /:has\(input:disabled\) \{ opacity: \.4; cursor: not-allowed; \}/);
+});
+
+// UAT 2026-11-16 gap 6: the big row of five plates became one small «who sees it» button; the plates open behind it.
+test("UAT 2026-11-16 gap 6: the picker is a small «who sees it» button with the plates behind it", () => {
+  assert.equal(levelCopy.pickerSummary(1), "Видят все");
+  assert.equal(levelCopy.pickerSummary(2), "Видят с допуска 2");
+  assert.equal(levelCopy.pickerSummary(3), "Видят с допуска 3");
+  assert.equal(levelCopy.pickerSummary(4), "Видят с допуска 4");
+  assert.equal(levelCopy.pickerSummary(5), "Видят только допуск 5");
+  // The summary is built from the same effective value as the checked plate (T-26-41).
+  assert.ok(picker.includes("levelCopy.pickerSummary(shown)"));
+  assert.ok(picker.includes("checked={shown === level}"));
+  assert.ok(picker.includes("disabled={level < min}") && picker.includes("onChange={() => onChange(level)}"));
+  assert.ok(/useState\(false\)/.test(picker), "closed by default");
+  assert.ok(picker.includes('<button type="button" className="access-level-toggle"'));
+  assert.ok(picker.includes("aria-expanded={open}") && picker.includes("aria-controls={optionsId}"));
+  assert.ok(picker.includes("id={optionsId}") && picker.includes("hidden={!open}"));
+  assert.ok(picker.includes("setOpen((current) => !current)"));
+  assert.ok(picker.includes("event.detail > 0") && picker.includes("setOpen(false)"), "a pointer choice closes the plates, the arrows do not");
+  assert.ok(picker.includes("onBlur=") && picker.includes("event.relatedTarget") && picker.includes(".contains("), "leaving the group closes the plates");
+  // The legend stays the first child, the button comes after it, and the hint, the notice and the action stay outside the hidden block.
+  assert.ok(picker.indexOf("<legend>") < picker.indexOf("access-level-toggle"));
+  const hiddenStart = picker.indexOf("hidden={!open}");
+  const optionsEnd = picker.indexOf("</div>", hiddenStart);
+  assert.ok(picker.indexOf('className="access-level-hint"') > optionsEnd, "the minimum hint is visible while closed");
+  assert.ok(picker.indexOf('role="status"') > optionsEnd && picker.indexOf("{action}") > optionsEnd);
+  assert.ok(!/[А-Яа-яЁё]/.test(picker), "every Russian text comes from lib/level-copy.ts");
+  const pickerCss = accessBlock.slice(accessBlock.indexOf("/* picker:"));
+  assert.match(pickerCss, /\.access-level-picker \{[^}]*grid-column: auto;/);
+  assert.doesNotMatch(pickerCss, /grid-column: 1 \/ -1/);
+  assert.match(pickerCss, /\.access-level-toggle \{[^}]*min-height: 32px;[^}]*padding: 0 8px;[^}]*width: auto;[^}]*font: 700 11px/);
+  assert.match(pickerCss, /\.access-level-options \{[^}]*margin-top: 4px;/);
+  assert.match(pickerCss, /@media \(max-width: 900px\) \{[^}]*\.access-level-option \{ width: 44px; height: 44px; \}\s*\.access-level-toggle \{ min-height: var\(--tap-target\); \}/);
+  assert.doesNotMatch(pickerCss, /border-radius|@keyframes|animation|transition|--muted|#[0-9a-fA-F]{3,8}/);
+  assert.match(pickerCss, /\.access-level-options\[hidden\] \{ display: none; \}/);
 });
 
 test("T-24-26 only the picker joined the allow-list of components that read the scale", () => {
