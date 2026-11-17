@@ -261,7 +261,8 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .window-titlebar {
   height: 46px;
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  /* Two tracks for two children (identity, controls): an empty third track kept its 18px gap and left a dead strip right of the close cross (quick 261117-bi1). */
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 18px;
   padding: 0 15px;

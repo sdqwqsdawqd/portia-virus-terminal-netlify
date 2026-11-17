@@ -687,6 +687,14 @@ test("UI-06 / D-03: the maximized hook is unchanged, the only one, and never a c
 
 // quick 261117-bi1 (R1): the owner could not hit the close button in the very corner of a maximized window: the window sat 8px inside the
 // work area. The hit area cannot grow outside the window (`overflow: hidden` clips clicks), so the window moves: inset 0, square corners.
+test("quick 261117-bi1 R1 fix: the title bar has exactly two tracks, so no empty track and gap push the controls off the right edge", () => {
+  // The bar holds two children (identity, controls). A third empty `auto` track still takes the 18px column gap,
+  // which left a dead strip right of the close cross (owner screenshot 2026-11-17).
+  const children = windowSource.slice(windowSource.indexOf('<div className="window-titlebar"'), windowSource.indexOf("{children}"));
+  assert.ok(!children.includes("window-meta"), "the bar renders no third (meta) child");
+  assert.equal(lastDeclaration(portiaCss, ".window-titlebar", "grid-template-columns"), "1fr auto");
+});
+
 test("quick 261117-bi1 R1: a maximized window is flush with the work area and square; a normal window keeps its frame", () => {
   assert.equal(lastDeclaration(cascadeCss, MAXIMIZED, "inset"), "0");
   assert.equal(lastDeclaration(cascadeCss, MAXIMIZED, "border-radius", DESKTOP), "0", "the window clips with square corners, so no corner pixel of the button falls through");
