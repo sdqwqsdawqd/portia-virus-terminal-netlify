@@ -24,7 +24,8 @@ import { AppWindow, appMeta, minimumWindowSize, nodWindow, type AppId } from "@/
 import { DesktopIcon, StartPanelButton, desktopShortcutOrder, placedShortcut, useShortcutPlacement, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
 import { PortiaPromotion } from "@/components/portia-promotion";
 import { PortiaTemplateBuilder } from "@/components/portia-template-builder";
-import { AssistantItems, CompanionItemsSettings } from "@/components/portia-companion-items";
+import { AssistantItems } from "@/components/portia-companion-items";
+import { CompanionItemsSettings } from "@/components/portia-companion-editor";
 import { AppDeniedPanel, AppFatalPanel, AppSkeleton, AppStaleBanner } from "@/components/portia-desktop-states";
 import { accessCheckFailedText, appViewState, contentSyncFailed, contentSyncSucceeded, emptyCopy, failureFromResponse, type AppFailure, type ContentSync } from "@/lib/app-state";
 import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
@@ -2222,8 +2223,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
               <SettingGroup title="Анимации" values={[['on','Включены'],['reduced','Уменьшены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)}><p className="setting-hint">Системная настройка движения не учитывается.</p></SettingGroup>
               <SettingGroup title="Паук" values={[['on','Показывать'],['off','Скрыть']]} current={desktopSettings.spider} onSelect={(value) => updateDesktopSetting("spider", value)} />
               {/* Owner 2026-11-18: things for Вивьян and for the spider; pictures of this device only, never uploaded. */}
-              <CompanionItemsSettings target="assistant" />
-              <CompanionItemsSettings target="spider" />
+              <CompanionItemsSettings />
               <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2>{!canEdit && <p>Войдите в разрешённый аккаунт редактора.</p>}</div><div className="content-control-actions"><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a></div></section>
               <div className="settings-footer"><button className="factory-reset" type="button" onClick={resetDesktopSettings}>СБРОСИТЬ ДО ЗАВОДСКИХ</button><span className={`settings-saved-status${settingsSavedVisible ? " is-visible" : ""}`} role="status" aria-live="polite">Настройки сохранены</span></div>
             </div>

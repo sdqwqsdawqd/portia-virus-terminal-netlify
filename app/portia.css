@@ -2691,25 +2691,43 @@ html[data-motion="reduced"] .assistant-items { transition-duration: var(--motion
 html[data-motion="off"] .desktop-assistant .assistant-items { animation: none !important; }
 html[data-motion="off"] .assistant-button:hover + .assistant-items, html[data-motion="off"] .assistant-button:focus-visible + .assistant-items, html[data-motion="off"] .assistant-button:active + .assistant-items { transform: none; }
 .assistant-items { position: absolute; inset: 0; z-index: 3; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-/* Настройки предметов: список и добавление файла или ссылки, компактно, на всю ширину группы. */
+/* Owner 2026-11-18 (round 2): item settings are one section with a button per target; the mini-editor is a dialog with a stage (the figure and its items) and a tools column. */
 .companion-settings { display: grid; gap: 8px; }
-.companion-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.companion-list li { display: grid; grid-template-columns: 44px minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 6px; border: 1px solid var(--line); background: var(--panel); }
-.companion-list img { width: 44px; height: 44px; object-fit: contain; background: var(--panel-2); }
-.companion-list label, .companion-add label { display: grid; gap: 3px; min-width: 0; color: var(--muted); font: 600 11px var(--sans); }
-.companion-list select, .companion-add select, .companion-link input { width: 100%; min-width: 0; }
-.companion-item-actions { display: flex; gap: 4px; }
-.companion-item-actions button, .companion-link button, .companion-file { min-height: 30px; padding: 0 10px; border: 1px solid var(--line); background: var(--panel-2); color: inherit; font: 700 11px var(--sans); cursor: pointer; }
-.companion-item-actions button.selected { border-color: var(--teal); color: var(--teal); }
-.companion-add { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.4fr); align-items: end; gap: 8px; }
+.companion-settings-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.companion-settings-buttons button, .companion-tools button, .companion-file { min-height: 30px; padding: 0 10px; border: 1px solid var(--line); background: var(--panel-2); color: inherit; font: 700 11px var(--sans); cursor: pointer; }
+.companion-settings-buttons button:disabled, .companion-tools button:disabled { opacity: .5; cursor: default; }
+.companion-editor-dialog { width: min(980px, calc(100vw - 24px)); }
+.companion-editor-body { display: grid; grid-template-columns: minmax(0, 1fr) 260px; align-items: start; gap: 16px; min-width: 0; }
+.companion-stage-box { min-width: 0; border: 1px solid var(--line); background: var(--panel); }
+.companion-stage-box:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.companion-stage { display: block; width: 100%; height: auto; max-height: min(68svh, 620px); background: var(--panel); touch-action: none; user-select: none; -webkit-user-select: none; }
+.companion-stage-figure.is-assistant { filter: var(--assistant-filter) brightness(1.1) saturate(1.08); }
+.companion-hit { fill: transparent; cursor: move; }
+.companion-outline { fill: none; stroke: var(--teal); stroke-width: 1.5; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; pointer-events: none; }
+.companion-handle { fill: var(--panel); stroke: var(--teal); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.companion-handle.is-n, .companion-handle.is-s { cursor: ns-resize; }
+.companion-handle.is-e, .companion-handle.is-w { cursor: ew-resize; }
+.companion-handle.is-ne, .companion-handle.is-sw { cursor: nesw-resize; }
+.companion-handle.is-nw, .companion-handle.is-se { cursor: nwse-resize; }
+.companion-tools { display: grid; align-content: start; gap: 10px; min-width: 0; }
+.companion-tools .setting-hint { margin: 0; }
 .companion-file { display: inline-grid; place-items: center; }
 .companion-file[aria-disabled] { opacity: .5; cursor: default; }
 .companion-link { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.companion-link input { width: 100%; min-width: 0; }
+.companion-strip { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.companion-strip button { width: 44px; height: 44px; padding: 2px; }
+.companion-strip img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.companion-strip button.selected, .companion-item-actions button.selected, .companion-attach button.selected { border-color: var(--teal); color: var(--teal); }
+.companion-selected { display: grid; gap: 8px; }
+.companion-selected label, .companion-attach { display: grid; gap: 3px; min-width: 0; color: var(--muted); font: 600 11px var(--sans); }
+.companion-selected input[type="range"] { width: 100%; min-width: 0; }
+.companion-item-actions { display: flex; gap: 4px; }
+.companion-attach > div { display: flex; gap: 4px; }
+.companion-attach button { flex: 1 1 0; min-width: 0; padding: 0 4px; }
 .companion-error { margin: 0; color: var(--danger, #e07a6f); font: 600 12px var(--sans); }
-@media (max-width: 640px) {
-  .companion-list li { grid-template-columns: 44px minmax(0, 1fr); }
-  .companion-list li > :nth-child(n + 3) { grid-column: 1 / -1; }
-  .companion-add { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 900px) {
+  .companion-editor-body { grid-template-columns: minmax(0, 1fr); }
 }
 /* users-tab:start — Phase 22 «Пользователи» (USR-01..USR-09): sharp corners, values from 22-UI-SPEC, nothing else in the file changes */
 .tab-count { min-width: 24px; margin-left: 8px; padding: 0 8px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px/1.35 var(--mono); text-align: center; }

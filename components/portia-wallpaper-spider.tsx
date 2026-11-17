@@ -6,7 +6,7 @@
 
 import { useLayoutEffect, useRef, type CSSProperties } from "react";
 import { SpiderItems, useCompanionItems } from "./portia-companion-items";
-import { spiderSlots } from "@/lib/companion-items";
+import type { CompanionItem } from "@/lib/companion-items";
 import { REST_NODE, besideThread, createPulsePool, emitStepWaves, followStep, footfallThreads, gaitPhase, laneSideFor, laneTarget, legPose, legSwingDegrees, planSpawn, planWalk, pulseShape, seeded, spiderTransform, stepPulses, turnGate, turnStep, visibleNodes, walkPose, webGeometry } from "@/lib/wallpaper-web";
 
 type LegId = "L1" | "L2" | "L3" | "L4" | "R1" | "R2" | "R3" | "R4";
@@ -139,6 +139,22 @@ const EYES: readonly (readonly [number, number, number])[] = [[349.17, 368.47, 2
 function SpiderParts({ parts }: { parts: readonly Part[] }) {
   return <>
     {parts.map(([kind, d], index) => <path key={index} className={`wallpaper-spider-${kind}`} d={d} />)}
+  </>;
+}
+
+// Owner 2026-11-18 (round 2): the static drawing of the spider, shared by the wallpaper and by the item editor, so both show the same figure.
+// A paw item is drawn inside its leg group, so on the wallpaper it swings with that leg; a body item stays on the body.
+export function SpiderFigure({ items }: { items: CompanionItem[] }) {
+  return <>
+    {LEG_DRAW_ORDER.map((leg) => <g className="wallpaper-spider-leg" data-leg={leg} style={legOrigin(leg)} key={leg}>
+      <SpiderParts parts={LEG_PARTS[leg]} />
+      <SpiderItems items={items.filter((item) => item.attach === leg)} />
+    </g>)}
+    <g className="wallpaper-spider-body">
+      <SpiderParts parts={BODY_PARTS} />
+      {EYES.map(([cx, cy, r]) => <circle className="wallpaper-spider-dark" cx={cx} cy={cy} r={r} key={`${cx} ${cy}`} />)}
+      <SpiderItems items={items.filter((item) => item.attach === "body")} />
+    </g>
   </>;
 }
 
@@ -382,24 +398,15 @@ export function WallpaperSpider() {
   }, []);
 
   const [restX, restY] = webGeometry.nodes[REST_NODE];
-  // Owner 2026-11-18: the visitor's items (this device only). A paw item is drawn inside its leg group, so it swings with that leg.
+  // Owner 2026-11-18: the visitor's items (this device only), drawn by SpiderFigure.
   const items = useCompanionItems().filter((item) => item.target === "spider");
-  const legOf = (slot: string) => spiderSlots.find((entry) => entry.id === slot)?.leg;
   return <>
     <svg className="desktop-wallpaper wallpaper-web-pulses" viewBox="0 0 1440 900" preserveAspectRatio="xMaxYMin slice" aria-hidden="true" ref={waves}>
       {Array.from({ length: PULSE_SLOTS }, (_, index) => <path key={index} d="" style={{ opacity: 0 }} />)}
     </svg>
     <div className="wallpaper-spider" ref={wrapper} style={{ "--rest-x": round(restX), "--rest-y": round(restY), opacity: 0 } as CSSProperties}>
       <svg viewBox="0 0 649.5 768" aria-hidden="true">
-        {LEG_DRAW_ORDER.map((leg) => <g className="wallpaper-spider-leg" data-leg={leg} style={legOrigin(leg)} key={leg}>
-          <SpiderParts parts={LEG_PARTS[leg]} />
-          <SpiderItems items={items.filter((item) => legOf(item.slot) === leg)} />
-        </g>)}
-        <g className="wallpaper-spider-body">
-          <SpiderParts parts={BODY_PARTS} />
-          {EYES.map(([cx, cy, r]) => <circle className="wallpaper-spider-dark" cx={cx} cy={cy} r={r} key={`${cx} ${cy}`} />)}
-          <SpiderItems items={items.filter((item) => !legOf(item.slot))} />
-        </g>
+        <SpiderFigure items={items} />
       </svg>
     </div>
   </>;

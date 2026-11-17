@@ -115,8 +115,9 @@ test("component families import only their own seams and the known shared compon
     // portia-virus-card: the archive's virus card, shared with the template builder (D-55, 20-43).
     // portia-redacted: the static «ЗАСЕКРЕЧЕНО · нужен допуск N» placeholder (Phase 24, D-08/D-09).
     // portia-companion-items: the visitor's items of the assistant and the spider, kept on the device (2026-11-18).
+    // portia-companion-editor: the item editor dialog opened from the settings (owner 2026-11-18, round 2).
     // portia-template-builder: the dossier template is its own app «Шаблон» since 2026-11-18 (it lived inside «Повышение»).
-    "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion", "portia-virus-card", "portia-redacted", "portia-template-builder", "portia-companion-items"],
+    "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion", "portia-virus-card", "portia-redacted", "portia-template-builder", "portia-companion-items", "portia-companion-editor"],
     // portia-desktop-states: the shared «Доступ закрыт» panel the editor shows when the rights check fails (STAB-APP-09).
     // portia-image-framing: the block «Видимая часть» under a picture field (D-63, 20-53), shared with the template builder through ImageEditorField.
     // portia-users-tab: the «Пользователи» tab body (USR-01, Phase 22).
