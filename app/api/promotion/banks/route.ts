@@ -9,7 +9,9 @@ import {
   type QualificationPreviewItem,
   type TaskPreviewItem,
 } from "@/lib/portia-promotion-reviewer";
+import { qualificationPromotionTransitions } from "@/lib/portia-promotion";
 import { createPreviewToken, verifyPreviewToken } from "@/lib/portia-promotion-preview-token";
+import { qualificationRulesSaveFailure, qualificationRulesText } from "@/lib/portia-qualification-rules";
 import { parseJsonObject } from "@/lib/request-json";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -91,6 +93,23 @@ export async function POST(request: Request) {
   }
 
   if (JSON.stringify(body).length > 64 * 1024) return Response.json({ error: "Данные слишком велики." }, { status: 413, headers: noStoreHeaders });
+  // Rules text of a transition (quick 261117-px5). Not part of the frozen question set: the bank version, and so an open preview, stay valid.
+  if (body.action === "save-qualification-rules") {
+    const transitionId = typeof body.transitionId === "string" && qualificationPromotionTransitions.some((item) => item.transitionId === body.transitionId) ? body.transitionId : "";
+    if (!transitionId) return Response.json({ error: "Некорректный переход.", code: "invalid-transition" }, { status: 400, headers: noStoreHeaders });
+    const rulesText = qualificationRulesText(body.rulesText);
+    if (rulesText === null) return Response.json({ error: "Правила длиннее 4000 символов.", code: "invalid-rules" }, { status: 400, headers: noStoreHeaders });
+    const { data, error } = await supabase.rpc("portia_promo_save_qualification_rules", { p_transition_id: transitionId, p_rules_text: rulesText });
+    if (error) {
+      const failure = qualificationRulesSaveFailure(error.code);
+      return Response.json({ error: failure.error, code: failure.code }, { status: failure.status, headers: noStoreHeaders });
+    }
+    if (!data) return Response.json({ error: "Сначала сохраните квоты для этого перехода.", code: "bank-missing" }, { status: 409, headers: noStoreHeaders });
+    const reloaded = await bankState(supabase);
+    return reloaded
+      ? Response.json({ id: data, state: reloaded }, { headers: noStoreHeaders })
+      : Response.json({ error: "Изменение принято, но подтверждённое состояние пока недоступно. Обновите банки.", code: "authoritative-state-unavailable" }, { status: 503, headers: noStoreHeaders });
+  }
   const command = parsePromotionBankCommand(body);
   if (!command) return Response.json({ error: "Некорректная команда банка." }, { status: 400, headers: noStoreHeaders });
   let state: BankState | null = null;

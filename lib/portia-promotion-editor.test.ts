@@ -5,7 +5,10 @@ import { qualificationGrade } from "./portia-qualification.ts";
 
 const main = readFileSync(new URL("../components/portia-promotion-editor-main.tsx", import.meta.url), "utf8");
 const ordinary = readFileSync(new URL("../components/portia-promotion-ordinary-editor.tsx", import.meta.url), "utf8");
-const qualification = readFileSync(new URL("../components/portia-promotion-qualification-editor.tsx", import.meta.url), "utf8");
+const qualificationEditor = readFileSync(new URL("../components/portia-promotion-qualification-editor.tsx", import.meta.url), "utf8");
+const questionDialog = readFileSync(new URL("../components/portia-qualification-question-dialog.tsx", import.meta.url), "utf8");
+// Quick 261117-px5: the question form moved into a dialog; the pins that are about the form read the dialog together with the editor.
+const qualification = qualificationEditor + questionDialog;
 const shell = readFileSync(new URL("../components/portia-editor.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
 
@@ -85,14 +88,15 @@ test("item editors prevent duplicate writes and preserve text typed during save"
     assert.ok(editor.includes("setCommandState"));
   }
   assert.ok(ordinary.includes("current === submittedDraft"));
-  assert.ok(qualification.includes("current === submittedText"));
+  assert.ok(qualification.includes("draft === submittedDraft"));
   assert.ok(qualification.includes("validateQuestionDraft"));
   assert.ok(qualification.includes("Проверьте варианты и правильный ответ"));
 });
 
 test("qualification questions select correct answers beside their options without zero-based index fields", () => {
   assert.ok(qualification.includes('className="promotion-answer-options"'));
-  assert.ok(qualification.includes('type={type === "single" ? "radio" : "checkbox"}'));
+  assert.ok(qualification.includes('type={draft.type === "single" ? "radio" : "checkbox"}'));
+  assert.ok(qualification.includes("Правильный ответ: вариант"));
   assert.ok(qualification.includes("Правильный ответ"));
   assert.doesNotMatch(qualification, /Индекс(?:ы)? правильн/);
 });
@@ -319,4 +323,48 @@ test("a failed attempt proposes a two-day retake that the reviewer can change, e
   assert.ok(main.includes("ОТКРЫТЬ ПЕРЕСДАЧУ ДОСРОЧНО"));
   assert.ok(main.includes('"release-retake"'));
   assert.ok(main.includes("Срок пересдачи: ${retakeDays} дн."));
+});
+
+test("quick 261117-px5: questions are built in a dialog with one row per option and the old inline form is gone", () => {
+  assert.ok(questionDialog.includes('role="dialog"'));
+  assert.ok(questionDialog.includes('aria-modal="true"'));
+  assert.ok(questionDialog.includes("aria-labelledby"));
+  assert.ok(questionDialog.includes('event.key === "Escape"'));
+  assert.ok(questionDialog.includes("opener?.focus()"));
+  assert.ok(qualificationEditor.includes("+ ВОПРОС"));
+  assert.ok(questionDialog.includes("+ ВАРИАНТ"));
+  for (const label of ["ОДИН ОТВЕТ", "НЕСКОЛЬКО", "СВОБОДНЫЙ"]) assert.ok(questionDialog.includes(label), label);
+  assert.ok(questionDialog.includes("aria-pressed={draft.type === value}"));
+  assert.ok(questionDialog.includes("Образец ответа для проверяющего"));
+  assert.ok(questionDialog.includes("Отметьте правильный ответ слева от варианта."));
+  assert.ok(questionDialog.includes("Удалить вариант"));
+  assert.ok(qualificationEditor.includes("PortiaQualificationQuestionDialog"));
+  assert.ok(!qualificationEditor.includes("promotion-question-form-anchor"));
+  assert.ok(!qualificationEditor.includes("по одному в строке"));
+  assert.ok(!questionDialog.includes("<select"), "the type is chosen with segmented buttons, not a select");
+  assert.match(styles, /\.promotion-question-dialog\s*\{[^}]*width:\s*min\(880px/);
+  assert.match(styles, /\.promotion-question-types button\s*\{[^}]*flex:\s*0 0 auto/);
+});
+
+test("quick 261117-px5: quotas are explained in one line and an unsatisfiable save is blocked with it", () => {
+  assert.ok(qualificationEditor.includes("qualificationQuotaSummary"));
+  assert.ok(qualificationEditor.includes('id="promotion-quota-summary"'));
+  assert.match(qualificationEditor, /disabled=\{busy \|\| !quotaSummary\.ok\}[^>]*aria-describedby="promotion-quota-summary"/);
+  for (const label of ["Один ответ", "Несколько", "Свободный"]) assert.ok(qualificationEditor.includes(label), label);
+});
+
+test("quick 261117-px5: rules are saved with their own action, keep the open preview and refuse without the migration", () => {
+  assert.ok(qualificationEditor.includes("save-qualification-rules"));
+  assert.ok(qualificationEditor.includes("ПРАВИЛА ДЛЯ КАНДИДАТА"));
+  assert.ok(qualificationEditor.includes("СОХРАНИТЬ ПРАВИЛА"));
+  assert.ok(qualificationEditor.includes("keepPreview: true"));
+  assert.ok(qualificationEditor.includes("Правила станут доступны после обновления базы — миграция ждёт владельца."));
+  assert.ok(qualificationEditor.includes("Сначала сохраните квоты для этого перехода."));
+  assert.ok(qualificationEditor.includes("QUALIFICATION_RULES_MAX_LENGTH"));
+  const route = readFileSync(new URL("../app/api/promotion/banks/route.ts", import.meta.url), "utf8");
+  assert.ok(route.includes('body.action === "save-qualification-rules"'));
+  assert.ok(route.includes("portia_promo_save_qualification_rules"));
+  assert.ok(route.includes("qualificationRulesSaveFailure(error.code)"));
+  assert.ok(route.indexOf("save-qualification-rules") > route.indexOf("64 * 1024") && route.indexOf("save-qualification-rules") < route.indexOf("parsePromotionBankCommand(body)"));
+  assert.match(route, /Response\.json\(\{ id: data, state: reloaded \}/);
 });
