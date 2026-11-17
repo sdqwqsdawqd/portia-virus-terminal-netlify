@@ -898,11 +898,11 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 /* Phase 26 (26-07, D-13a): the section tabs stand in the nav slot of the sticky action bar (.etab-bar), so they have no sticky layer, frame or panel of their own. */
 .editor-section-tabs { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .editor-section-tabs nav { display: flex; flex: 1; gap: 5px; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
-.editor-section-tabs nav button, .editor-section-tab-order button { flex: 0 0 auto; min-height: 36px; padding: 6px 11px; border: 1px solid var(--line); border-radius: var(--radius-tab); background: var(--panel-2); color: var(--muted); font: 600 12px var(--sans); cursor: pointer; }
+.editor-section-tabs nav button { flex: 0 0 auto; min-height: 36px; padding: 6px 11px; border: 1px solid var(--line); border-radius: var(--radius-tab); background: var(--panel-2); color: var(--muted); font: 600 12px var(--sans); cursor: pointer; }
 .editor-section-tabs nav button[aria-current="true"] { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); }
-.editor-section-tab-order { display: flex; gap: 4px; }
-.editor-section-tab-order button { min-width: 36px; padding-inline: 6px; }
-.editor-section-tab-order button:disabled { opacity: .4; cursor: default; }
+/* UAT 2026-11-16 gap 5: ручка перетаскивания у вкладки раздела — цвета ручки подразделов (.order-drag-handle), а не вкладки; геометрия — в блоке ui-unify. */
+.editor-section-tabs nav .order-drag-handle { border: 1px dashed oklch(.445 calc(.038 * var(--accent-chroma)) var(--accent-hue)); background: rgba(var(--desktop-glow), .035); color: oklch(.628 calc(.036 * var(--accent-chroma)) var(--accent-hue)); }
+.editor-section-tabs nav .order-drag-handle:hover, .editor-section-tabs nav .order-drag-handle[data-dragging="true"] { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); }
 .editor-section-tabs button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 .editor-section-column > .nested-editor-card + .nested-editor-card { margin-top: 0; }
 @media (width > 900px) {
@@ -918,7 +918,7 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 .editor-section-addbar-row > button { justify-self: start; }
 @media (max-width: 900px) {
   .editor-section-addbar-row > button { min-height: 44px; }
-  .editor-section-tabs nav button, .editor-section-tab-order button { min-height: 44px; }
+  .editor-section-tabs nav button { min-height: 44px; }
 }
 /* D-41 «Сводка»: entries live in the «Без раздела» list or inside a section; the list keeps the width of the old form cards on a PC. */
 .broadcast-group-title { margin: 6px 0 0; color: var(--teal); font: 700 11px var(--sans); letter-spacing: .07em; text-transform: uppercase; }
@@ -2711,12 +2711,20 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .etab-banner { flex: 0 0 100%; order: 3; min-width: 0; }
 .etab-banner > .app-stale-banner { position: static; margin: 0 -16px; }
 /* Разделы вкладки в слоте nav (D-13a): сначала «+ ДОБАВИТЬ РАЗДЕЛ» (форма заголовка раскрывается под кнопкой, панель растёт),
-   затем вкладки разделов в одну строку с прокруткой; кнопки порядка «←/→» остаются видимыми справа от них. */
+   затем вкладки разделов в одну строку с прокруткой; порядок разделов меняет ручка ≡ у каждой вкладки (UAT 2026-11-16 gap 5). */
 .etab-nav > .editor-section-addbar { flex: none; }
 .etab-nav > .editor-section-addbar:has(> .editor-section-create:not([hidden])) { padding: 8px 0; }
 .etab-nav > .editor-section-tabs { flex: 1 1 auto; min-width: 0; }
 .etab-nav .editor-section-tabs nav { flex-wrap: nowrap; overflow-x: auto; }
 .etab-nav .editor-section-create { width: min(320px, 70vw); white-space: normal; }
+/* UAT 2026-11-16 gap 5 (владелец: «перетаскивание пропало»): каждая вкладка раздела — ручка ≡ того же вида, что у подразделов, и кнопка вкладки в одной строке.
+   Общее правило вкладок `.editor-section-tabs nav button` (0,1,2) задело бы и ручку, поэтому ручка получает селектор сильнее (0,2,1); её цвета — рядом с цветами вкладок выше (блок цветов не трогает). */
+.editor-section-tabs nav > .editor-section-tab { display: inline-flex; flex: none; align-items: stretch; gap: 4px; }
+.editor-section-tabs nav .order-drag-handle { width: 24px; min-width: 24px; min-height: 40px; padding: 0; }
+.editor-section-tabs nav > .editor-section-tab:has(> .order-drag-handle[data-dragging="true"]) { position: relative; z-index: 1; }
+@media (max-width: 900px) {
+  .editor-section-tabs nav .order-drag-handle { width: var(--tap-target); min-width: var(--tap-target); min-height: var(--tap-target); }
+}
 .etab-nav > .dossier-tabs { margin: 0; }
 /* «Пользователи» (26-09): три раздела в слоте nav — вкладки по ширине подписи в одну строку. */
 .etab-nav > .users-sections { display: flex; flex-wrap: nowrap; gap: 8px; margin: 0; }

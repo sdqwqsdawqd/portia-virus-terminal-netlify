@@ -276,7 +276,6 @@ function SectionTabs({ label, sections, activeId, onSelect, onMove }: {
   onSelect: (id: string) => void;
   onMove: (from: number, to: number) => void;
 }) {
-  const activeIndex = sections.findIndex((section) => section.id === activeId);
   const navRef = useRef<HTMLElement>(null);
   // D-13a: the current section stays in view of the bar's nav when it changes; instant unless the house motion switch is on.
   useEffect(() => {
@@ -284,12 +283,11 @@ function SectionTabs({ label, sections, activeId, onSelect, onMove }: {
   }, [activeId]);
   return <div className="editor-section-tabs">
     <nav aria-label={label} ref={navRef}>
-      {sections.map((section) => <button key={section.id} type="button" aria-current={section.id === activeId ? "true" : undefined} onClick={() => onSelect(section.id)}>{section.title || "Без названия"}</button>)}
+      {sections.map((section, index) => <span key={section.id} className="editor-section-tab" data-sort-index={index}>
+        <OrderDragHandle index={index} label={section.title || "раздел"} onMove={onMove} />
+        <button type="button" aria-current={section.id === activeId ? "true" : undefined} onClick={() => onSelect(section.id)}>{section.title || "Без названия"}</button>
+      </span>)}
     </nav>
-    {activeIndex >= 0 && <div className="editor-section-tab-order" aria-label="Порядок разделов">
-      <button type="button" disabled={activeIndex === 0} onClick={() => onMove(activeIndex, activeIndex - 1)} aria-label="Переместить раздел левее">←</button>
-      <button type="button" disabled={activeIndex === sections.length - 1} onClick={() => onMove(activeIndex, activeIndex + 1)} aria-label="Переместить раздел правее">→</button>
-    </div>}
   </div>;
 }
 

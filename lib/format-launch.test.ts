@@ -84,6 +84,9 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //      (applyReviewDraftBarHunk); русских строк в файле не добавлено, подпись строки лежит в шве. Источник одобрения: 26-REVIEW WR-01 и поручение владельца исправить все предупреждения.
 //  13. PORTIA-26-R05 (код-ревью 26, WR-05; UI-04, D-13b, D-21) — скрытая строка статуса (sr-only, живая область) остаётся только на вкладках не из черновика: на вкладках черновика
 //      статус панели и есть единственная живая область (applyReviewLiveRegionHunk); русских строк не добавлено. Источник одобрения: 26-REVIEW WR-05 и поручение владельца исправить все предупреждения.
+//  14. PORTIA-26-G05 (26-18; UI-04, D-13a, D-21) — вкладки разделов «Справочника» и «Информации» (общий SectionTabs) несут ручку OrderDragHandle, как подразделы;
+//      кнопки-стрелки порядка «←/→» после вкладок убраны вместе с их надписями (applySectionDragHunk); русских строк не добавлено: надпись ручки берёт литерал «раздел»,
+//      который в файле уже есть. Источник одобрения: 26-UAT gap 5 (2026-11-16, владелец: «перетаскивание пропало») и план 26-18.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -942,6 +945,35 @@ function stripFramingAttributes(text: string): string {
   }).join("\n");
 }
 
+/**
+ * PORTIA-26-G05 (26-18 Task 1; UI-04, D-13a, D-21; UAT gap 5): every section tab carries the drag handle of the subsections and stands in a span with its source index,
+ * a child of the nav, so the handle swaps tabs in the row. The arrow buttons after the nav leave with their labels. No Russian text is added: the handle's name
+ * takes the literal «раздел» the file already holds.
+ */
+function applySectionDragHunk(text: string): string {
+  const next = replaceOnce(
+    text,
+    "  const activeIndex = sections.findIndex((section) => section.id === activeId);\n  const navRef = useRef<HTMLElement>(null);\n",
+    "  const navRef = useRef<HTMLElement>(null);\n",
+    "section drag: active index out",
+  );
+  return replaceOnce(
+    next,
+    '      {sections.map((section) => <button key={section.id} type="button" aria-current={section.id === activeId ? "true" : undefined} onClick={() => onSelect(section.id)}>{section.title || "Без названия"}</button>)}\n' +
+      "    </nav>\n" +
+      '    {activeIndex >= 0 && <div className="editor-section-tab-order" aria-label="Порядок разделов">\n' +
+      '      <button type="button" disabled={activeIndex === 0} onClick={() => onMove(activeIndex, activeIndex - 1)} aria-label="Переместить раздел левее">←</button>\n' +
+      '      <button type="button" disabled={activeIndex === sections.length - 1} onClick={() => onMove(activeIndex, activeIndex + 1)} aria-label="Переместить раздел правее">→</button>\n' +
+      "    </div>}\n",
+    '      {sections.map((section, index) => <span key={section.id} className="editor-section-tab" data-sort-index={index}>\n' +
+      '        <OrderDragHandle index={index} label={section.title || "раздел"} onMove={onMove} />\n' +
+      '        <button type="button" aria-current={section.id === activeId ? "true" : undefined} onClick={() => onSelect(section.id)}>{section.title || "Без названия"}</button>\n' +
+      "      </span>)}\n" +
+      "    </nav>\n",
+    "section drag: tabs with handles, arrows out",
+  );
+}
+
 /** Реестр одобренных правок (D-64): `apply` — порядок применения к образцу; `normalizeActual` — что вырезается из текущего файла перед сравнением. */
 const approvedEditorEdits: readonly { id: string; apply: (text: string) => string; normalizeActual?: (text: string) => string }[] = [
   { id: "D-57", apply: applyLaunchButtonHunk },
@@ -959,6 +991,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26-13", apply: applyCardToggleNameHunk },
   { id: "PORTIA-26-R01", apply: applyReviewDraftBarHunk },
   { id: "PORTIA-26-R05", apply: applyReviewLiveRegionHunk },
+  { id: "PORTIA-26-G05", apply: applySectionDragHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -1072,10 +1105,10 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutTabShell = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutTabShell), null, "a file without the PORTIA-26-06 hunk is a difference");
   assert.throws(() => applyTabShellHunk(expected), /exactly one approved anchor/, "the tab shell hunk cannot be applied twice");
-  const withoutTabBodies = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-06b" && edit.id !== "PORTIA-26-R01" && !edit.id.startsWith("PORTIA-26-07")).reduce((text, edit) => edit.apply(text), sample);
+  const withoutTabBodies = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-06b" && edit.id !== "PORTIA-26-R01" && !edit.id.startsWith("PORTIA-26-07") && !edit.id.startsWith("PORTIA-26-G")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutTabBodies), null, "a file without the PORTIA-26-06b hunk is a difference");
   assert.throws(() => applyTabBodiesHunk(expected), /exactly one approved anchor/, "the tab bodies hunk cannot be applied twice");
-  const withoutSectionNav = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26-07") && edit.id !== "PORTIA-26-R01").reduce((text, edit) => edit.apply(text), sample);
+  const withoutSectionNav = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26-07") && edit.id !== "PORTIA-26-R01" && !edit.id.startsWith("PORTIA-26-G")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutSectionNav), null, "a file without the PORTIA-26-07 hunk is a difference");
   assert.throws(() => applySectionNavHunk(expected), /exactly one approved anchor/, "the section nav hunk cannot be applied twice");
   const withoutInfoBroadcastNav = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-07b").reduce((text, edit) => edit.apply(text), sample);
@@ -1093,6 +1126,9 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutReviewLiveRegion = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-R05").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutReviewLiveRegion), null, "a file without the PORTIA-26-R05 hunk is a difference");
   assert.throws(() => applyReviewLiveRegionHunk(expected), /exactly one approved anchor/, "the review live region hunk cannot be applied twice");
+  const withoutSectionDrag = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-G05").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutSectionDrag), null, "a file without the PORTIA-26-G05 hunk is a difference");
+  assert.throws(() => applySectionDragHunk(expected), /exactly one approved anchor/, "the section drag hunk cannot be applied twice");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");
