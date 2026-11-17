@@ -472,7 +472,8 @@ test("UI-05 (UAT 2026-11-16): the window frame is a non-interactive overlay, so 
   assert.equal(lastDeclaration(cascadeCss, frame, "position"), "absolute");
   assert.equal(lastDeclaration(cascadeCss, frame, "inset"), "0");
   assert.equal(lastDeclaration(cascadeCss, frame, "border"), "1px solid var(--line-bright)");
-  assert.equal(lastDeclaration(cascadeCss, frame, "border-radius"), "inherit");
+  // Not `inherit`: style-tokens (UI-02) allows only role tokens; every window has the radius var(--radius-window), phone included.
+  assert.equal(lastDeclaration(cascadeCss, frame, "border-radius"), "var(--radius-window)");
   assert.equal(lastDeclaration(cascadeCss, frame, "pointer-events"), "none", "the frame never takes a click from the controls (T-26-35)");
   assert.equal(lastDeclaration(cascadeCss, frame, "background"), undefined, "the frame draws a line only, no fill (T-26-35)");
   const frameZ = Number(lastDeclaration(cascadeCss, frame, "z-index"));
