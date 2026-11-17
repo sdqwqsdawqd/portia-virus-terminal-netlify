@@ -1,140 +1,106 @@
 ---
 phase: PORTIA-26-edinyy-stil-sayta
-reviewed: 2026-11-16T00:00:00Z
+reviewed: 2026-11-17T03:10:00Z
 depth: standard
-files_reviewed: 34
+files_reviewed: 16
 files_reviewed_list:
-  - app/portia-promotion-editor.css
   - app/portia.css
-  - components/custom-color-picker.tsx
-  - components/portia-access-gate.tsx
-  - components/portia-desktop-shortcuts.tsx
   - components/portia-desktop.tsx
-  - components/portia-editor-dossier.tsx
-  - components/portia-editor-rich-text.tsx
-  - components/portia-editor-tab-shell.tsx
   - components/portia-editor.tsx
-  - components/portia-icons.tsx
-  - components/portia-promotion-editor-main.tsx
-  - components/portia-promotion-ordinary-editor.tsx
-  - components/portia-promotion-qualification-editor.tsx
-  - components/portia-users-tab.tsx
-  - lib/card-toggle-name.ts
-  - lib/info-phone-nav.ts
-  - lib/shortcut-layout.ts
-  - lib/users-copy.ts
-  - lib/users-view.ts
-  - playwright.config.ts
+  - components/portia-level-picker.tsx
+  - lib/classification-fit.test.ts
   - lib/editor-tab-layout.test.ts
+  - lib/format-launch.test.ts
+  - lib/level-copy.ts
+  - lib/level-editor.test.ts
+  - lib/portia-desktop.test.ts
+  - lib/search-index.test.ts
+  - lib/search-index.ts
+  - lib/start-menu.test.ts
+  - lib/start-menu.ts
   - lib/ui-unify.test.ts
-  - lib/ui-contrast.test.ts
-  - lib/virus-classes.test.ts
-  - lib/phase26-regressions.test.ts
-  - lib/shortcut-layout.test.ts
-  - lib/users-view.test.ts
-  - lib/info-phone-nav.test.ts
-  - lib/card-toggle-name.test.ts
-  - tests/e2e/specs/users-tab.spec.ts
-  - tests/e2e/specs/info-phone-nav.spec.ts
-  - tests/e2e/specs/editor-ui-contract.spec.ts
+  - tests/e2e/specs/access-levels.spec.ts
 findings:
   critical: 0
-  warning: 6
+  warning: 3
   info: 3
-  total: 9
-  necessity: 0
+  total: 6
+  necessity: 1
 status: issues_found
 ---
 
-# Phase 26: Отчёт о код-ревью
+# Phase 26: Code Review Report (incremental, plans 26-15..26-20)
 
-**Reviewed:** 2026-11-16
-**Depth:** standard (diff 312033d..HEAD)
-**Files Reviewed:** 34
+**Reviewed:** 2026-11-17
+**Depth:** standard
+**Files Reviewed:** 16
 **Status:** issues_found
 
 ## Summary
 
-Проверены изменения фазы 26: каркас вкладок редактора (`EditorActionBar` / `EditorTabBody`), вкладка «Пользователи» (список и деталь), панель «РАЗДЕЛЫ» в информации на телефоне, расстановка ярлыков 521–900px (`placeShortcuts` / `useShortcutPlacement`), иконки классификации, CSS липкой панели. Тесты и e2e-спеки просмотрены на корректность проверок, которые охраняют поведение.
+Это инкрементальное ревью gap-closure планов 26-15..26-20 (коммиты 28fdbce..HEAD, hunks из `git diff 28fdbce HEAD`). Оно заменяет прежний 26-REVIEW.md (ревью 26-01..26-14, исправлено в 26-REVIEW-FIX.md).
 
-Что подтверждено как исправное:
-- Права во вкладке «Пользователи» идут только через `visibleControls` в `RowActions`. Новый `UsersActionBody` сам ничего не решает, а обработчики `approve`, `setLevel`, `requestReject`, `requestRevoke` и `clearCooldown` по-прежнему проверяют `"canDecide" in row.source`, `"canRevoke" in row.source` и `callerIsOwner`. Выбор строки в списке ничего не отправляет. Обхода гейтинга не найдено.
-- `ResizeObserver` в `useShortcutPlacement` не зацикливается. `.desktop-icons` на 521–900px получает фиксированную высоту `calc(100svh - 82px)`, а выросшая `--shortcut-content-height` меняет только `min-height` у `.workspace`. Обратной связи нет. `placeShortcuts` гарантированно завершается: цикл ограничен `rows > ids.length + taken.length`.
-- Порядок подключения CSS (`portia.css`, затем `portia-promotion-editor.css`) делает так, что `display: block` у `.promotion-editor-workbench` на телефоне перебивает `.etab-body { display: grid }`.
-- В SVG иконок нет `id`, `url(#…)`, `mask` и `clipPath`, поэтому коллизий между экземплярами нет.
+Проверено: меню PORTIA (lib/start-menu.ts + эффект в portia-desktop.tsx), «Доступные записи» (search-index.ts), LevelPicker-кнопка (portia-level-picker.tsx, level-copy.ts), вкладки разделов с ручкой и обёртка `editor-section-single` (portia-editor.tsx), кнопка корзины в `virus-editor-head`, CSS-блоки gap 2/3/4/5/6/7/8/9/10/11, новые и изменённые тесты.
 
-Блокеров нет. Найдено 6 предупреждений и 3 замечания.
+Прогон: `node --experimental-strip-types --test` по 8 затронутым test-файлам — 242/242 pass; `tsc --noEmit` (через node_modules/typescript, Node 22.13.1) — без ошибок. BLOCKER-уровня дефектов (потеря данных, безопасность, краш) не найдено: новый код не трогает сеть, данные и RLS, а пользовательский ввод в нём не интерпретируется. Остались три дефекта поведения в UX-путях, которые тесты исходного кода (в основном grep по исходникам и CSS) не ловят.
+
+Structural findings (fallow) не передавались.
 
 ## Warnings
 
-### WR-01: Несохранённый черновик не виден и не сохраняется на вкладках без панели действий
+### WR-01: ручка перетаскивания в карточке активного раздела («Информация», «Справочник») больше не перетаскивает
 
-**File:** `components/portia-editor.tsx:1215` (панель выводится только при `editorSections.some(section => section === tab)`)
-**Issue:** Плавающая плашка сохранения (`editor-save-chip`) была видна на любой вкладке, пока `dirty || saving || saved || saveNotice`. Теперь статус, «СОХРАНИТЬ», «ОТМЕНИТЬ» и причины отказа живут только в `EditorActionBar`, а он рисуется для 7 вкладок черновика (`viruses`, `info`, `guide`, `broadcasts`, `recycle`, `search`, `assistant`).
-Черновик общий для всех вкладок. Если сделать правку в «Информации» и перейти в `users`, `promo` или `access`, на экране не остаётся ни индикатора несохранённого, ни кнопки сохранения, ни `saveNotice`, ни `saveError`. Остаётся только `sr-only` статус (строка 1705). Вкладка `employees` рисует свою панель, но она относится к профилю, а не к черновику.
-Прежний комментарий D-09 прямо требовал, чтобы компактная плашка никогда не скрывала несохранённую работу, и новое поведение этому противоречит. Это риск потери правок: пользователь закрывает окно, не зная, что есть несохранённое (`beforeunload` его только спросит).
-**Fix:** Показывать компактную индикацию несохранённого на вкладках вне `editorSections` при `dirty || saveState !== "idle"`. Например, вызвать `EditorActionBar` без `nav` на всех вкладках, кроме тех, у которых своя панель, либо вывести ту же строку статуса и кнопки над `users`, `promo` и `access`. Минимум: строка «Не сохранено: N» с кнопкой возврата на вкладку черновика.
+**File:** `components/portia-editor.tsx:1390` и `components/portia-editor.tsx:1448` (обёртки — строки 1387 и 1445)
+**Issue:** План 26-18 заменил `SectionColumns` на `<div className="editor-section-single">`, где отрисована ровно одна карточка (остальные `false`). В `OrderDragHandle.moveTo` (components/portia-editor-dossier.tsx:104-123) целью свопа считается только строка с `data-sort-index`, у которой `parentElement === parent` (родитель — `.editor-section-single`). Единственный кандидат — сама карточка, поэтому `target === indexRef.current` и функция выходит. `moveAcross` тоже выходит: у обёртки нет `data-sort-group`. Итог: в шапке карточки по-прежнему стоит заметная ручка `≡` с `aria-label="Изменить порядок: …"`, но перетаскивание мышью/пальцем у неё не работает (работают только ArrowUp/ArrowDown). Владелец жаловался именно на «перетаскивание пропало» (gap 5); ручка, которая выглядит рабочей и молчит, повторяет ту же жалобу. Тест `editor-tab-layout.test.ts` проверяет только строку разметки, а не поведение.
+**Fix:** убрать `handle={...}` из `CollapsibleCard` обоих разделов (порядок разделов теперь меняется только ручками вкладок), либо оставить её, но явно прокинуть то же `onMove` и не выдавать за drag. Если handle удаляется, удалить и неиспользуемый `keepSectionHandleFocus` из этих двух мест:
+```tsx
+<CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={...} title={section.title} open={isOpen(section.id)} onToggle={() => toggleCard(section.id)}
+  actions={...}>
+```
 
-### WR-02: Граница телефона 520/521px оставляет щель на дробной ширине вьюпорта
+### WR-02: ручка вкладки раздела — клавиатурный порядок и перетаскивание неудобно/некорректно ложатся на горизонтальную полосу
 
-**File:** `components/portia-desktop-shortcuts.tsx:187` и `:247` (`(max-width: 520px)`), `:32` (`(min-width: 521px) and (max-width: 900px)`); `app/portia.css:1507` (`@media (max-width: 520px)`) и `:1519` (`@media (min-width: 521px) and (max-width: 900px)`)
-**Issue:** Раньше граница была одна (`max-width: 900px`), теперь их две, и между ними нет перекрытия. При дробной CSS-ширине (масштаб браузера 125% / 110% и т.п. даёт, например, 520.8px) не срабатывает ни `max-width: 520px`, ни `min-width: 521px`. Результат:
-- CSS: блок `max-width: 900px` применяется, то есть сетка телефона с `position: relative; inset: auto`. Блок 521–900 и `inset: auto !important` из блока ≤520 не применяются.
-- JS: `tablet === false`, расстановки нет. `handlePointerDown` и `handleKeyDown` проверяют только `max-width: 520px`, поэтому видят «не телефон» и разрешают перетаскивание.
-Ярлык в сетке телефона визуально не двигается, а `onMove` сохраняет координаты в `shortcutPositions`. Это портит сохранённую раскладку ПК и планшета ложными позициями. Те же дробные ширины ломают и новые правила `@media (min-width: 901px)` липкой панели (`portia.css:2690`): при 900.5px не применяется ни ПК-блок, ни телефонный.
-**Fix:** Задать границы без щели. Для JS: «телефон» = `!matchMedia("(min-width: 521px)").matches`, «планшет» = `(min-width: 521px) and (not (min-width: 901px))`. Для CSS: `@media (not (min-width: 521px))` или `@media (width < 521px)` вместо `max-width: 520px`, и `@media (width <= 900px)` либо `not (min-width: 901px)` вместо `max-width: 900px` в новых блоках.
+**File:** `components/portia-editor.tsx:288-291` (использует `OrderDragHandle` из `components/portia-editor-dossier.tsx:187-212`)
+**Issue:** Три связанных проблемы после удаления кнопок `←/→` (gap 5):
+1. Клавиатура: ручка слушает только `ArrowUp`/`ArrowDown` (`aria-keyshortcuts="ArrowUp ArrowDown"`), а полоса вкладок горизонтальная. Прежние кнопки «Переместить раздел левее/правее» были единственным ожидаемым способом (←/→); теперь пользователь с клавиатурой или скринридером должен знать, что на горизонтальной ленте порядок меняют вертикальными стрелками. Тест это закрепляет (`assert.ok(!tabs.includes("Переместить раздел"))`).
+2. Автоскролл: `autoscroll` прокручивает только `.content-editor`/window по вертикали (`scroller.scrollBy(0, …)`). `nav` — `overflow-x: auto` (portia.css `.editor-section-tabs nav`, `.etab-nav .editor-section-tabs nav`); при перетаскивании вкладки к краю полосы лента не едет, поэтому при числе разделов, не помещающихся в полосу, вкладку нельзя перетащить на позицию за видимой частью.
+3. Два tab-стопа на раздел (ручка + кнопка вкладки) удваивают проход Tab по полосе.
+**Fix:** добавить в `OrderDragHandle` необязательный `orientation` (или определять по `getComputedStyle(row.parentElement).flexDirection`), чтобы для горизонтального родителя слушать `ArrowLeft/ArrowRight` и автоскроллить `scrollLeft` у `nav`; обновить `aria-keyshortcuts`. Минимально — слушать оба набора стрелок и поставить `tabIndex={-1}` на ручку вкладки, оставив порядок через стрелки с фокуса вкладки.
 
-### WR-03: После решения на ПК выбор и фокус пропадают, если `load()` вытеснен другим запросом
+### WR-03: LevelPicker закрывается/не закрывается по blur, который не приходит от мыши в Safari и Firefox на macOS
 
-**File:** `components/portia-users-tab.tsx:569-581`
-**Issue:** `postAction` делает `const refreshed = await load(); if (!refreshed) return;`. `load()` возвращает `undefined` как для устаревшего запроса (`requestId !== requestEpoch.current`), так и для ошибки или отказа (`false`). Поллинг каждые 10с и смена `debouncedQuery` запускают конкурирующий `load()` и увеличивают эпоху. Тогда запрос после действия отбрасывается, и ветка PC (выбор следующей строки, `focusPcSelection`) не выполняется.
-Решённая строка при этом может исчезнуть из раздела: одобренная заявка уходит из «Заявок». `selectedKey` остаётся «висеть», `selectedContext` равен `null`, панель деталей пустеет, а фокус остаётся на удалённой кнопке «ОДОБРИТЬ» и уходит в `body`. Для клавиатурного пользователя это потеря контекста (T-26-20 как раз про это).
-Список при этом обновит конкурирующий `load()`, но логика «следующая строка / кнопка раздела» к нему не привязана.
-**Fix:** Не полагаться на возврат `load()` для управления фокусом. Применять пост-обработку к последнему принятому списку, то есть к `latestList.current` после `await load()`. Либо вынести подбор выбора в эффект на `[list, selectedKey]`: если `selectedKey` не найден в `activeView.rows`, выбрать соседа и сфокусировать его.
-
-### WR-04: Сообщения «Повышения» всегда получают тон `error`, а CSS строки статуса противоречит сам себе
-
-**File:** `components/portia-promotion-editor-main.tsx:123` (`tone={message ? "error" : ""}`), `app/portia.css:553` и `:2667`
-**Issue:** `message` содержит и успехи: «Привязка … сброшена.», «Запрос отклонён и удалён из активной очереди.», «Запрос удалён.». Все они выводятся красным (`.editor-save-status.error`).
-Кроме того, `.editor-save-status.error { white-space: normal }` (специфичность 0,2,0) перебивает `.etab-status { white-space: nowrap; text-overflow: ellipsis }` (0,1,0). Для любого `tone="error"` строка в панели переносится на несколько строк вместо одной с многоточием. На телефоне при `line-height: 44px` длинный текст ошибки раздувает липкую панель до нескольких строк по 44px и закрывает контент под ней.
-**Fix:** Различать тон: `tone = isFailure ? "error" : "saved"`. Достаточно хранить признак ошибки отдельно от `message` либо выводить успехи через `notice`. В CSS поднять специфичность правила панели: `.etab-status.editor-save-status { white-space: nowrap; }`.
-
-### WR-05: Дублирование живых областей: статус сохранения читается дважды
-
-**File:** `components/portia-editor.tsx:1705` и `components/portia-editor-tab-shell.tsx:458`
-**Issue:** `EditorActionBar` теперь содержит `<p role="status" aria-live="polite">` с текстом статуса и числом несохранённого, а прежний `sr-only` `<p role="status" aria-live="polite">` с тем же `statusText` и списком секций остался. Скринридер объявляет каждое изменение статуса дважды в разных формулировках («Сохранение…» и «Не сохранено: 3 · …»). Для обычного пользователя панель видна, и вторая область лишняя.
-**Fix:** Оставить одну область. Либо убрать `sr-only` абзац на вкладках, где панель видна, либо сделать видимый `etab-status` не-live (`role="status"` без `aria-live`), если нужна именно расширенная формулировка со списком секций.
-
-### WR-06: Липкая плашка «данные устарели» во вкладке «Пользователи» уходит под панель действий
-
-**File:** `components/portia-users-tab.tsx:719`, `app/portia.css:2122` (`.app-stale-banner { position: sticky; top: 0; z-index: 1 }`) против `:2665` (`.etab-bar { position: sticky; top: 0; z-index: 4 }`)
-**Issue:** Панель и плашка лежат в одном контейнере `.users-tab` и прилипают к одному краю (`top: 0` на ПК). При прокрутке `.etab-bar` (z-index 4) перекрывает плашку (z-index 1). Предупреждение об устаревших данных и кнопка «повторить» пропадают, когда список прокручен. На телефоне плашка прилипает к `top: 0` под системной полосой, а панель к `top: 48px`, и порядок слоёв там другой. Вывод по ПК сделан по CSS, без проверки в браузере.
-**Fix:** Либо вывести плашку внутри панели (`messages`/отдельный слот `EditorActionBar`), либо задать ей `top: calc(var(--etab-bar-height, 48px))` в `.users-tab` и больший z-index относительно панели. Проще: в `.users-tab > .app-stale-banner { top: 56px; }` для ПК и `top: 104px` для телефона.
+**File:** `components/portia-level-picker.tsx:25-28`, `:35-37`, `:46-48`
+**Issue:** `closeOnLeave` решает «ушёл ли пользователь» по `relatedTarget` события blur. В Chrome (Windows) это работает, потому что невидимый `<input>` занимает всю пластину (`.access-level-option input { position:absolute; inset:0 }`), mousedown приходит на input, и `relatedTarget` внутри fieldset. В Safari (macOS) и Firefox (macOS) мышь не ставит фокус на radio и button:
+- пользователь открыл список мышью, кликнул в любое другое место страницы — blur не приходит, список остаётся раскрытым (в отличие от меню PORTIA, где добавлен pointerdown вне);
+- если фокус уже внутри fieldset (открыли с клавиатуры, потом кликнули по пластине мышью), mousedown по пластине порождает blur с `relatedTarget === null`, `setOpen(false)` срабатывает на mousedown, блок получает `hidden`, и клик по пластине теряется: уровень не меняется.
+Тесты проверяют только наличие строк `onBlur=`/`relatedTarget`, не поведение.
+**Fix:** закрывать по pointerdown вне fieldset (как в `lib/start-menu.ts`) и не опираться на blur для мышиных нажатий. Например, эффект при `open`: `document.addEventListener("pointerdown", e => { if (!fieldsetRef.current?.contains(e.target as Node)) setOpen(false); }, true)`; blur оставить только для клавиатурного ухода (`event.relatedTarget` не null или нет недавнего pointerdown).
 
 ## Info
 
-### IN-01: Вложенный `.etab-detail` в «Пользователях» даёт двойной отступ
+### IN-01: `100cqw` уже считается от content-box, а формула вычитает padding ещё раз — названия классов мельчают без причины
 
-**File:** `components/portia-users-tab.tsx:762` и `components/portia-editor-tab-shell.tsx:467-484`
-**Issue:** `EditorTabBody` сам оборачивает `detail` в `div.etab-detail`, а `EditorEmptyDetail` рисует `div.etab-detail.etab-empty`. Во вкладке «Пользователи» пустая деталь получается вложенной: padding 24px внешнего блока плюс 48px 24px внутреннего. Во вкладке вирусов `EditorEmptyDetail` кладётся напрямую в `.etab-body`, и там всё верно. Селектор `.etab-body[data-mobile-view="list"] > .etab-detail` рассчитан именно на прямого потомка.
-**Fix:** Убрать класс `etab-detail` из корня `EditorEmptyDetail` и оставить `etab-empty`, либо не оборачивать в `EditorTabBody`, если `detail` сам уже `.etab-detail`.
+**File:** `app/portia.css:1169`, `:1367` (и прежние `:2449`, `:2451`); модель повторена в `lib/classification-fit.test.ts:114-120`
+**Issue:** `.class-cell` — контейнер (`container-type: inline-size`), а `100cqw` — ширина content-box контейнера, то есть padding (24px / 20px) и рамка уже вычтены. Формула `clamp(12px, calc((100cqw - 24px) / 8.6), 15px)` вычитает padding второй раз. Следствие: слово 14 глифов не переполняет ячейку (поэтому тест зелёный и безопасность «не рвать слово» соблюдена), но 15px достигается только при ячейке ≈178px вместо ≈151px, и в средних ячейках (например, 3 колонки в панели ~500px) имя рисуется ≈13.6px там, где вошло бы 15px. Тест моделирует то же двойное вычитание, поэтому расхождение не обнаруживает. Это то же правило, что уже стоит в карточке шаблона (D-65), поэтому исправление затрагивает оба места и тест.
+**Fix:** `font-size: clamp(12px, calc(100cqw / 8.6), 15px)` (и `13px` на телефоне), в тесте `content` подставлять без `Number(pc[1])`; либо оставить как сознательный запас и поправить комментарий, чтобы он не утверждал «размер следует за ячейкой» без оговорки.
 
-### IN-02: Одинаковые подписи у `<section>` и вложенного `<nav>` в панели действий
+### IN-02: мёртвые и дублирующие объявления в CSS
 
-**File:** `components/portia-users-tab.tsx:706-712`, `components/portia-promotion-editor-main.tsx:123`, `components/portia-editor-tab-shell.tsx:456`
-**Issue:** `EditorActionBar` рисует `<section aria-label={label}>`. Во «Пользователях» и «Повышении» внутри лежит `<nav aria-label>` с тем же текстом («Разделы пользователей», «Разделы повышения»). Скринридер перечисляет два ориентира с одним именем подряд.
-**Fix:** Дать `section` другое имя (например, «Панель действий: …») или убрать `aria-label` у вложенного `nav`.
-
-### IN-03: Расстановка ярлыков 521–900px не учитывает помощника и кнопку формата, а касание смешивает прокрутку и перетаскивание
-
-**File:** `lib/shortcut-layout.ts:526-565`, `components/portia-desktop-shortcuts.tsx:184-206`, `app/portia.css:1524`
+**File:** `app/portia.css:1169`, `:251`, `:2448-2451`
 **Issue:**
-- `placeShortcuts` обходит только уже сохранённые ярлыки. Помощник (`.desktop-assistant`) и `.global-format-launch` учитываются лишь в момент перетаскивания (`shortcutObstacles`), но не при расстановке и не после поворота экрана. Сохранённый ярлык после смены ориентации может оказаться под помощником.
-- В 521–900px у иконки `touch-action: pan-y pinch-zoom`, а `handlePointerDown` по-прежнему захватывает указатель. Касание по вертикали прокручивает страницу, а горизонтальное (плюс вертикальная составляющая) работает как перетаскивание. Поведение зависит от угла жеста и нигде не зафиксировано.
-**Fix:** Передавать `shortcutObstacles` в `placeShortcuts` для сохранённых позиций. Для касания (`event.pointerType === "touch"`) на планшете либо вовсе не начинать перетаскивание, либо оставить только Alt+стрелки.
+- `:1169` — в одном правиле `.class-cell strong` подряд `gap: 6px` и `gap: 2px 6px`; первое мёртвое.
+- `:251` — `.app-window.is-active { border-color: … }` после gap 2 не действует (`.app-window { border: 0 }`); тест `ui-unify.test.ts` намеренно держит его «как историю».
+- `:2448-2451` — **Category:** necessity (already-defended-elsewhere). Правила `.template-card-preview .class-cell { container-type }` и `.template-card-preview .class-cell strong {...}` теперь полностью дублируют базовые `.class-cell` / `.class-cell strong` (те же `flex-wrap`, `overflow-wrap`, `word-break`, `hyphens`, `font-size`, `container-type`), так как 26-20 сделал их общими для архива и шаблона. Доказательство: сравнение объявлений на `:1169`, `:1181` и `:2448-2451`; тест `classification-fit.test.ts:176-188` их фиксирует, но поведение страницы они не меняют. Единственный возможный довод оставить — экспортёр шаблона (`lib/portia-template-export.ts`, `cardClasses`) копирует правила по списку классов, и оба набора попадут в файл, так что дубль только раздувает вывод. Решение остаётся за человеком, поэтому Info.
+**Fix:** удалить первый `gap`, убрать мёртвое правило активной рамки (и его пин в тесте); дубли `.template-card-preview .class-cell*` удалить вместе с пинами в `classification-fit.test.ts`, проверив, что экспорт шаблона всё ещё содержит базовые правила.
+
+### IN-03: абзац загрузки «Проверяем доступ к повышению…» уходит в колонку 2 в развёрнутом окне
+
+**File:** `app/portia.css:2688-2689` (правило `.app-window.is-maximized .promotion-gate:not(:has(> form)) > p { grid-column: 2 / -1 }`)
+**Issue:** `<div className="promotion-gate" role="status"><p>Проверяем доступ к повышению…</p></div>` не имеет знака (колонка 1) и шапки; в развёрнутом окне сетка `72px 1fr 1fr`, а абзац помещается в колонки 2..-1, оставляя пустую колонку 72px слева. Визуально текст загрузки сдвинут относительно рамки. Подтвердить скриншотом не удалось (не запускалось приложение), поэтому Info.
+**Fix:** для абзаца без соседнего `.promotion-gate-mark` использовать `grid-column: 1 / -1`, например `.promotion-gate:not(:has(> header)) > p { grid-column: 1 / -1; }` в том же блоке.
 
 ---
 
-_Reviewed: 2026-11-16_
+_Reviewed: 2026-11-17T03:10:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
