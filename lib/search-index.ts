@@ -111,6 +111,13 @@ export function buildSearchIndex(input: SearchIndexInput): SearchItem[] {
   return items.filter((entry) => !seen.has(entry.key) && Boolean(seen.add(entry.key)));
 }
 
+// RED stub: the limit does not depend on the window state yet.
+export const availableRecordsInWindow = 8;
+export function availableRecordsLimit(maximized: boolean): number {
+  void maximized;
+  return availableRecordsInWindow;
+}
+
 // An empty query lists the first `limit` items; a query lists every match. The preview of a card starts at the first block that holds the query; matching itself is unchanged.
 export function matchSearch(items: readonly SearchItem[], query: string, limit = 8): SearchItem[] {
   const needle = normalizeSearch(query.trim());

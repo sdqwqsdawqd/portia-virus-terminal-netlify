@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildSearchIndex, matchSearch, normalizeSearch, searchKeyAction, type SearchIndexInput, type SearchKeyContext } from "./search-index.ts";
+import { availableRecordsInWindow, availableRecordsLimit, buildSearchIndex, matchSearch, normalizeSearch, searchKeyAction, type SearchIndexInput, type SearchKeyContext } from "./search-index.ts";
 import { globalSearchKeyAction } from "./search-index.ts";
 
 const virus = (id: string, name: string, extra: Record<string, unknown> = {}) => ({
@@ -79,6 +79,17 @@ test("an empty query lists the first 8 in source order; a query lists every matc
   assert.equal(matchSearch(items, "   ").length, 8);
   assert.equal(matchSearch(items, "вирус").length, 12);
   assert.equal(matchSearch(items, "", 3).length, 3);
+});
+
+test("UAT 2026-11-16 gap 3: a maximized search window lists every available record, a normal window the first 8", () => {
+  assert.equal(availableRecordsInWindow, 8);
+  assert.equal(availableRecordsLimit(false), 8);
+  assert.equal(availableRecordsLimit(true), Number.POSITIVE_INFINITY);
+  const items = buildSearchIndex({ ...empty, viruses: Array.from({ length: 40 }, (_, i) => virus(String(i), `Вирус ${i}`)) });
+  assert.deepEqual(matchSearch(items, "", availableRecordsLimit(true)).map((entry) => entry.key), items.map((entry) => entry.key));
+  assert.deepEqual(matchSearch(items, "", availableRecordsLimit(false)).map((entry) => entry.key), items.slice(0, 8).map((entry) => entry.key));
+  assert.equal(matchSearch(items, "вирус 3", availableRecordsLimit(false)).length, matchSearch(items, "вирус 3", availableRecordsLimit(true)).length, "a query lists every match at any limit");
+  assert.ok(matchSearch(items, "", availableRecordsLimit(true)).every((entry) => items.includes(entry)), "only items of the passed index");
 });
 
 test("the preview of a card starts at the first block that holds the query", () => {

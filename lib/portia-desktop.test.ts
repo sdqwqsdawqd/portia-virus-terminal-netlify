@@ -180,7 +180,8 @@ test("promotion is a standalone desktop application with its own window geometry
 test("global search is built by buildSearchIndex from every existing collection and opens the owner app (D-13, D-14)", () => {
   assert.ok(source.includes("globalSearchAppIds.map"));
   assert.ok(source.includes("buildSearchIndex({"));
-  assert.ok(source.includes("matchSearch(searchIndex, globalQuery)"));
+  assert.ok(source.includes("matchSearch(searchIndex, globalQuery, availableRecordsLimit(windows.search.maximized))"));
+  assert.ok(source.includes("[searchIndex, globalQuery, windows.search.maximized]"));
   assert.ok(!source.includes("const escapeSearch"), "one normalisation: normalizeSearch from lib/search-index");
   assert.ok(source.includes('openApp("employees")'));
   for (const collection of ["content.viruses", "content.infoSections", "content.guideSections", "content.broadcasts", "content.recycleFiles", "recycledViruses", "employees"]) {
