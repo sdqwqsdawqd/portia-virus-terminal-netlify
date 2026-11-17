@@ -2102,6 +2102,8 @@ html[data-motion="reduced"] .assistant-button img { transition-duration: var(--m
 .promotion-gate-mark { width: 70px; height: 70px; display: grid; place-items: center; border: 1px solid var(--line-bright); border-radius: var(--radius-card); background: var(--teal-soft); color: var(--teal); font: 300 38px/1 var(--mono); }
 .promotion-gate header h1 { margin: 5px 0 10px; font: 700 clamp(27px, 4vw, 42px)/1.08 var(--sans); letter-spacing: -.04em; }
 .promotion-gate header p { max-width: 540px; margin: 0; color: oklch(.67 calc(.025 * var(--accent-chroma)) var(--accent-hue)); font: 400 14px/1.55 var(--doc); }
+/* UAT 2026-11-16 gap 8: абзацы без колонки попадали в колонку знака 72px и рвались по слову в строку; абзац входа — на всю ширину сетки. */
+.promotion-gate > p { grid-column: 1 / -1; }
 .promotion-gate form { grid-column: 1 / -1; display: grid; gap: 8px; padding: 24px; border: 1px solid var(--line); border-radius: var(--radius-card); background: rgba(255,255,255,.025); }
 .promotion-gate label { color: oklch(.78 calc(.024 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1.35 var(--sans); letter-spacing: .06em; text-transform: uppercase; }
 .promotion-gate input { width: 100%; min-height: 44px; box-sizing: border-box; padding: 0 16px; border: 1px solid var(--line-bright); border-radius: var(--radius-field); outline: none; background: oklch(.185 calc(.018 * var(--accent-chroma)) var(--accent-hue)); color: #f3f7f6; font: 500 15px var(--mono); }
@@ -2658,6 +2660,17 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .app-window.is-maximized .info-document > .content-fade { max-width: 820px; }
   /* D-19: карточки редактора в развёрнутом окне — только больше колонок той же ширины var(--editor-card-width), без 1fr. */
   .app-window.is-maximized .editor-card-columns, .app-window.is-maximized .editor-section-columns { grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--editor-card-width)), var(--editor-card-width))); }
+  /* UAT 2026-11-16 gap 3 (владелец: маленькая карточка посреди окна): «Повышение» участника — на всё развёрнутое окно.
+     Вход: знак слева, шапка справа, форма и пояснения рядом (2 колонки); статус: шапка и карточки заявок на всю ширину, карточки по 2.
+     Поля shell не меняются: на них рассчитаны отрицательные поля .promotion-identity. Поле ника по-прежнему до 640px (R2). */
+  .app-window.is-maximized .promotion-gate, .app-window.is-maximized .promotion-shell { width: auto; margin: 0; }
+  .app-window.is-maximized .promotion-gate { align-content: start; grid-template-columns: 72px minmax(0, 1fr) minmax(0, 1fr); }
+  .app-window.is-maximized .promotion-gate > header { grid-column: 2 / -1; }
+  .app-window.is-maximized .promotion-gate > form { grid-column: 2; }
+  .app-window.is-maximized .promotion-gate:has(> form) > p { grid-column: 3; }
+  .app-window.is-maximized .promotion-gate:not(:has(> form)) > p { grid-column: 2 / -1; }
+  .app-window.is-maximized .promotion-gate input { max-width: var(--field-max); }
+  .app-window.is-maximized .promotion-flow-list { display: grid; gap: 24px; grid-template-columns: repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 24px) / 2)), 1fr)); }
 }
 /* R3 (D-19): две колонки только у плоских форм — профиль сотрудника, форма вируса в редакторе, группы настроек; не шире 1320px.
    Блоки, одноколоночные по природе, занимают обе колонки. У «Настроек» сетка стоит на самой панели с фоном: 2 × 648px + 24px = 1320px. */
