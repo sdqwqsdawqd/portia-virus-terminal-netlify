@@ -90,6 +90,9 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //  15. PORTIA-26-G04 (26-18; UI-04, UI-06, D-21) — активный раздел «Справочника» и «Информации» стоит в обёртке div.editor-section-single (на все колонки формы),
 //      а не в колонке сетки SectionColumns по 340px: открывающая строка и закрытие `)} />` -> `))}</div>` у обоих списков (applySectionWidthHunk); тело карточки раздела не тронуто;
 //      русских строк не добавлено. Источник одобрения: 26-UAT gap 4 (2026-11-16, владелец: «пипец как мало места») и план 26-18.
+//  16. PORTIA-26-G10 (26-18; UI-04, D-21) — вкладка вирусов: кнопка «ПЕРЕМЕСТИТЬ В КОРЗИНУ» переехала из низа формы в верхнюю строку записи div.virus-editor-head
+//      рядом с вкладками досье (applyRecycleButtonHunk); разметка кнопки и обработчик те же, русская надпись переносится, а не добавляется (набор строк D-58 тот же).
+//      Источник одобрения: 26-UAT gap 10 (2026-11-16, владелец: кнопка «в странном месте») и план 26-18.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -1005,6 +1008,22 @@ function applySectionWidthHunk(text: string): string {
   );
 }
 
+/**
+ * PORTIA-26-G10 (26-18 Task 3; UI-04, D-21; UAT gap 10): the recycle button of the virus tab moves from the bottom of the form into the head row beside the dossier tabs.
+ * Two replacements, byte for byte; the button's markup and its handler are the same, and the confirmation dialog is not touched. No Russian text is added: the label moves.
+ */
+const RECYCLE_BUTTON_LINE = '<button className="danger-control" type="button" onClick={() => setDialog("recycle")}>ПЕРЕМЕСТИТЬ В КОРЗИНУ</button>';
+const DOSSIER_TABS_LINE = "<DossierTabs active={dossierTab} changed={liveDossierChanged} onSelect={selectDossierTab} />";
+function applyRecycleButtonHunk(text: string): string {
+  const next = replaceOnce(
+    text,
+    `              ${DOSSIER_TABS_LINE}\n`,
+    `              <div className="virus-editor-head">\n                ${DOSSIER_TABS_LINE}\n                ${RECYCLE_BUTTON_LINE}\n              </div>\n`,
+    "recycle button: the head row",
+  );
+  return replaceOnce(next, `\n\n              ${RECYCLE_BUTTON_LINE}\n            </div>\n`, `\n            </div>\n`, "recycle button: the old place out");
+}
+
 /** Реестр одобренных правок (D-64): `apply` — порядок применения к образцу; `normalizeActual` — что вырезается из текущего файла перед сравнением. */
 const approvedEditorEdits: readonly { id: string; apply: (text: string) => string; normalizeActual?: (text: string) => string }[] = [
   { id: "D-57", apply: applyLaunchButtonHunk },
@@ -1024,6 +1043,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26-R05", apply: applyReviewLiveRegionHunk },
   { id: "PORTIA-26-G05", apply: applySectionDragHunk },
   { id: "PORTIA-26-G04", apply: applySectionWidthHunk },
+  { id: "PORTIA-26-G10", apply: applyRecycleButtonHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -1164,6 +1184,9 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutSectionWidth = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-G04").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutSectionWidth), null, "a file without the PORTIA-26-G04 hunk is a difference");
   assert.throws(() => applySectionWidthHunk(expected), /exactly one approved anchor/, "the section width hunk cannot be applied twice");
+  const withoutRecycleButton = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-G10").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutRecycleButton), null, "a file without the PORTIA-26-G10 hunk is a difference");
+  assert.throws(() => applyRecycleButtonHunk(expected), /exactly one approved anchor/, "the recycle button hunk cannot be applied twice");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

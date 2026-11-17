@@ -2726,6 +2726,11 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 /* UAT 2026-11-16 gap 4: один активный раздел — не сетка карточек: он занимает всю форму (все колонки), подразделы и карточки внутри идут строками на всю ширину раздела.
    D-19 (ширина карточки 340px, переменная --editor-card-width) действует для сеток из нескольких карточек — «Сводка», «Рекомендации». */
 .editor-section-single { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; grid-column: 1 / -1; min-width: 0; align-content: start; }
+/* UAT 2026-11-16 gap 10 (владелец: кнопка «ПЕРЕМЕСТИТЬ В КОРЗИНУ» стоит в странном месте): запись вируса открывается строкой «вкладки досье · кнопка в корзину справа»;
+   на узком окне строка переносится, кнопка уходит под вкладки к правому краю. Подтверждение переноса в корзину прежнее. */
+.virus-editor-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+.virus-editor-head > .dossier-tabs { flex: 1 1 auto; min-width: 0; margin: 0; }
+.virus-editor-head > .danger-control { flex: none; margin-left: auto; }
 /* UAT 2026-11-16 gap 5 (владелец: «перетаскивание пропало»): каждая вкладка раздела — ручка ≡ того же вида, что у подразделов, и кнопка вкладки в одной строке.
    Общее правило вкладок `.editor-section-tabs nav button` (0,1,2) задело бы и ручку, поэтому ручка получает селектор сильнее (0,2,1); её цвета — рядом с цветами вкладок выше (блок цветов не трогает). */
 .editor-section-tabs nav > .editor-section-tab { display: inline-flex; flex: none; align-items: stretch; gap: 4px; }
