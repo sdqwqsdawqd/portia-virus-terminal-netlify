@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 26
 current_phase_name: Единый стиль сайта
 status: executing
-stopped_at: Completed 26-14-PLAN.md
-last_updated: "2026-11-16T21:53:37.517Z"
-last_activity: 2026-11-16
-last_activity_desc: Phase PORTIA-26 execution started
-state_head: 418e6a008405f765fa7f1f601bafab962b8e0172
+stopped_at: Completed 26-15-PLAN.md
+last_updated: "2026-11-17T02:24:14.504Z"
+last_activity: 2026-11-17
+last_activity_desc: Phase PORTIA-26 execution resumed (wave continue)
+state_head: 86ffd298703249f379ca55056eb7543bf3793701
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 70
-  completed_plans: 64
+  completed_plans: 65
 ---
 
 # Project State
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 Phase: PORTIA-26 (Единый стиль сайта) — READY TO EXECUTE
 Plan: 14 of 14
 Status: Executing Phase PORTIA-26
-Last activity: 2026-11-16 — Phase PORTIA-26 execution started
+Last activity: 2026-11-17 — Phase PORTIA-26 execution resumed (wave continue)
 
 Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 — принятый риск; Phase 22 не закрыта)
 
@@ -103,6 +103,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase 26 P12 | 4 min | 2 tasks | 2 files |
 | Phase 26 P13 | 7 min | 2 tasks | 7 files |
 | Phase 26 P14 | 12 min | 3 tasks | 4 files |
+| Phase PORTIA-26 P15 | 14 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -342,6 +343,8 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 26]: 26-13: .eyebrow — var(--teal), подсказки и small — .658 (подсказка 11px); палитра пресетов не менялась; контраст на --bg/--panel закреплён lib/ui-contrast.test.ts (минимум 4.58:1, red)
 - [Phase 26]: 26-14: регрессии 2026-10-28 пп. 9 (клэмп окна) и 10 (конец анимации ярлыка) — NOT REPRODUCED по тестам на текущем коде, код не менялся; устройство и DPR 1.25 — BLOCKED (DEVICE), Phase 27
 - [Phase 26]: 26-14: will-change ярлыков по Phase 19 (D-17) — постоянный у частей знаков, у контейнера .desktop-icon отсутствует; противоречие UI-SPEC записано владельцу
+- [Phase PORTIA-26]: 26-15: PORTIA start menu keydown/pointerdown listeners run in the capture phase; Escape is marked handled before the quest toast listener
+- [Phase PORTIA-26]: 26-15: availableRecordsLimit(maximized) is the single place for the Available records limit (8 normal, unbounded maximized)
 
 ### Pending Todos
 
@@ -395,8 +398,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-16T17:13:35.818Z
-Stopped at: Completed 26-14-PLAN.md
+Last session: 2026-11-17T02:24:13.436Z
+Stopped at: Completed 26-15-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
