@@ -590,6 +590,34 @@ test("D-12: the banks are list/detail with the same 280px list on a PC; the work
   assert.equal(declaredIn(promotionRules, ".promotion-bank-workflow .promotion-bank-layout", "display", PHONE), "block");
 });
 
+// ---- quick 261117-bi1 (R2): «Отзыв привязки по нику» stands in the bar's strip next to the three branches on a PC ----
+
+test("261117-bi1 R2: the device-reset form is defined once, stands in the branch strip on a PC and in the request toolbar on a phone", () => {
+  assert.equal(promotionMain.split('className="promotion-device-reset"').length - 1, 1, "one form definition, two placements");
+  assert.ok(promotionMain.includes('{canManageEditors && <form className="promotion-device-reset"'), "the owner-only guard stays on the form itself");
+  const bar = promotionSlice("<EditorActionBar", "{message && conflict &&");
+  const mapEnd = bar.indexOf("</button>)}");
+  assert.ok(mapEnd > 0, "the branch buttons are mapped");
+  assert.ok(bar.slice(mapEnd).includes("{!isPhone && deviceReset}</nav>"), "on a PC the form follows the three branch buttons in the strip");
+  const toolbar = promotionSlice('<div className="promotion-requests-toolbar">', '<div className="promotion-editor-workbench etab-body">');
+  assert.ok(toolbar.includes("{isPhone && deviceReset}"), "on a phone the form keeps its place in the request toolbar");
+  assert.ok(toolbar.indexOf("{isPhone && deviceReset}") > toolbar.indexOf("promotion-queue-filters"), "after the filters, as before");
+  for (const text of ["Точный ник для отзыва привязки", "СБРОСИТЬ ПРИВЯЗКУ ПО НИКУ", "maxLength={64}", 'confirmLabel: "Сбросить привязку", cancelLabel: "Не сбрасывать", run: () => void resetDevice(key)']) {
+    assert.equal(promotionMain.split(text).length - 1, 1, `${text}: unchanged, once`);
+  }
+});
+
+test("261117-bi1 R2: the form in the strip is inline and frameless, wraps to a second line of the strip on a narrow window", () => {
+  const form = ".promotion-editor-branches > .promotion-device-reset";
+  assert.equal(declaredIn(promotionRules, form, "margin", DESKTOP), "0 0 0 auto");
+  assert.equal(declaredIn(promotionRules, form, "padding", DESKTOP), "0");
+  assert.equal(declaredIn(promotionRules, form, "border", DESKTOP), "0");
+  assert.equal(declaredIn(promotionRules, form, "flex", DESKTOP), "none");
+  assert.equal(declaredIn(promotionRules, `${form} label`, "display", DESKTOP), "flex");
+  assert.equal(declaredIn(promotionRules, `${form} label`, "align-items", DESKTOP), "center");
+  assert.equal(declaredIn(promotionRules, ".promotion-editor-branches:has(> .promotion-device-reset)", "flex-wrap", DESKTOP), "wrap", "a narrow window wraps the form instead of hiding it in a scroll");
+});
+
 // ---- 26-09 (D-12, D-11 step 4): «Пользователи» on a PC — the sections in the bar's nav slot, the rows on the left, the detail on the right ----
 // components/portia-users-tab.tsx is not a part of the portia-editor family; it calls the seam directly. A phone keeps the Phase 22 markup.
 
