@@ -31,6 +31,7 @@ import { FormattedText, LoadingState, ScientistDocument, VirusRecord } from "@/c
 import { PortiaImage } from "@/components/portia-desktop-media";
 import { newRecommendationSeed, pickSearchRecommendations, seededRandom } from "@/lib/search-recommendations";
 import { infoCurrentTitle, infoNextTarget, infoOverviewVisible, infoSectionsButtonLabel, infoSectionsHitCount, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";
+import { startMenuCloseReason, type StartMenuEvent } from "@/lib/start-menu";
 import { broadcastType, buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, searchKeyAction, searchKeyContext, type SearchItem } from "@/lib/search-index";
 
 // Phase 24, D-20/D-22: a record window whose record became closed keeps its place and shows the block; the slot of the placeholder
@@ -412,6 +413,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
   // The visitor's local day, known from the first render so dated quests never flash a wrong status; the tick keeps rolling it over at midnight (D-03, CONT-07).
   const [today, setToday] = useState(() => localDateKey(new Date()));
   const [startOpen, setStartOpen] = useState(false);
+  const startButtonRef = useRef<HTMLButtonElement>(null);
+  const startPanelRef = useRef<HTMLDivElement>(null);
   const [windows, setWindows] = useState<Record<AppId, WindowState>>(initialWindows);
   const [activeApp, setActiveApp] = useState<AppId>("archive");
   const [qualificationLocked, setQualificationLocked] = useState(false);
@@ -1210,6 +1213,37 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     }));
     setActiveApp("promotion");
   }, []);
+
+  // UAT 2026-11-16 gap 1: the PORTIA menu closes on a press or focus outside it, when the browser window loses focus and on Escape.
+  // The button counts as inside, so pressing it only toggles; the keydown listener runs in the capture phase and marks Escape as handled,
+  // so the quest toast (which skips handled keys) keeps its own Escape.
+  useEffect(() => {
+    if (!startOpen) return;
+    const inside = (target: EventTarget | null) => target instanceof Node && Boolean(startPanelRef.current?.contains(target) || startButtonRef.current?.contains(target));
+    const close = (event: StartMenuEvent, source?: Event) => {
+      const reason = startMenuCloseReason(event);
+      if (!reason) return;
+      setStartOpen(false);
+      if (reason === "escape") {
+        source?.preventDefault();
+        startButtonRef.current?.focus();
+      }
+    };
+    const onPointerDown = (event: PointerEvent) => close({ kind: "pointerdown", inside: inside(event.target) });
+    const onFocusIn = (event: FocusEvent) => close({ kind: "focusin", inside: inside(event.target) });
+    const onKeyDown = (event: KeyboardEvent) => close({ kind: "keydown", key: event.key }, event);
+    const onBlur = () => close({ kind: "blur" });
+    document.addEventListener("pointerdown", onPointerDown, { capture: true });
+    document.addEventListener("focusin", onFocusIn);
+    document.addEventListener("keydown", onKeyDown, { capture: true });
+    window.addEventListener("blur", onBlur);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, { capture: true });
+      document.removeEventListener("focusin", onFocusIn);
+      document.removeEventListener("keydown", onKeyDown, { capture: true });
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [startOpen]);
 
   // Taskbar entries are dragged with a mouse or pen; touch keeps scrolling the phone taskbar.
   // The entry follows the pointer and the order changes on release, so pointer capture is never lost to a DOM move.
@@ -2171,7 +2205,12 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
         </div>
 
         <footer className="taskbar">
-          <button className="start-button" type="button" onClick={() => setStartOpen((value) => !value)} aria-expanded={startOpen}><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA</span></button>
+          <button className="start-button" ref={startButtonRef} type="button" onClick={(event) => {
+            const opening = !startOpen;
+            setStartOpen(opening);
+            // Opened from the keyboard: focus moves to the first menu button, because the menu closes when focus leaves it.
+            if (opening && event.detail === 0) window.requestAnimationFrame(() => startPanelRef.current?.querySelector("button")?.focus());
+          }} aria-expanded={startOpen}><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA</span></button>
           <div className="taskbar-apps" role="toolbar" aria-label="Открытые программы">
             {taskbarOrder.filter((app) => windows[app].open).map((app) => <button key={app} data-taskbar-app={app} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}${bouncingApps[app] ? " is-bouncing" : ""}`} type="button" onKeyDown={onTaskbarKeyDown(app)} onPointerDown={beginTaskbarDrag(app)} onPointerMove={moveTaskbarDrag} onPointerUp={endTaskbarDrag} onPointerCancel={endTaskbarDrag} onLostPointerCapture={endTaskbarDrag} onClick={(event) => {
               if (suppressTaskbarClick.current) { suppressTaskbarClick.current = false; return; }
@@ -2184,7 +2223,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
           <span className="sr-only" role="status" aria-live="polite">{layoutAnnouncement}</span>
         </footer>
 
-        {startOpen && <div className="start-panel">
+        {startOpen && <div className="start-panel" ref={startPanelRef}>
           <div className="start-panel-brand"><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><div><strong>PORTIA OS</strong></div></div>
           <StartPanelButton icon="search" label="Глобальный поиск" onClick={() => openApp("search")} />
           <StartPanelButton icon="virus" label="База вирусов" onClick={() => openApp("archive")} />
