@@ -869,7 +869,7 @@ test("UI-03 (UAT 2026-11-16): native confirm dialogs sit in the centre of the sc
   const componentsDir = new URL("../components/", import.meta.url);
   let dialogs = 0;
   for (const file of readdirSync(componentsDir).filter((name) => name.endsWith(".tsx"))) {
-    const source = lf(readFileSync(new URL(file, componentsDir), "utf8"));
+    const source = lf(readFileSync(new URL(file, componentsDir), "utf8")).replace(/\/\*[\s\S]*?\*\//gu, "").replace(/^\s*\/\/.*$/gmu, "");
     for (const match of source.matchAll(/<dialog\b([^>]*)>/gu)) {
       dialogs += 1;
       assert.match(match[1], /className="[^"]*\bportia-dialog\b[^"]*"/u, `${file}: a <dialog> without the portia-dialog class`);

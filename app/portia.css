@@ -2633,6 +2633,9 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .app-window { border: 0; }
 .app-window::after { content: ""; position: absolute; inset: 0; z-index: 11; border: 1px solid var(--line-bright); border-radius: var(--radius-window); pointer-events: none; }
 .app-window.is-active::after { border-color: oklch(.536 calc(.043 * var(--accent-chroma)) var(--accent-hue)); }
+/* Диалоги подтверждения (UAT 2026-11-16, gap 9): preflight Tailwind 4 обнуляет margin у dialog, и модальный диалог прилипал к левому верхнему углу;
+   margin: auto возвращает центр, как у .image-framing-dialog. Ширина, радиус, цвета и кнопки диалога не меняются. */
+.portia-dialog { margin: auto; }
 /* Угловой крестик слоёв (UI-05): один класс .corner-close у карточки заявки, уведомлений, пикера цвета и панели оформления;
    у двух заголовков свои правила кнопок с большей специфичностью, поэтому они названы. Строка заголовка — 44px, справа 44px под крестик. */
 .corner-close, .custom-color-picker-head .corner-close, .floating-text-format > header .corner-close { position: absolute; top: 0; right: 0; box-sizing: border-box; display: grid; place-items: center; width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: var(--radius-control); font-size: 20px; line-height: 1; cursor: pointer; }
