@@ -1384,7 +1384,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
           </EditorGroup>
           <p className="editor-guidance">Каждый блок становится отдельным разделом приложения «Информация». Раздел может содержать подразделы, собранные из блоков в любом порядке.</p>
           {draft.infoSections.length === 0 && <div className="editor-empty">Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».</div>}
-          <SectionColumns items={draft.infoSections} render={(section, index) => section.id === activeInfoSection && (
+          <div className="editor-section-single">{draft.infoSections.map((section, index) => section.id === activeInfoSection && (
             <CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={`РАЗДЕЛ ${String(index + 1).padStart(2, "0")}`} title={section.title} open={isOpen(section.id)} onToggle={() => toggleCard(section.id)}
               handle={<OrderDragHandle index={index} label={section.title || "раздел"} itemId={section.id} onMove={(from, to) => { const refocus = keepSectionHandleFocus(section.id); changeDraft((next) => moveArrayItem(next.infoSections, from, to)); refocus(); }} />}
               actions={<div className="nested-editor-actions"><button type="button" onClick={() => { closeFormatterFor(portiaTextKey.info(section.id), ...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id)))); changeDraft((next) => removeInfoSection(next, section.id)); }}>Удалить</button></div>}>
@@ -1432,7 +1432,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                 <LimitNote id={`limit-subsections-${section.id}`} count={section.subsections.length} max={MAX_SUBSECTIONS} />
               </div>
             </CollapsibleCard>
-          )} />
+          ))}</div>
         </div>
         } />
       )}
@@ -1442,7 +1442,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
         <div className="editor-form flat-editor-form editor-card-columns">
           <p className="editor-guidance">Справочник на рабочем столе состоит из разделов, в разделах лежат карточки-плитки. Нажатие на плитку открывает страницу карточки из блоков в любом порядке. Подразделы раздела — его карточки-плитки.</p>
           {draft.guideSections.length === 0 && <div className="editor-empty">Разделов пока нет. Добавьте первый раздел кнопкой «+ ДОБАВИТЬ РАЗДЕЛ».</div>}
-          <SectionColumns items={draft.guideSections} render={(section, index) => section.id === activeGuideSection && (
+          <div className="editor-section-single">{draft.guideSections.map((section, index) => section.id === activeGuideSection && (
             <CollapsibleCard key={section.id} id={section.id} sortIndex={index} label={`РАЗДЕЛ ${guideNo(index)}`} title={section.title} open={isOpen(section.id)} onToggle={() => toggleCard(section.id)} cardProps={{ "data-drop-group": section.id }}
               handle={<OrderDragHandle index={index} label={section.title || "раздел"} itemId={section.id} onMove={(from, to) => { const refocus = keepSectionHandleFocus(section.id); changeDraft((next) => moveArrayItem(next.guideSections, from, to)); refocus(); }} />}
               actions={<div className="nested-editor-actions"><button type="button" aria-label={`Удалить раздел «${section.title || "Без названия"}» вместе с карточками`} onClick={() => { closeFormatterFor(...section.cards.flatMap((card) => card.blocks.map((block) => portiaTextKey.guideBlock(block.id)))); changeDraft((next) => removeGuideSection(next, section.id)); }}>Удалить</button></div>}>
@@ -1521,7 +1521,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                 <LimitNote id={`limit-cards-${section.id}`} count={section.cards.length} max={MAX_SUBSECTIONS} />
               </div>
             </CollapsibleCard>
-          )} />
+          ))}</div>
         </div>
         } />
       )}

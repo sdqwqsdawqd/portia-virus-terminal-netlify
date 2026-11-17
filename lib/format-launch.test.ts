@@ -87,6 +87,9 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //  14. PORTIA-26-G05 (26-18; UI-04, D-13a, D-21) — вкладки разделов «Справочника» и «Информации» (общий SectionTabs) несут ручку OrderDragHandle, как подразделы;
 //      кнопки-стрелки порядка «←/→» после вкладок убраны вместе с их надписями (applySectionDragHunk); русских строк не добавлено: надпись ручки берёт литерал «раздел»,
 //      который в файле уже есть. Источник одобрения: 26-UAT gap 5 (2026-11-16, владелец: «перетаскивание пропало») и план 26-18.
+//  15. PORTIA-26-G04 (26-18; UI-04, UI-06, D-21) — активный раздел «Справочника» и «Информации» стоит в обёртке div.editor-section-single (на все колонки формы),
+//      а не в колонке сетки SectionColumns по 340px: открывающая строка и закрытие `)} />` -> `))}</div>` у обоих списков (applySectionWidthHunk); тело карточки раздела не тронуто;
+//      русских строк не добавлено. Источник одобрения: 26-UAT gap 4 (2026-11-16, владелец: «пипец как мало места») и план 26-18.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -974,6 +977,34 @@ function applySectionDragHunk(text: string): string {
   );
 }
 
+/**
+ * PORTIA-26-G04 (26-18 Task 2; UI-04, UI-06, D-21; UAT gap 4): the active section of «Информация» and «Справочник» is one wrapper that spans the whole form, not a card in a 340px grid column.
+ * Four replacements: the opening line and the closing line of each list, byte for byte; the body of the section card is not touched. No Russian text is added.
+ */
+function applySectionWidthHunk(text: string): string {
+  let next = text;
+  for (const [list, active] of [["infoSections", "activeInfoSection"], ["guideSections", "activeGuideSection"]] as const) {
+    next = replaceOnce(
+      next,
+      `          <SectionColumns items={draft.${list}} render={(section, index) => section.id === ${active} && (\n`,
+      `          <div className="editor-section-single">{draft.${list}.map((section, index) => section.id === ${active} && (\n`,
+      `section width: ${list} open`,
+    );
+  }
+  next = replaceOnce(
+    next,
+    "            </CollapsibleCard>\n          )} />\n        </div>\n        } />\n      )}\n\n      {tab === " + '"guide" && (',
+    "            </CollapsibleCard>\n          ))}</div>\n        </div>\n        } />\n      )}\n\n      {tab === " + '"guide" && (',
+    "section width: info close",
+  );
+  return replaceOnce(
+    next,
+    "            </CollapsibleCard>\n          )} />\n        </div>\n        } />\n      )}\n\n      {tab === " + '"broadcasts" && (',
+    "            </CollapsibleCard>\n          ))}</div>\n        </div>\n        } />\n      )}\n\n      {tab === " + '"broadcasts" && (',
+    "section width: guide close",
+  );
+}
+
 /** Реестр одобренных правок (D-64): `apply` — порядок применения к образцу; `normalizeActual` — что вырезается из текущего файла перед сравнением. */
 const approvedEditorEdits: readonly { id: string; apply: (text: string) => string; normalizeActual?: (text: string) => string }[] = [
   { id: "D-57", apply: applyLaunchButtonHunk },
@@ -992,6 +1023,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26-R01", apply: applyReviewDraftBarHunk },
   { id: "PORTIA-26-R05", apply: applyReviewLiveRegionHunk },
   { id: "PORTIA-26-G05", apply: applySectionDragHunk },
+  { id: "PORTIA-26-G04", apply: applySectionWidthHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -1111,7 +1143,7 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutSectionNav = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26-07") && edit.id !== "PORTIA-26-R01" && !edit.id.startsWith("PORTIA-26-G")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutSectionNav), null, "a file without the PORTIA-26-07 hunk is a difference");
   assert.throws(() => applySectionNavHunk(expected), /exactly one approved anchor/, "the section nav hunk cannot be applied twice");
-  const withoutInfoBroadcastNav = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-07b").reduce((text, edit) => edit.apply(text), sample);
+  const withoutInfoBroadcastNav = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-07b" && edit.id !== "PORTIA-26-G04").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutInfoBroadcastNav), null, "a file without the PORTIA-26-07b hunk is a difference");
   assert.throws(() => applyInfoBroadcastNavHunk(expected), /exactly one approved anchor/, "the info and broadcast nav hunk cannot be applied twice");
   const withoutEmployeesBar = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-07c").reduce((text, edit) => edit.apply(text), sample);
@@ -1129,6 +1161,9 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutSectionDrag = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-G05").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutSectionDrag), null, "a file without the PORTIA-26-G05 hunk is a difference");
   assert.throws(() => applySectionDragHunk(expected), /exactly one approved anchor/, "the section drag hunk cannot be applied twice");
+  const withoutSectionWidth = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-G04").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutSectionWidth), null, "a file without the PORTIA-26-G04 hunk is a difference");
+  assert.throws(() => applySectionWidthHunk(expected), /exactly one approved anchor/, "the section width hunk cannot be applied twice");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

@@ -2716,7 +2716,16 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .etab-nav > .editor-section-addbar:has(> .editor-section-create:not([hidden])) { padding: 8px 0; }
 .etab-nav > .editor-section-tabs { flex: 1 1 auto; min-width: 0; }
 .etab-nav .editor-section-tabs nav { flex-wrap: nowrap; overflow-x: auto; }
-.etab-nav .editor-section-create { width: min(320px, 70vw); white-space: normal; }
+.etab-nav .editor-section-create { width: auto; white-space: normal; }
+/* UAT 2026-11-16 gap 4 (владелец: «пипец как мало места»): форма «+ ДОБАВИТЬ РАЗДЕЛ» при открытии занимает целую строку панели — поле растёт до var(--field-max),
+   «Создать раздел» и «Отмена» рядом по ширине надписи; закрытая форма (hidden) и кнопка остаются как были. */
+.etab-nav:has(> .editor-section-addbar > .editor-section-create:not([hidden])) { flex-wrap: wrap; }
+.etab-nav > .editor-section-addbar:has(> .editor-section-create:not([hidden])) { flex: 1 0 100%; }
+.etab-nav .editor-section-create:not([hidden]) { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.etab-nav .editor-section-create .editor-field { flex: 1 1 320px; max-width: var(--field-max); }
+/* UAT 2026-11-16 gap 4: один активный раздел — не сетка карточек: он занимает всю форму (все колонки), подразделы и карточки внутри идут строками на всю ширину раздела.
+   D-19 (ширина карточки 340px, переменная --editor-card-width) действует для сеток из нескольких карточек — «Сводка», «Рекомендации». */
+.editor-section-single { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; grid-column: 1 / -1; min-width: 0; align-content: start; }
 /* UAT 2026-11-16 gap 5 (владелец: «перетаскивание пропало»): каждая вкладка раздела — ручка ≡ того же вида, что у подразделов, и кнопка вкладки в одной строке.
    Общее правило вкладок `.editor-section-tabs nav button` (0,1,2) задело бы и ручку, поэтому ручка получает селектор сильнее (0,2,1); её цвета — рядом с цветами вкладок выше (блок цветов не трогает). */
 .editor-section-tabs nav > .editor-section-tab { display: inline-flex; flex: none; align-items: stretch; gap: 4px; }
