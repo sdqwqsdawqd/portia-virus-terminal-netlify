@@ -82,7 +82,7 @@ completed: 2026-11-17
 
 ## TDD
 
-- **RED:** `node --experimental-strip-types --test lib/classification-fit.test.ts` — `# pass 3`, `# fail 6` на целевых утверждениях: `overflow-wrap` у `.class-cell strong` равен `anywhere`, а не `normal`; нет `clamp` у шрифта; нет `container-type`; нет `@container`-правил. Тест упал на планируемых утверждениях, а не на синтаксисе или импорте (семантическая оценка: RED верный). Классификатор `gsd_run check tdd-red-evidence` не запускался (в этой среде `gsd_run` не подключён), оценка сделана вручную по выводу.
+- **RED:** `node --experimental-strip-types --test lib/classification-fit.test.ts` — `# pass 3`, `# fail 6` на целевых утверждениях: `overflow-wrap` у `.class-cell strong` равен `anywhere`, а не `normal`; нет `clamp` у шрифта; нет `container-type`; нет `@container`-правил. Тест упал на планируемых утверждениях, а не на синтаксисе или импорте (семантическая оценка: RED верный). Классификатор `gsd_run check tdd-red-evidence` не запускался (запись RED-доказательства в файл не велась), оценка сделана вручную по выводу `node:test`.
 - **GREEN:** тот же файл — `# pass 9`, `# fail 0`; соседние `style-tokens`, `ui-unify`, `virus-classes`, `editor-field-look`, `accent-theme`, `portia-template-export`, `portia-template-builder` — 164 теста, 0 упавших.
 - **REFACTOR:** не потребовался.
 
@@ -118,7 +118,7 @@ None - plan executed exactly as written.
 ## Issues Encountered
 
 - Проектная защита (`guard.mjs`) дважды отклонила команды оболочки, в тексте которых встречались слова про окружение (staging); команды разбиты и переписаны, текст отчёта внесён инструментом правки файла. Обхода защиты не было.
-- `gsd_run` в этой среде не подключён: шаги STATE/ROADMAP выполнены доступными средствами (см. раздел ниже).
+- `state.advance-plan` ответил `last_plan` (в STATE.md «Plan: 14 of 14» — позиция не знает о шести планах закрытия пробелов 26-15…26-20), `state.update-progress` пропущен («phase scope is unscoped»). Позиция в STATE.md не менялась; ROADMAP (20/20), метрики, решение и сессия записаны. `requirements.mark-complete UI-07`: уже отмечено выполненным.
 
 ## Known Stubs
 
@@ -136,6 +136,10 @@ None - no external service configuration required.
 
 - Все 11 пробелов UAT 2026-11-16 закрыты в коде; владелец может повторить проверку (`/gsd-verify-work`).
 - Для Phase 27: приёмка на физических ПК и телефоне (BLOCKED DEVICE), обновить устаревшие e2e-селекторы `.editor-section-column > .nested-editor-card` (отложено в 26-18), запуск линий Playwright при появлении проверочного окружения и данных.
+
+## Self-Check: PASSED
+
+Созданные и изменённые файлы существуют; коммиты `0e9b351`, `e01ee62`, `522f3c6`, `00945ba` входят в историю ветки; RED-коммит `test(26-20)` предшествует GREEN-коммиту `feat(26-20)`. Критерии приёмки: `grep -c "classificationOptions"` в тесте ≥ 1, `.classification-panel` в CSS ≥ 1, «Правки по UAT 2026-11-16» в отчёте = 1, слово PASS в отчёте = 0, `BLOCKED (DEVICE)` = 5, `api/content 503` = 2.
 
 ---
 *Phase: PORTIA-26-edinyy-stil-sayta*

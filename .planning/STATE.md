@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: 26
 current_phase_name: Единый стиль сайта
 status: executing
-stopped_at: Completed PORTIA-26-19-PLAN.md
-last_updated: "2026-11-17T02:45:26.361Z"
+stopped_at: Completed PORTIA-26-20-PLAN.md
+last_updated: "2026-11-17T02:52:13.803Z"
 last_activity: 2026-11-17
 last_activity_desc: Phase PORTIA-26 execution resumed (wave continue)
-state_head: 1cd725586eb86a34013e1d8bbb740f77c4ae7f43
+state_head: 00945baf721d6928bd4cc03863fba66756ba639b
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 70
-  completed_plans: 69
+  completed_plans: 70
 ---
 
 # Project State
@@ -108,6 +108,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-26 P17 | 15 min | 2 tasks | 3 files |
 | Phase PORTIA-26 P18 | 35 min | 3 tasks | 4 files |
 | Phase PORTIA-26 P19 | 25 min | 2 tasks | 6 files |
+| Phase PORTIA-26 P20 | 25 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -356,6 +357,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-26]: 26-18: активный раздел Справочника/Информации — div.editor-section-single (grid-column 1 / -1) вместо SectionColumns; D-19 и 340px не тронуты; вставка D-21 PORTIA-26-G04; display:flex открытой формы добавления только под :not([hidden])
 - [Phase PORTIA-26]: 26-18: кнопка корзины вируса — в div.virus-editor-head рядом с вкладками досье (margin-left: auto); вставка D-21 PORTIA-26-G10; e2e-селекторы .editor-section-column у Информации/Справочника устарели — отложено до линии Playwright (Phase 27)
 - [Phase PORTIA-26]: 26-19: выбор допуска — кнопка-сводка с раскрываемыми пластинами 32px (44px на телефоне); панель .etab-bar не сжимается (flex-shrink: 0) в колоночном flex «Повышения»
+- [Phase PORTIA-26]: [26-20] Названия классов в карточке вируса — целые слова: clamp шрифта 12-15px по ширине ячейки, слово под знак, сетка 3/2/1 колонка по ширине панели (380px/254px); правило шаблона D-65 не менялось
 
 ### Pending Todos
 
@@ -409,8 +411,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-17T02:45:25.201Z
-Stopped at: Completed PORTIA-26-19-PLAN.md
+Last session: 2026-11-17T02:52:12.645Z
+Stopped at: Completed PORTIA-26-20-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
