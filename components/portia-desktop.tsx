@@ -32,7 +32,7 @@ import { PortiaImage } from "@/components/portia-desktop-media";
 import { newRecommendationSeed, pickSearchRecommendations, seededRandom } from "@/lib/search-recommendations";
 import { infoCurrentTitle, infoNextTarget, infoOverviewVisible, infoSectionsButtonLabel, infoSectionsHitCount, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";
 import { startMenuCloseReason, type StartMenuEvent } from "@/lib/start-menu";
-import { broadcastType, buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, searchKeyAction, searchKeyContext, type SearchItem } from "@/lib/search-index";
+import { availableRecordsLimit, broadcastType, buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, searchKeyAction, searchKeyContext, type SearchItem } from "@/lib/search-index";
 
 // Phase 24, D-20/D-22: a record window whose record became closed keeps its place and shows the block; the slot of the placeholder
 // is what is remembered, never the record. A selection with an id is a normal one; the lost state counts only while the id is empty,
@@ -1734,7 +1734,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     recycleFiles: content.recycleFiles,
     recycledViruses,
   }), [content, employees, recycledViruses, rosterOutOfSearch, searchApps]);
-  const searchResults = useMemo(() => matchSearch(searchIndex, globalQuery), [searchIndex, globalQuery]);
+  const searchResults = useMemo(() => matchSearch(searchIndex, globalQuery, availableRecordsLimit(windows.search.maximized)), [searchIndex, globalQuery, windows.search.maximized]);
 
   const isSearchHit = (type: string, id: string) => searchHit?.type === type && searchHit.id === id;
   const hitClass = (type: string, id: string) => isSearchHit(type, id) ? " search-hit" : "";
