@@ -1672,10 +1672,6 @@ html[data-motion="full"] .desktop-wallpaper-grid { animation: helix-scroll 60s l
 @keyframes helix-scroll { to { transform: translate3d(0, calc(100% / -3), 0); } }
 .wallpaper-helix path { stroke-width: 1.5; }
 .wallpaper-helix .wallpaper-rungs { stroke-width: 1; opacity: .7; }
-/* Owner 2026-11-18 (round 2): the tilted helices form one parallel family; each drifts along its own axis by one loop (720 units) in 60 s,
-   the same 12 units/s as the vertical scroll (rotate(-45) makes local -y point up-left), so every helix rises at one pace. One loop keeps the seam invisible. */
-html[data-motion="full"] .wallpaper-helix-drift { animation: helix-drift 60s linear infinite; }
-@keyframes helix-drift { from { transform: translateY(0); } to { transform: translateY(-720px); } }
 /* «Гель»: soft lane columns fading downward, wells, a labelled ladder. Sample bands creep down their lanes, leave
    through the bottom fade and come back in at the top; the ladder and its labels stay still, and the glow breathes
    (motion on only; without animation every band sits at its drawn y). */

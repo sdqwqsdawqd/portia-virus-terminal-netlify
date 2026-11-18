@@ -62,28 +62,6 @@ const helices = [
   { x: 880, amplitude: 18, period: 144, opacity: 0.12 },
 ].map((column) => ({ ...column, ...helixColumn(column.x, 0, HELIX_LOOP * 3, column.amplitude, column.period) }));
 
-// Owner 2026-11-18 (round 2): the tilted helices are one parallel family, not a mix of angles and directions.
-// Same angle (axis from upper-left to lower-right), amplitude, period and opacity; the centres lie on the lines x - y = -200, -420, -640,
-// evenly spaced, in the lower left, so they never meet each other or the vertical columns (the leftmost column starts at x 862).
-// Each one is drawn along its own axis (five loops long, centred on its point, so its ends stay off screen) and drifts along it by one loop
-// in the same direction at the same pace as the vertical scroll. Only transform animates; reduced and off motion stop it through the global
-// `.desktop-wallpaper *` rule.
-const tiltedHelices = [
-  { x: 350, y: 550, angle: -45, amplitude: 20, period: 240, opacity: 0.12 },
-  { x: 240, y: 660, angle: -45, amplitude: 20, period: 240, opacity: 0.12 },
-  { x: 130, y: 770, angle: -45, amplitude: 20, period: 240, opacity: 0.12 },
-].map((helix) => ({ ...helix, ...helixColumn(0, -HELIX_LOOP * 2.5, HELIX_LOOP * 5, helix.amplitude, helix.period) }));
-
-function WallpaperTiltedHelices() {
-  return <svg className="desktop-wallpaper desktop-wallpaper-tilted" viewBox="0 0 1440 900" preserveAspectRatio="xMaxYMin slice">
-    {tiltedHelices.map((helix) => <g key={`${helix.x}-${helix.y}`} transform={`translate(${helix.x} ${helix.y}) rotate(${helix.angle})`}>
-      <g className="wallpaper-helix wallpaper-helix-drift" style={{ opacity: helix.opacity }}>
-        <path d={helix.a} /><path d={helix.b} /><path d={helix.rungs} className="wallpaper-rungs" />
-      </g>
-    </g>)}
-  </svg>;
-}
-
 // Sample bands creep down their lanes at 6 units/s: visible within 3 s, still calm enough to read text on top (D-10).
 const GEL_SPEED = 6;
 
@@ -533,7 +511,7 @@ export function DesktopWallpaper({ kind }: { kind: string }) {
   return <div className="desktop-wallpaper-frame" aria-hidden="true">
     {shown.map((value) => <div key={value} className={`wallpaper-layer${value === layers.leaving ? " is-leaving" : layers.leaving ? " is-entering" : ""}`}>
       <WallpaperArt kind={value} />
-      {value === "radar" ? <WallpaperSpider /> : value === "gel" ? <WallpaperGelStrip /> : value === "grid" ? <WallpaperTiltedHelices /> : null}
+      {value === "radar" ? <WallpaperSpider /> : value === "gel" ? <WallpaperGelStrip /> : null}
     </div>)}
   </div>;
 }
