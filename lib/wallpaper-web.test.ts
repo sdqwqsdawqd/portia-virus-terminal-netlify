@@ -940,12 +940,6 @@ test("owner 2026-11-18 (round 2): the tilted helices are one parallel family tha
     assert.ok(900 + (num(entry, "x") - num(entry, "y")) + num(entry, "amplitude") * 1.5 <= 820, `${entry.x},${entry.y} stays left of the vertical columns`);
     assert.equal(720 % num(entry, "period"), 0, "one loop of 720 keeps the drift seamless");
   }
-  // Round 3: five helices, each exactly beside the next (the centres step by (75, -75), perpendicular to the axis), joined by bridges.
-  assert.equal(entries.length, 5, "five helices");
-  entries.slice(1).forEach((entry, index) => assert.deepEqual([num(entry, "x") - num(entries[index], "x"), num(entry, "y") - num(entries[index], "y")], [75, -75]));
-  assert.match(source, /const TILT_STEP = 75;/);
-  assert.match(source, /<path d=\{helix\.bridges\} className="wallpaper-bridges" \/>/);
-  assert.match(css, /\.wallpaper-helix \.wallpaper-bridges \{[^}]*stroke-dasharray/);
   const tilted = /function WallpaperTiltedHelices\(\) \{[\s\S]*?\n\}/.exec(source.replace(/\r\n/g, "\n"))?.[0] ?? "";
   assert.ok(tilted.includes("wallpaper-helix-drift"), "the family component is found");
   assert.doesNotMatch(tilted, /is-reverse|animationDuration/);

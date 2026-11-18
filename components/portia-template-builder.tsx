@@ -381,7 +381,7 @@ export function PortiaTemplateBuilder({ onClose, standalone = false }: { onClose
   // The confirmation is modal inside this view: Tab and Shift+Tab cycle over its two buttons and leaving it puts the focus back on the control that opened it.
   const dismissConfirm = () => {
     setConfirmClose(false);
-    requestAnimationFrame(() => backRef.current?.focus());
+    requestAnimationFrame(() => (backRef.current ?? headingRef.current)?.focus());
   };
   const trapConfirmTab = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Tab") return;
@@ -416,7 +416,8 @@ export function PortiaTemplateBuilder({ onClose, standalone = false }: { onClose
           <span className="promotion-eyebrow">{standalone ? "ШАБЛОН // ДОСЬЕ" : "ПОВЫШЕНИЕ // ЗАДАНИЕ"}</span>
           <h1 ref={headingRef} tabIndex={-1}>Шаблон досье</h1>
         </div>
-        <button ref={backRef} type="button" className="promotion-action template-back" onClick={requestClose} disabled={busy}>{standalone ? "Закрыть шаблон" : "Вернуться к повышению"}</button>
+        {/* Owner 2026-11-18: the standalone app has no «Закрыть шаблон» button; its window closes with the cross. */}
+        {!standalone && <button ref={backRef} type="button" className="promotion-action template-back" onClick={requestClose} disabled={busy}>Вернуться к повышению</button>}
       </header>
       <p className="template-note">Скачайте файл и отправьте проверяющему вне сайта.</p>
 
