@@ -70,10 +70,10 @@ function saturate(rgb: Rgb, s: number): Rgb {
   ], rgb);
 }
 function parseFilter(value: string): (rgb: Rgb) => Rgb {
-  const match = value.match(/^hue-rotate\((-?\d+)deg\)(?:\s+saturate\(([\d.]+)\))?$/);
+  const match = value.match(/^hue-rotate\((-?\d+)deg\)(?:\s+saturate\(([\d.]+)\))?(?:\s+brightness\(([\d.]+)\))?$/);
   assert.ok(match, `unsupported filter token: ${value}`);
-  const deg = Number(match[1]), sat = match[2] === undefined ? 1 : Number(match[2]);
-  return (rgb) => saturate(hueRotate(rgb, deg), sat);
+  const deg = Number(match[1]), sat = match[2] === undefined ? 1 : Number(match[2]), bright = match[3] === undefined ? 1 : Number(match[3]);
+  return (rgb) => saturate(hueRotate(rgb, deg), sat).map((v) => Math.min(255, v * bright)) as Rgb;
 }
 
 function declarations(body: string) {
@@ -399,6 +399,11 @@ test("quick 261117-bi1 R4b: under «Выключены» Vivian has no keyframe 
 });
 
 const rgbToHex = (rgb: Rgb) => "#" + rgb.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, "0")).join("");
+// Owner 2026-11-18 (round 3): Vivian and the logo follow black, white and grey picks too. A pick keeps the full tint and the drawn lightness only
+// with chroma from 0.06 and lightness .55-.75 (the ramps of lib/accent-custom.ts); outside that the artwork greys, darkens or lightens.
+const inDefaultZone = (pick: string) => { const lch = oklch(hex(pick)); return lch[0] < 0.55 || lch[0] > 0.75 || lch[1] < 0.06; };
+const brightnessOf = (value: string) => Number(/brightness\(([\d.]+)\)/.exec(value)?.[1] ?? "1");
+const saturationOf = (value: string) => Number(/saturate\(([\d.]+)\)/.exec(value)?.[1] ?? "1");
 
 test("custom accents derive every preset token in the preset formats", () => {
   for (const pick of ["#ff3366", "#3366ff", "#808080"]) {
@@ -429,8 +434,8 @@ test("every custom hue stays readable and keeps the spider and Vivian on the acc
     const mark = parseFilter(t["--mark-filter"]);
     const assistant = parseFilter(t["--assistant-filter"]);
     for (const [label, rgb] of [["logo", mark(hex(LOGO_TEAL))], ["assistant light", assistant(hex(ASSISTANT_TEAL_LIGHT))], ["assistant dark", assistant(hex(ASSISTANT_TEAL_DARK))]] as const) {
-      if (scale === 0) assert.ok(oklch(rgb)[1] <= 0.005, `${pick} ${label} keeps chroma ${oklch(rgb)[1].toFixed(4)}`);
-      else if (tealChroma >= 0.02) assert.ok(hueDistance(oklch(rgb)[2], hueOf(t["--teal"])) <= 10, `${pick} ${label} ends ${hueDistance(oklch(rgb)[2], hueOf(t["--teal"])).toFixed(1)} deg from the accent`);
+      if (inDefaultZone(pick)) continue;
+      if (tealChroma >= 0.02) assert.ok(hueDistance(oklch(rgb)[2], hueOf(t["--teal"])) <= 10, `${pick} ${label} ends ${hueDistance(oklch(rgb)[2], hueOf(t["--teal"])).toFixed(1)} deg from the accent`);
     }
     // Below chroma 0.02 the 8-bit rounded --teal has no usable hue.
     if (tealChroma >= 0.02) assert.ok(hueDistance(Number(t["--accent-hue"]), hueOf(t["--teal"])) <= 0.5, `${pick}: --accent-hue off its --teal`);
@@ -439,6 +444,7 @@ test("every custom hue stays readable and keeps the spider and Vivian on the acc
     assert.ok(oklch(hex(t["--teal-dim"]))[0] < tealL, `${pick}: --teal-dim is not darker`);
     assert.ok(oklch(hex(t["--desktop-base"]))[0] <= 0.17, `${pick}: --desktop-base too light`);
     for (const name of ["--mark-filter", "--assistant-filter"]) {
+      if (brightnessOf(t[name]) !== 1) continue;
       for (const grey of ["#000000", "#ffffff", "#808080"]) {
         const out = parseFilter(t[name])(hex(grey));
         hex(grey).forEach((channel, i) => assert.ok(Math.abs(out[i] - channel) <= 1, `${pick} ${name} moves ${grey}`));
@@ -458,8 +464,9 @@ test("an achromatic pick gives a neutral grey theme", () => {
     }
     assert.ok(equal3(t["--teal-soft"].match(/\d+/g)!.slice(0, 3)), `${pick} --teal-soft ${t["--teal-soft"]}`);
     for (const name of ["--desktop-glow", "--desktop-grid"]) assert.ok(equal3(t[name].split(", ")), `${pick} ${name} ${t[name]}`);
-    assert.equal(t["--mark-filter"], "hue-rotate(0deg) saturate(0)");
-    assert.equal(t["--assistant-filter"], "hue-rotate(0deg) saturate(0)");
+    // Owner 2026-11-18 (round 3): a neutral pick greys the artwork (black darker, white lighter).
+    assert.match(t["--mark-filter"], /^hue-rotate\(0deg\) saturate\(0\)( brightness\([\d.]+\))?$/, pick);
+    assert.match(t["--assistant-filter"], /^hue-rotate\(0deg\) saturate\(0\)( brightness\([\d.]+\))?$/, pick);
   }
   const t = deriveAccentTokens("#0d0d0d")!;
   assert.equal(t["--teal"], "#868686");
@@ -487,7 +494,8 @@ test("a dark or muted pick keeps its hue and strength", () => {
   const bluish = derive("#3a3a42");
   assert.ok(hueDistance(Number(bluish.t["--accent-hue"]), 286) <= 3, `#3a3a42 hue ${bluish.t["--accent-hue"]}`);
   assert.ok(Number(bluish.t["--accent-chroma"]) >= 0.1 && Number(bluish.t["--accent-chroma"]) <= 0.3, `#3a3a42 chroma scale ${bluish.t["--accent-chroma"]}`);
-  assert.ok(oklch(parseFilter(bluish.t["--mark-filter"])(hex(LOGO_TEAL)))[1] <= 0.03, "#3a3a42 spider is as faint as the accent");
+  // Owner 2026-11-18 (round 3): a dark muted pick darkens Vivian and nearly greys her.
+  assert.ok(brightnessOf(bluish.t["--assistant-filter"]) < 0.9 && saturationOf(bluish.t["--assistant-filter"]) < 0.5, `#3a3a42 ${bluish.t["--assistant-filter"]}`);
 
   const muted = derive("#6b4a4a");
   assert.ok(muted.lch[1] <= 0.05, `#6b4a4a chroma ${muted.lch[1].toFixed(3)}`);
@@ -504,6 +512,7 @@ test("a dark or muted pick keeps its hue and strength", () => {
         const bg = oklchToRgb(0.163, 0.014 * scale, Number(t["--accent-hue"])).map((x) => Math.min(255, Math.max(0, x))) as Rgb;
         assert.ok(contrast(hex(t["--teal"]), bg) >= 4.5, `${note}: contrast ${contrast(hex(t["--teal"]), bg).toFixed(2)}`);
         for (const name of ["--mark-filter", "--assistant-filter"]) {
+          if (brightnessOf(t[name]) !== 1) continue;
           for (const grey of ["#000000", "#ffffff", "#808080"]) {
             const out = parseFilter(t[name])(hex(grey));
             hex(grey).forEach((channel, i) => assert.ok(Math.abs(out[i] - channel) <= 1, `${note} ${name} moves ${grey}`));
@@ -511,9 +520,11 @@ test("a dark or muted pick keeps its hue and strength", () => {
         }
         if (lch[1] >= 0.02) {
           assert.ok(hueDistance(lch[2], pickLch[2]) <= 5, `${note}: teal hue ${lch[2].toFixed(1)} vs pick ${pickLch[2].toFixed(1)}`);
-          const mark = parseFilter(t["--mark-filter"]), assistant = parseFilter(t["--assistant-filter"]);
-          for (const [label, rgb] of [["logo", mark(hex(LOGO_TEAL))], ["assistant light", assistant(hex(ASSISTANT_TEAL_LIGHT))], ["assistant dark", assistant(hex(ASSISTANT_TEAL_DARK))]] as const) {
-            assert.ok(hueDistance(oklch(rgb)[2], lch[2]) <= 10, `${note} ${label} ends ${hueDistance(oklch(rgb)[2], lch[2]).toFixed(1)} deg from the accent`);
+          if (!inDefaultZone(pick)) {
+            const mark = parseFilter(t["--mark-filter"]), assistant = parseFilter(t["--assistant-filter"]);
+            for (const [label, rgb] of [["logo", mark(hex(LOGO_TEAL))], ["assistant light", assistant(hex(ASSISTANT_TEAL_LIGHT))], ["assistant dark", assistant(hex(ASSISTANT_TEAL_DARK))]] as const) {
+              assert.ok(hueDistance(oklch(rgb)[2], lch[2]) <= 10, `${note} ${label} ends ${hueDistance(oklch(rgb)[2], lch[2]).toFixed(1)} deg from the accent`);
+            }
           }
         }
         checked++;
@@ -522,6 +533,94 @@ test("a dark or muted pick keeps its hue and strength", () => {
   }
   assert.equal(checked, 432);
   assert.equal(deriveAccentTokens("#ff3366")!["--accent-chroma"], "1");
+});
+
+test("owner 2026-11-18 (round 3): black darkens Vivian and the logo, white lightens them, grey greys them", () => {
+  const lum = (rgb: Rgb) => 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+  const drawn = lum(hex(ASSISTANT_TEAL_LIGHT));
+  for (const pick of ["#000000", "#0a0a0a", "#111111", "#1a1a1a"]) {
+    const t = deriveAccentTokens(pick)!;
+    for (const name of ["--mark-filter", "--assistant-filter"]) assert.ok(saturationOf(t[name]) === 0 && brightnessOf(t[name]) <= 0.5, `${pick} ${name} ${t[name]}`);
+    assert.ok(lum(parseFilter(t["--assistant-filter"])(hex(ASSISTANT_TEAL_LIGHT))) < 0.6 * drawn, `${pick} darker`);
+  }
+  for (const pick of ["#ffffff", "#fafafa", "#f2f2f2"]) {
+    const t = deriveAccentTokens(pick)!;
+    for (const name of ["--mark-filter", "--assistant-filter"]) assert.ok(saturationOf(t[name]) === 0 && brightnessOf(t[name]) >= 1.7, `${pick} ${name} ${t[name]}`);
+    assert.ok(lum(parseFilter(t["--assistant-filter"])(hex(ASSISTANT_TEAL_LIGHT))) > 1.5 * drawn, `${pick} lighter`);
+  }
+  for (const pick of ["#808080", "#999999"]) {
+    const t = deriveAccentTokens(pick)!;
+    for (const name of ["--mark-filter", "--assistant-filter"]) assert.equal(t[name], "hue-rotate(0deg) saturate(0)", `${pick} ${name}`);
+  }
+});
+
+test("owner 2026-11-18 (round 3): a grey ramp from black to white changes Vivian step by step", () => {
+  let prev = deriveAccentTokens("#000000")!;
+  for (let v = 1; v <= 255; v++) {
+    const pick = "#" + v.toString(16).padStart(2, "0").repeat(3);
+    const next = deriveAccentTokens(pick)!;
+    for (const name of ["--mark-filter", "--assistant-filter"]) {
+      assert.ok(Math.abs(brightnessOf(prev[name]) - brightnessOf(next[name])) <= 0.06, `${pick} ${name}: ${prev[name]} -> ${next[name]}`);
+    }
+    prev = next;
+  }
+  // From a grey to a vivid colour the tint fades in, not at a jump.
+  let prevSat = 0;
+  for (let c = 0; c <= 0.15; c += 0.0025) {
+    const t = deriveAccentTokens(rgbToHex(oklchToRgb(0.6, c, 30)))!;
+    const sat = saturationOf(t["--assistant-filter"]);
+    assert.ok(Math.abs(sat - prevSat) <= 0.25, `chroma ${c.toFixed(4)}: saturate ${prevSat} -> ${sat}`);
+    prevSat = sat;
+  }
+});
+
+const tintedPicks = () => [
+  ...Array.from({ length: 36 }, (_, i) => rgbToHex(oklchToRgb(0.7, 0.15, i * 10))),
+  ...Array.from({ length: 12 }, (_, i) => rgbToHex(oklchToRgb(0.55, 0.1, i * 30 + 7))),
+  ...[0, 60, 120, 180, 240, 300].flatMap((h) => [0.3, 0.6, 1].flatMap((sat) => [0.35, 0.6, 0.9].map((v) => hsvToHex(h, sat, v)))),
+].filter((pick) => !inDefaultZone(pick));
+
+test("owner 2026-11-18: a tinted pick never fades Vivian or the logo", () => {
+  const picks = tintedPicks();
+  assert.ok(picks.length >= 50, `${picks.length} tinted picks`);
+  for (const pick of picks) {
+    const t = deriveAccentTokens(pick)!;
+    for (const name of ["--mark-filter", "--assistant-filter"]) {
+      const sat = Number(/saturate\(([\d.]+)\)/.exec(t[name])?.[1] ?? "1");
+      assert.ok(sat >= 1 && sat <= 2, `${pick} ${name} ${t[name]}`);
+    }
+    const mark = parseFilter(t["--mark-filter"]), assistant = parseFilter(t["--assistant-filter"]);
+    for (const [label, source, filtered] of [["logo", LOGO_TEAL, mark(hex(LOGO_TEAL))], ["assistant light", ASSISTANT_TEAL_LIGHT, assistant(hex(ASSISTANT_TEAL_LIGHT))], ["assistant dark", ASSISTANT_TEAL_DARK, assistant(hex(ASSISTANT_TEAL_DARK))]] as const) {
+      assert.ok(oklch(filtered)[1] >= 0.9 * oklch(hex(source))[1], `${pick} ${label}: chroma ${oklch(filtered)[1].toFixed(3)} below 0.9 x ${oklch(hex(source))[1].toFixed(3)} (${t["--assistant-filter"]})`);
+    }
+  }
+});
+
+test("owner 2026-11-18: dragging the picker moves the filters smoothly", () => {
+  const angle = (value: string) => Number(/hue-rotate\((-?\d+)deg\)/.exec(value)![1]);
+  const sat = (value: string) => Number(/saturate\(([\d.]+)\)/.exec(value)?.[1] ?? "1");
+  let maxAngle = 0, maxSat = 0;
+  let prev = deriveAccentTokens(rgbToHex(oklchToRgb(0.7, 0.15, 0)))!;
+  for (let h = 1; h < 360; h++) {
+    const next = deriveAccentTokens(rgbToHex(oklchToRgb(0.7, 0.15, h)))!;
+    for (const name of ["--assistant-filter", "--mark-filter"]) {
+      const da = hueDistance(angle(prev[name]), angle(next[name])), ds = Math.abs(sat(prev[name]) - sat(next[name]));
+      maxAngle = Math.max(maxAngle, da); maxSat = Math.max(maxSat, ds);
+      assert.ok(da <= 10, `h${h} ${name}: ${prev[name]} -> ${next[name]}`);
+      assert.ok(ds <= 0.1, `h${h} ${name}: saturate ${sat(prev[name])} -> ${sat(next[name])}`);
+    }
+    prev = next;
+  }
+  console.log(`# max neighbouring filter step: ${maxAngle} deg, saturate ${maxSat.toFixed(2)}`);
+});
+
+test("owner 2026-11-18: Vivian's items are drawn outside the filtered button", () => {
+  const button = /<button className="assistant-button"[\s\S]*?<\/button>/.exec(desktopSource)?.[0] ?? "";
+  assert.ok(button.includes("assistant-button"), "the button is found");
+  assert.ok(!button.includes("<AssistantItems"), "AssistantItems is not inside the filtered button");
+  assert.match(desktopSource, /<span className="assistant-figure">[\s\S]*<\/button><AssistantItems \/>[\s\S]*<\/span>/);
+  assert.doesNotMatch(css, /\.assistant-button \.assistant-items/, "no selector reaches the items through the button");
+  assert.match(css, /\.assistant-button:hover \+ \.assistant-items/);
 });
 
 test("tampered custom colours never reach the page", () => {

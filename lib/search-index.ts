@@ -111,16 +111,18 @@ export function buildSearchIndex(input: SearchIndexInput): SearchItem[] {
   return items.filter((entry) => !seen.has(entry.key) && Boolean(seen.add(entry.key)));
 }
 
-// UAT 2026-11-16 gap 3: a maximized search window lists every available record in the R1 grid, a normal window the first eight.
-export const availableRecordsInWindow = 8;
-export function availableRecordsLimit(maximized: boolean): number {
-  return maximized ? Number.POSITIVE_INFINITY : availableRecordsInWindow;
+// Owner 2026-11-18 (round 2): the search shows the first 10 entries, «Показать ещё» reveals more, never more than 25 in total (replaces the UAT 2026-11-16
+// maximized "list everything" rule). The cap is applied when the rows are drawn, so the count of matches stays the real one.
+export const searchFirstPage = 10;
+export const searchMaxShown = 25;
+export function searchShownCount(total: number, expanded: boolean): number {
+  return Math.max(0, Math.min(total, expanded ? searchMaxShown : searchFirstPage));
 }
 
-// An empty query lists the first `limit` items; a query lists every match. The preview of a card starts at the first block that holds the query; matching itself is unchanged.
-export function matchSearch(items: readonly SearchItem[], query: string, limit = availableRecordsInWindow): SearchItem[] {
+// An empty query lists every item; a query lists every match. The preview of a card starts at the first block that holds the query; matching itself is unchanged.
+export function matchSearch(items: readonly SearchItem[], query: string): SearchItem[] {
   const needle = normalizeSearch(query.trim());
-  if (!needle) return items.slice(0, limit);
+  if (!needle) return items.slice();
   return items.filter((entry) => normalizeSearch(`${entry.title} ${entry.meta} ${entry.body}`).includes(needle)).map((entry) => {
     const at = entry.parts ? entry.parts.findIndex((part) => normalizeSearch(part).includes(needle)) : -1;
     return at > 0 && entry.parts ? { ...entry, body: [...entry.parts.slice(at), ...entry.parts.slice(0, at)].join(" ") } : entry;

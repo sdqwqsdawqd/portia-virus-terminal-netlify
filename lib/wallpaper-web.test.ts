@@ -921,3 +921,10 @@ test("D-53 (20-37) the footfall wave runs along the heading or against it, one w
   assert.equal(forward.slots[0].dir, 1, "along the heading: toward the b end of a thread that points that way");
   assert.equal(backward.slots[0].dir, -1, "against the heading: toward the a end");
 });
+
+test("owner 2026-11-18 (round 4): the grid wallpaper has only its vertical helices, no tilted ones", () => {
+  const source = readFileSync(new URL("../components/portia-wallpaper.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /tiltedHelices|WallpaperTiltedHelices|desktop-wallpaper-tilted|wallpaper-helix-drift/);
+  assert.doesNotMatch(css, /helix-drift|desktop-wallpaper-tilted/);
+});

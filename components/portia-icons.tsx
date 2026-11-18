@@ -3,7 +3,7 @@ import { canonicalClassificationName } from "@/lib/portia-content";
 
 export type PortiaIconName =
   | "search" | "virus" | "employees" | "broadcasts" | "info" | "guide"
-  | "settings" | "promotion" | "charter" | "sheet" | "trash" | "editor"
+  | "settings" | "promotion" | "charter" | "sheet" | "trash" | "editor" | "template"
   | "class-hephaestus" | "class-proteus" | "class-apeiron"
   | "class-nomos" | "class-theseus" | "class-abraxas"
   | "class-warning" | "class-risk" | "class-esnov"
@@ -67,6 +67,12 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
     <path className="icon-promotion-level icon-promotion-level-low" d="M7 16.5h10" opacity=".65" />
     <path className="icon-promotion-level icon-promotion-level-high" d="M8.5 13.5h7" opacity=".65" />
     <path className="icon-promotion-arrow" d="M12 13V4.5m0 0L8.8 7.7M12 4.5l3.2 3.2" />
+  </>,
+  template: <>
+    {/* Owner 2026-11-18: «Шаблон» — a dossier sheet with a photo frame and two text lines; its cycle tilts the sheet, develops the photo and slides the lines in. */}
+    <path className="icon-template-sheet" d="M6.5 3.5h11a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1Z" />
+    <rect className="icon-template-photo" x="8.5" y="6.5" width="7" height="5.5" rx=".5" />
+    <path className="icon-template-lines" d="M8.5 15h7M8.5 17.8h4.5" />
   </>,
   charter: <>
     <path d="M7 4.5H5.5v16h13v-16H17" />

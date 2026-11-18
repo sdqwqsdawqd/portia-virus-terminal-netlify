@@ -6,7 +6,6 @@ import { promotionAvailabilityText } from "@/lib/portia-promotion";
 import { QUALIFICATION_HEARTBEAT_MS } from "@/lib/portia-qualification";
 import { qualificationPreStartLines } from "@/lib/portia-qualification-rules";
 import { statusPollOutcome } from "@/lib/portia-promotion-poll";
-import { PortiaTemplateBuilder } from "@/components/portia-template-builder";
 
 type RequestKind = "ordinary" | "qualification";
 type SubmitPhase = "idle" | "submitting" | "error" | "success";
@@ -361,7 +360,7 @@ const outcomeLabels: Record<string, string> = {
   rejected: "Заявка отклонена", "technical-failure": "Попытка завершена", "retake-released": "Повторная проверка открыта",
 };
 
-export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockChange }: { visible: boolean; onRetakeReady?: (notification: RetakeNotification) => void; onQualificationLockChange?: (locked: boolean) => void }) {
+export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockChange, onOpenTemplate }: { visible: boolean; onRetakeReady?: (notification: RetakeNotification) => void; onQualificationLockChange?: (locked: boolean) => void; onOpenTemplate?: () => void }) {
   const [nickname, setNickname] = useState("");
   const [checkedNickname, setCheckedNickname] = useState("");
   const [editor, setEditor] = useState(false);
@@ -379,10 +378,6 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
   const submittingRef = useRef(new Set<RequestKind>());
   const submitFeedbackRefs = useRef<Record<RequestKind, HTMLParagraphElement | null>>({ ordinary: null, qualification: null });
   const retakeLedgerRef = useRef<RetakeLedger>([]);
-  const [templateOpen, setTemplateOpen] = useState(false);
-  const templateTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const shellRef = useRef<HTMLDivElement>(null);
-  const shellScrollRef = useRef(0);
 
   const loadStatus = useCallback(async (_value: string, explicit = false, restore = false) => {
     if (explicit) setBusy(true);
@@ -503,20 +498,6 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
     if (checkedNickname) void loadStatus(checkedNickname);
   }, [checkedNickname, loadStatus]);
 
-  // The builder replaces the view, not the component: nickname, status, polling and a running qualification stay mounted underneath.
-  const openTemplate = (trigger: HTMLButtonElement) => {
-    templateTriggerRef.current = trigger;
-    shellScrollRef.current = shellRef.current?.scrollTop ?? 0;
-    setTemplateOpen(true);
-  };
-  const closeTemplate = () => {
-    setTemplateOpen(false);
-    requestAnimationFrame(() => {
-      if (shellRef.current) shellRef.current.scrollTop = shellScrollRef.current;
-      templateTriggerRef.current?.focus();
-    });
-  };
-
   const nextKind: RequestKind | null = status && status.promotionRecord !== null
     ? (status.ordinary.eligibility.status === "qualification-required" ? (["qualification", "ordinary"] as const) : (["ordinary", "qualification"] as const))
       .find((kind) => canRequestOn(kind, status[kind].active, status[kind].eligibility)) ?? null
@@ -532,7 +513,7 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
   </div></div>;
 
   return <>
-  <div className="promotion-app" ref={shellRef} hidden={templateOpen}>
+  <div className="promotion-app">
     <div className="promotion-shell" aria-live="polite">
       <header className="promotion-identity">
         <div><span className="promotion-eyebrow">УЧАСТНИК</span><h1 ref={headingRef} tabIndex={-1}>{status.nickname}</h1></div>
@@ -541,7 +522,8 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
       {stale && <div className="promotion-stale"><strong>Состояние временно не обновляется</strong><span>Показаны последние данные. Действия отключены.</span></div>}
       {error && <p className="promotion-error" role="alert">{error}</p>}
       <section className="promotion-template-entry" aria-label="Конструктор шаблона">
-        <button className="promotion-action" type="button" onClick={(event) => openTemplate(event.currentTarget)}>Создать шаблон</button>
+        {/* Owner 2026-11-18: the builder is its own app «Шаблон» now (open to everyone, also without access to «Повышение»); this only opens it. */}
+        <button className="promotion-action" type="button" onClick={() => onOpenTemplate?.()}>Открыть «Шаблон»</button>
         <p>Шаблон не засчитывает задание сам по себе.</p>
       </section>
       <div className="promotion-flow-list">
@@ -554,6 +536,5 @@ export function PortiaPromotion({ visible, onRetakeReady, onQualificationLockCha
       {status.results.length > 0 && <details className="promotion-history"><summary>Последние результаты <span>{Math.min(status.results.length, 3)}</span></summary><ul>{status.results.slice(0, 3).map((result, index) => <li key={`${result.createdAt}-${index}`}><span>{result.kind === "ordinary" ? "ЗАДАНИЯ" : "КВАЛИФИКАЦИЯ"}</span><strong>{outcomeLabels[result.outcome] ?? "Результат обновлён"}</strong><time dateTime={result.createdAt}>{formatDate(result.createdAt)}</time></li>)}</ul></details>}
     </div>
   </div>
-  {templateOpen && <PortiaTemplateBuilder onClose={closeTemplate} />}
   </>;
 }

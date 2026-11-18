@@ -285,10 +285,14 @@ test("the shared components only gained optional properties and keep their defau
   expectMatch(rich, /<span id=\{labelId\}>\{label\}<\/span>/);
 });
 
-test("Promotion renders the builder with nothing but onClose", () => {
+// Owner 2026-11-18: the builder is the app «Шаблон»; «Повышение» no longer mounts it and only opens that window.
+test("the desktop renders the builder once, as the app «Шаблон», and «Повышение» only opens it", () => {
   const promotion = read("components/portia-promotion.tsx");
-  const uses = [...promotion.matchAll(/<PortiaTemplateBuilder\b([^>]*)\/>/g)].map((match) => match[1].trim());
-  assert.deepEqual(uses, ["onClose={closeTemplate}"]);
+  assert.deepEqual([...promotion.matchAll(/<PortiaTemplateBuilder\b/g)], []);
+  expectMatch(promotion, /onClick=\{\(\) => onOpenTemplate\?\.\(\)\}/);
+  const desktop = read("components/portia-desktop.tsx");
+  const uses = [...desktop.matchAll(/<PortiaTemplateBuilder\b(.*?) \/>/g)].map((match) => match[1].trim());
+  assert.deepEqual(uses, ['standalone onClose={() => closeApp("template")}']);
 });
 
 test("the builder keeps its draft in the 20-38 model and changes it only through the model's functions", () => {

@@ -984,6 +984,23 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 .image-framing-stage img { position: absolute; display: block; max-width: none; max-height: none; pointer-events: none; user-select: none; -webkit-user-select: none; }
 .image-framing-dim { filter: brightness(.38); }
 .image-framing-window { position: absolute; overflow: hidden; box-shadow: 0 0 0 2px #f3f6f4, 0 0 0 3px rgba(0, 0, 0, .55); pointer-events: none; }
+/* Владелец 2026-11-18: рамку видимой части тянут за углы и середины краёв (единый стандарт для обложек, полос, досье и фото карточки).
+   Ручки лежат внутри рамки (у неё overflow: hidden), углы — уголки, края — короткие полосы; на телефоне зона касания 28px. */
+.image-framing-handle { position: absolute; z-index: 1; width: 18px; height: 18px; pointer-events: auto; touch-action: none; }
+.image-framing-handle::before { content: ""; position: absolute; inset: 0; border: 0 solid #f3f6f4; filter: drop-shadow(0 0 1px rgba(0, 0, 0, .8)); }
+.image-framing-handle.is-nw { top: 0; left: 0; cursor: nwse-resize; } .image-framing-handle.is-nw::before { border-top-width: 4px; border-left-width: 4px; }
+.image-framing-handle.is-ne { top: 0; right: 0; cursor: nesw-resize; } .image-framing-handle.is-ne::before { border-top-width: 4px; border-right-width: 4px; }
+.image-framing-handle.is-se { right: 0; bottom: 0; cursor: nwse-resize; } .image-framing-handle.is-se::before { border-bottom-width: 4px; border-right-width: 4px; }
+.image-framing-handle.is-sw { bottom: 0; left: 0; cursor: nesw-resize; } .image-framing-handle.is-sw::before { border-bottom-width: 4px; border-left-width: 4px; }
+.image-framing-handle.is-n, .image-framing-handle.is-s { left: calc(50% - 14px); width: 28px; height: 12px; cursor: ns-resize; }
+.image-framing-handle.is-e, .image-framing-handle.is-w { top: calc(50% - 14px); width: 12px; height: 28px; cursor: ew-resize; }
+.image-framing-handle.is-n { top: 0; } .image-framing-handle.is-n::before { border-top-width: 4px; }
+.image-framing-handle.is-s { bottom: 0; } .image-framing-handle.is-s::before { border-bottom-width: 4px; }
+.image-framing-handle.is-e { right: 0; } .image-framing-handle.is-e::before { border-right-width: 4px; }
+.image-framing-handle.is-w { left: 0; } .image-framing-handle.is-w::before { border-left-width: 4px; }
+.image-framing-window.is-resizing { box-shadow: 0 0 0 2px var(--teal), 0 0 0 3px rgba(0, 0, 0, .55); }
+@media (pointer: coarse) { .image-framing-handle.is-nw, .image-framing-handle.is-ne, .image-framing-handle.is-se, .image-framing-handle.is-sw { width: 28px; height: 28px; } }
+.image-framing-preview.free { width: auto; }
 .image-framing-zoom { display: grid; grid-template-columns: 24px minmax(0, 1fr) 24px 3.5em; align-items: center; gap: 10px; color: oklch(.614 calc(.027 * var(--accent-chroma)) var(--accent-hue)); }
 .image-framing-zoom input[type="range"] { width: 100%; min-height: 24px; padding: 0; border: 0; background: transparent; accent-color: var(--teal); cursor: pointer; }
 .image-framing-zoom-icon { justify-self: center; }
@@ -1632,6 +1649,8 @@ html[data-motion="full"] .wallpaper-web-dew circle { animation: web-dew 7s ease-
    straight on the page, so it is not resampled: the blur at rest came from a layer kept by will-change and by a forwards-filled fade. */
 .wallpaper-spider[data-spider-walking] { will-change: transform; }
 .wallpaper-spider svg { display: block; width: 100%; height: auto; }
+/* Владелец 2026-11-18: предмет в передней лапке стоит у кончика лапы, у края рисунка — ему можно выходить за рамку svg. */
+.wallpaper-spider svg:has(.wallpaper-spider-item) { overflow: visible; }
 /* D-50 (20-34), D-53 (20-37): the spider is the owner's logo spider. White body, near-black parts (neutral, no accent tint), the second strand of the legs in the accent.
    Parts carry no stroke and there is no rim layer: the gaps between the coils and strands of the legs are transparent and the desktop shows through them.
    No filter, no blur, no glow (D-45). The parts stay opaque (D-25). */
@@ -1887,6 +1906,9 @@ html[data-motion="full"] .taskbar-app.is-bouncing .mini-app-icon { animation: ta
 :is(.desktop-icon-symbol, .start-panel-icon)[data-icon="promotion"] .icon-promotion-level-low { translate: 0 0; opacity: 1; will-change: translate, opacity; }
 :is(.desktop-icon-symbol, .start-panel-icon)[data-icon="promotion"] .icon-promotion-level-high { translate: 0 0; opacity: 1; will-change: translate, opacity; }
 :is(.desktop-icon-symbol, .start-panel-icon)[data-icon="promotion"] .icon-promotion-arrow { translate: 0 0; opacity: 1; will-change: translate, opacity; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="template"] .icon-template-sheet { transform-origin: center bottom; rotate: 0deg; translate: 0 0; will-change: rotate, translate; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="template"] .icon-template-photo { transform-origin: center; scale: 1; opacity: 1; will-change: scale, opacity; }
+:is(.desktop-icon-symbol, .start-panel-icon)[data-icon="template"] .icon-template-lines { translate: 0 0; opacity: 1; will-change: translate, opacity; }
 :is(.desktop-icon-symbol, .start-panel-icon)[data-icon="charter"] svg > :nth-child(2) { translate: 0 0; will-change: translate; }
 :is(.desktop-icon-symbol, .start-panel-icon)[data-icon="charter"] svg > :nth-child(4) { scale: 1; opacity: 1; will-change: scale, opacity; }
 :is(.desktop-icon-symbol, .start-panel-icon)[data-icon="sheet"] svg > :nth-child(2) { stroke-dasharray: 32; stroke-dashoffset: 0; }
@@ -1923,6 +1945,9 @@ html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="promotion"] .icon-promotion-level-low { animation: icon-promotion-level 560ms 30ms var(--ease-out) both; }
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="promotion"] .icon-promotion-level-high { animation: icon-promotion-level 560ms 60ms var(--ease-out) both; }
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="promotion"] .icon-promotion-arrow { animation: icon-promotion-launch 560ms 90ms var(--ease-out) both; }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="template"] .icon-template-sheet { animation: icon-template-sheet 560ms var(--ease-out) both; }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="template"] .icon-template-photo { animation: icon-template-photo 560ms 45ms var(--ease-out) both; }
+html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="template"] .icon-template-lines { animation: icon-template-lines 560ms 90ms var(--ease-out) both; }
 /* Charter: the clip lifts, the seal stamps down. */
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="charter"] svg > :nth-child(2) { animation: icon-lift 560ms var(--ease-out); }
 html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-symbol, .start-panel > button.is-icon-animating .start-panel-icon)[data-icon="charter"] svg > :nth-child(4) { animation: icon-stamp 560ms 90ms var(--ease-out) backwards; }
@@ -1955,6 +1980,9 @@ html:not([data-motion="off"]) :is(.desktop-icon.is-icon-animating .desktop-icon-
 @keyframes icon-promotion-base { 35% { animation-timing-function: var(--ease-in); scale: 1.12 1; opacity: 1; } 70% { scale: .98 1; } 100% { scale: 1; opacity: 1; } }
 @keyframes icon-promotion-level { 0% { translate: 0 2px; opacity: .12; } 55% { animation-timing-function: var(--ease-in); translate: 0 -.45px; opacity: .9; } 85% { translate: 0 .1px; opacity: .97; } 100% { translate: 0 0; opacity: 1; } }
 @keyframes icon-promotion-launch { 0% { translate: 0 2.2px; opacity: .35; } 48% { animation-timing-function: var(--ease-in); translate: 0 -2.8px; opacity: 1; } 72% { translate: 0 .35px; } 100% { translate: 0 0; opacity: 1; } }
+@keyframes icon-template-sheet { 35% { animation-timing-function: var(--ease-in); rotate: -7deg; translate: 0 -1px; } 72% { rotate: 1.5deg; translate: 0 .2px; } 100% { rotate: 0deg; translate: 0 0; } }
+@keyframes icon-template-photo { 0% { scale: .35; opacity: .15; } 55% { animation-timing-function: var(--ease-in); scale: 1.14; opacity: 1; } 80% { scale: .97; opacity: 1; } 100% { scale: 1; opacity: 1; } }
+@keyframes icon-template-lines { 0% { translate: -2.4px 0; opacity: .2; } 58% { animation-timing-function: var(--ease-in); translate: .5px 0; opacity: 1; } 82% { translate: -.1px 0; opacity: 1; } 100% { translate: 0 0; opacity: 1; } }
 @keyframes icon-write-10 { from { stroke-dashoffset: 10; } }
 @keyframes icon-write-32 { from { stroke-dashoffset: 32; } to { stroke-dashoffset: 0; } }
 @keyframes icon-lift { 40% { animation-timing-function: var(--ease-in); translate: 0 -2.2px; } 85% { translate: 0 .3px; } 100% { translate: 0 0; } }
@@ -2065,7 +2093,7 @@ html[data-motion="off"] .assistant-button:active img { transform: none; }
 .guide-tile { display: block; min-width: 0; padding: 0; border: 1px solid var(--line); background: var(--panel-2); color: oklch(.919 calc(.012 * var(--accent-chroma)) var(--accent-hue)); text-align: left; cursor: pointer; }
 .guide-tile:hover, .guide-tile:focus-visible { border-color: var(--teal); background: var(--teal-soft); }
 .guide-tile-cover { position: relative; display: block; aspect-ratio: 4 / 3; background: var(--panel); overflow: hidden; }
-.guide-tile-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.guide-tile-cover img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 50%; } /* centred unless the card has its own framing (inline style wins) */
 .guide-tile-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; min-height: 52px; padding: 8px 12px; font: 700 13px/1.3 var(--sans); overflow-wrap: anywhere; }
 .guide-back-bar { height: 36px; margin: 0 0 16px; }
 .guide-back-bar button { display: inline-flex; align-items: center; gap: 7px; min-width: 36px; min-height: 36px; padding: 0 11px; border: 1px solid var(--line); background: var(--panel); color: oklch(.919 calc(.012 * var(--accent-chroma)) var(--accent-hue)); font: 700 12px var(--sans); cursor: pointer; }
@@ -2096,10 +2124,22 @@ html[data-motion="off"] .assistant-button:active img { transform: none; }
 .guide-table { overflow-x: auto; }
 .guide-table .info-ledger { margin-top: 0; }
 .guide-photo img { display: block; width: 100%; max-width: none; height: auto; max-height: none; cursor: default; }
+/* Владелец 2026-11-18: в развёрнутом окне фото раздувались на всю ширину и мешали листать — фото карточки не шире 820px и не выше 70% экрана
+   (картинка без рамки уменьшается целиком, без обрезки); рамка «Видимая часть» ограничивается по ширине из своих пропорций (стиль в GuidePhoto). */
+.guide-photo { max-width: min(100%, 820px); }
+.guide-photo:not(.is-framed) img { width: auto; max-width: 100%; max-height: min(70svh, 620px); }
+.guide-photo:not(.is-framed) img[style*="height"] { width: 100%; }
+.guide-photo.is-framed .portia-image { width: 100%; }
+/* Владелец 2026-11-18: блок «Карточки» — плитки других карточек на странице карточки, той же сеткой, что в разделе. */
+.guide-nested-cards { margin-top: 0; }
+.guide-cards-editor { display: grid; gap: 8px; }
+.guide-cards-editor-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.guide-cards-editor-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 6px; padding: 4px 6px; border: 1px solid var(--line); background: var(--panel); }
+.guide-cards-editor-list li > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 600 12px var(--sans); }
+.guide-cards-editor-list button { min-width: 32px; min-height: 28px; padding: 0 8px; }
 .guide-photo-left { margin-right: auto; }
 .guide-photo-center { margin-inline: auto; }
 .guide-photo-right { margin-left: auto; }
-.guide-photo img[style] { max-height: none; }
 .guide-photo-layout { display: grid; gap: 10px; margin-top: 10px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-card); background: var(--panel-2); }
 .guide-photo-layout-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 10px; }
 .guide-photo-layout-controls label { display: grid; gap: 5px; color: var(--muted); font: 600 11px var(--sans); }
@@ -2122,6 +2162,12 @@ html[data-motion="off"] .assistant-button:active img { transform: none; }
 
 /* Promotion is a standalone PORTIA application: one calm path, two explicitly separate workflows. */
 .promotion-window { width: min(760px, calc(100% - 170px)); height: min(620px, calc(100% - 42px)); }
+/* Владелец 2026-11-18: «Шаблон» — отдельное окно (раньше конструктор подменял «Повышение»), шире: поля и предпросмотр рядом.
+   Окно открывается с плавным «листом»: лёгкий наклон и подъём при появлении; при reduced/off — без движения. */
+.template-window { width: min(1120px, calc(100% - 170px)); height: min(760px, calc(100% - 42px)); }
+.template-window .template-builder { min-height: 100%; }
+html[data-motion="full"] .template-window .template-shell { animation: template-sheet-in 360ms var(--ease-out) both; }
+@keyframes template-sheet-in { from { opacity: 0; transform: translateY(10px) rotate(-.6deg); transform-origin: left top; } }
 .promotion-app { height: calc(100% - 46px); overflow-y: auto; background: radial-gradient(circle at 50% 0, rgba(var(--desktop-glow), .07), transparent 42%), var(--panel); color: oklch(.866 calc(.018 * var(--accent-chroma)) var(--accent-hue)); }
 .promotion-gate, .promotion-shell { width: min(680px, 100%); min-height: 100%; box-sizing: border-box; margin: 0 auto; padding: 32px 24px 48px; }
 .promotion-gate { display: grid; align-content: center; grid-template-columns: 72px minmax(0, 1fr); gap: 24px; }
@@ -2615,6 +2661,74 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .app-window.is-maximized > .access-redacted-block { box-sizing: border-box; height: calc(100% - 46px); max-height: none; }
 }
 /* access-levels:end */
+/* Owner 2026-11-18 (round 2): Vivian's items (svg .assistant-items, components/portia-companion-items.tsx) sit next to her button inside .assistant-figure,
+   NOT inside it, so the accent filter on .assistant-button never reaches them and they keep their own colours. They still move with her:
+   copies of every picture rule in the same order (hover, press, sulking, hops, reduced and off motion) through the sibling selector.
+   The temporary sulking state (grey, 0.78 opacity) is a mood of the figure, not the accent, so the items mirror it. The picture rules are untouched. */
+.assistant-figure { position: relative; display: block; width: 100%; }
+.assistant-items { display: block; width: 100%; height: auto; object-fit: contain; user-select: none; pointer-events: none; filter: none; transform-origin: 50% 100%; transition: transform 220ms var(--ease-out), filter 360ms ease, opacity 360ms ease; }
+.assistant-button:hover + .assistant-items, .assistant-button:focus-visible + .assistant-items { transform: translate(-2px, -3px) rotate(-4deg) scale(1.03); filter: drop-shadow(0 0 8px rgba(var(--desktop-glow), .28)); }
+.assistant-button:active + .assistant-items { transform: translateY(1px) scale(.97); }
+.desktop-assistant.is-offended .assistant-items { transform: none; translate: 0 4px; rotate: -3deg; scale: -1 .94; filter: brightness(.92) grayscale(.85) saturate(.4); opacity: .78; }
+.desktop-assistant[data-mood="3"]:not(.is-offended) .assistant-items { filter: brightness(1.02); }
+html[data-motion="full"] .desktop-assistant.is-speaking[data-auto]:not(.is-offended) .assistant-items { animation: vivian-hop 620ms; }
+html[data-motion="full"] .desktop-assistant[data-mood][data-squish="a"]:not(.is-offended) .assistant-items { animation: vivian-squish-a 320ms var(--ease-out); }
+html[data-motion="full"] .desktop-assistant[data-mood][data-squish="b"]:not(.is-offended) .assistant-items { animation: vivian-squish-b 320ms var(--ease-out); }
+html[data-motion="full"] .desktop-assistant[data-mood="3"][data-squish="a"]:not(.is-offended) .assistant-items { animation: vivian-huff-a 500ms ease-out; }
+html[data-motion="full"] .desktop-assistant[data-mood="3"][data-squish="b"]:not(.is-offended) .assistant-items { animation: vivian-huff-b 500ms ease-out; }
+html[data-motion="full"] .desktop-assistant.is-offended .assistant-items { animation: vivian-offended 660ms cubic-bezier(.3, .7, .3, 1) both; }
+html[data-motion="full"] .desktop-assistant.is-recovering .assistant-items { animation: vivian-recover 780ms var(--ease-out) both; }
+html[data-motion="reduced"] .desktop-assistant.is-speaking[data-auto]:not(.is-offended) .assistant-items { animation: vivian-bounce var(--motion-base) var(--ease-out) !important; }
+html[data-motion="reduced"] .desktop-assistant[data-mood][data-squish="a"]:not(.is-offended) .assistant-items { animation: vivian-bounce-a var(--motion-base) var(--ease-out) !important; }
+html[data-motion="reduced"] .desktop-assistant[data-mood][data-squish="b"]:not(.is-offended) .assistant-items { animation: vivian-bounce-b var(--motion-base) var(--ease-out) !important; }
+html[data-motion="reduced"] .desktop-assistant.is-offended .assistant-items { animation: vivian-sink var(--motion-base) var(--ease-out) both !important; }
+html[data-motion="reduced"] .desktop-assistant.is-recovering .assistant-items { animation: vivian-bounce var(--motion-base) var(--ease-out) !important; }
+html[data-motion="reduced"] .assistant-items { transition-duration: var(--motion-fast); }
+html[data-motion="off"] .desktop-assistant .assistant-items { animation: none !important; }
+html[data-motion="off"] .assistant-button:hover + .assistant-items, html[data-motion="off"] .assistant-button:focus-visible + .assistant-items, html[data-motion="off"] .assistant-button:active + .assistant-items { transform: none; }
+.assistant-items { position: absolute; inset: 0; z-index: 3; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+/* Owner 2026-11-18 (round 2): item settings are one section with a button per target; the mini-editor is a dialog with a stage (the figure and its items) and a tools column. */
+.companion-settings { display: grid; gap: 8px; }
+.companion-settings-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.companion-settings-buttons button, .companion-tools button, .companion-file { min-height: 30px; padding: 0 10px; border: 1px solid var(--line); background: var(--panel-2); color: inherit; font: 700 11px var(--sans); cursor: pointer; }
+.companion-settings-buttons button:disabled, .companion-tools button:disabled { opacity: .5; cursor: default; }
+.companion-editor-dialog { width: min(980px, calc(100vw - 24px)); }
+.companion-editor-body { display: grid; grid-template-columns: minmax(0, 1fr) 260px; align-items: start; gap: 16px; min-width: 0; }
+.companion-stage-box { min-width: 0; border: 1px solid var(--line); background: var(--panel); }
+.companion-stage-box:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.companion-stage { display: block; width: 100%; height: auto; max-height: min(68svh, 620px); background: var(--panel); touch-action: none; user-select: none; -webkit-user-select: none; }
+.companion-stage-figure.is-assistant { filter: var(--assistant-filter) brightness(1.1) saturate(1.08); }
+.companion-hit { fill: transparent; cursor: move; }
+.companion-outline { fill: none; stroke: var(--teal); stroke-width: 1.5; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; pointer-events: none; }
+.companion-handle { fill: var(--panel); stroke: var(--teal); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.companion-handle.is-n, .companion-handle.is-s { cursor: ns-resize; }
+.companion-handle.is-e, .companion-handle.is-w { cursor: ew-resize; }
+.companion-handle.is-ne, .companion-handle.is-sw { cursor: nesw-resize; }
+.companion-handle.is-nw, .companion-handle.is-se { cursor: nwse-resize; }
+.companion-tools { display: grid; align-content: start; gap: 10px; min-width: 0; }
+.companion-tools .setting-hint { margin: 0; }
+.companion-file { display: inline-grid; place-items: center; }
+.companion-file[aria-disabled] { opacity: .5; cursor: default; }
+.companion-link { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.companion-link input { width: 100%; min-width: 0; }
+.companion-strip { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.companion-strip button { width: 44px; height: 44px; padding: 2px; }
+.companion-strip img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.companion-strip button.selected, .companion-item-actions button.selected, .companion-attach button.selected { border-color: var(--teal); color: var(--teal); }
+.companion-selected { display: grid; gap: 8px; }
+.companion-selected label, .companion-attach { display: grid; gap: 3px; min-width: 0; color: var(--muted); font: 600 11px var(--sans); }
+.companion-selected input[type="range"] { width: 100%; min-width: 0; }
+.companion-item-actions { display: flex; gap: 4px; }
+.companion-attach > div { display: flex; gap: 4px; }
+.companion-attach button { flex: 1 1 0; min-width: 0; padding: 0 4px; }
+.companion-error { margin: 0; color: var(--danger, #e07a6f); font: 600 12px var(--sans); }
+@media (max-width: 900px) {
+  .companion-editor-body { grid-template-columns: minmax(0, 1fr); }
+}
+/* Owner 2026-11-18 (round 2): «Показать ещё» under the search results (10 first, 25 at most). */
+.global-search-more { justify-self: start; min-height: 30px; margin-top: 8px; padding: 0 12px; border: 1px solid var(--line); background: var(--panel-2); color: inherit; font: 700 11px var(--sans); letter-spacing: .06em; text-align: left; cursor: pointer; }
+.global-search-more:hover, .global-search-more:focus-visible { border-color: var(--teal); color: var(--teal); }
+.global-search-more-note { margin: 8px 0 0; color: var(--muted); font: 400 12px/1.5 var(--sans); }
 /* users-tab:start — Phase 22 «Пользователи» (USR-01..USR-09): sharp corners, values from 22-UI-SPEC, nothing else in the file changes */
 .tab-count { min-width: 24px; margin-left: 8px; padding: 0 8px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px/1.35 var(--mono); text-align: center; }
 .users-tab { display: grid; gap: 24px; min-width: 0; }
@@ -2723,6 +2837,9 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 /* Угловой крестик слоёв (UI-05): один класс .corner-close у карточки заявки, уведомлений, пикера цвета и панели оформления;
    у двух заголовков свои правила кнопок с большей специфичностью, поэтому они названы. Строка заголовка — 44px, справа 44px под крестик. */
 .corner-close, .custom-color-picker-head .corner-close, .floating-text-format > header .corner-close { position: absolute; top: 0; right: 0; box-sizing: border-box; display: grid; place-items: center; width: 44px; height: 44px; min-width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: var(--radius-control); font-size: 20px; line-height: 1; cursor: pointer; }
+/* Владелец 2026-11-18: квадратный крестик выступал за скруглённый угол пикера цвета. Остальные слои (заявка, уведомления, панель оформления)
+   уже прокручиваются и потому обрезают содержимое по своему скруглению; пикер тоже обрезает (тень снаружи не режется), крестик остаётся квадратным. */
+.custom-color-picker { overflow: hidden; }
 .custom-color-picker { position: relative; padding-top: 0; }
 .quest-toast > div { padding-top: 0; }
 .quest-toast-head, .custom-color-picker-head, .floating-text-format > header { box-sizing: border-box; min-height: 44px; padding-right: 44px; }
@@ -2734,11 +2851,10 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .app-window.is-maximized .global-result { min-width: 0; }
   .app-window.is-maximized .global-search-header, .app-window.is-maximized .global-search-box { max-width: var(--field-max); }
   .app-window.is-maximized .global-search-empty { grid-column: 1 / -1; justify-self: stretch; }
-  /* Аудит окон (D-04): колонка списка у базы вирусов и сотрудников, сводка и справочник сеткой R1 (плитки справочника от 220px),
-     документ «Информации» — колонка чтения 820px (R4). Закрытый «Устав» (R5) — в блоке access-levels: заглушку стилизует только он. */
+  /* Аудит окон (D-04): колонка списка у базы вирусов и сотрудников, сводка сеткой R1, документ «Информации» — колонка чтения 820px (R4).
+     Владелец 2026-11-18 (круг 3): «Справочник» без колонки разделов — плитки остаются 176px (не растут), карточка — колонка 820px. Закрытый «Устав» (R5) — в блоке access-levels: заглушку стилизует только он. */
   .app-window.is-maximized .archive-grid, .app-window.is-maximized .personnel-app { grid-template-columns: clamp(270px, 24%, 340px) minmax(0, 1fr); }
   .app-window.is-maximized .broadcast-grid { gap: 8px; grid-template-columns: repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 24px) / 4)), 1fr)); }
-  .app-window.is-maximized .guide-grid { gap: 8px; grid-template-columns: repeat(auto-fill, minmax(max(220px, calc((100% - 24px) / 4)), 1fr)); }
   .app-window.is-maximized .info-document > .content-fade { max-width: 820px; }
   /* D-19: карточки редактора в развёрнутом окне — только больше колонок той же ширины var(--editor-card-width), без 1fr. */
   .app-window.is-maximized .editor-card-columns, .app-window.is-maximized .editor-section-columns { grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--editor-card-width)), var(--editor-card-width))); }
@@ -2755,11 +2871,12 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .app-window.is-maximized .promotion-flow-list { display: grid; gap: 24px; grid-template-columns: repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 24px) / 2)), 1fr)); }
   /* UAT 2026-11-16 gap 3 (владелец: пустая треть «Настроек», статья и запись в узкой колонке): «Настройки» — группы сеткой до 3 колонок
      на всю панель (она несёт фон, поэтому фон и полоса прокрутки доходят до края окна); заголовок, «Содержимое сайта» и подвал — на все колонки.
-     Статья «Справочника» и запись/документ «Базы вирусов» — на всю панель; запись привязана к .archive-grid, шаблон «Повышения»
+     Запись/документ «Базы вирусов» — на всю панель; запись привязана к .archive-grid, шаблон «Повышения»
      (.template-card-preview, файл 1060px, D-55) не затронут. «Информация», «Сводка», «Сотрудники», «Корзина» не менялись: жалобы не было (D-10). */
   .app-window.is-maximized .settings-app { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(var(--card-min), calc((100% - 48px) / 3)), 1fr)); column-gap: 24px; align-content: start; }
   .app-window.is-maximized .settings-app > header, .app-window.is-maximized .settings-app > .content-control-entry, .app-window.is-maximized .settings-app > .settings-footer { grid-column: 1 / -1; }
-  .app-window.is-maximized .guide-page { max-width: none; }
+  /* Владелец 2026-11-18: «Шаблон» в развёрнутом окне — на всю ширину (пустые поля по бокам владелец не принимает). */
+  .app-window.is-maximized .template-shell { width: auto; margin: 0; }
   .app-window.is-maximized .archive-grid .record-document { width: auto; }
   .app-window.is-maximized .archive-document-paper { width: calc(100% - 42px); }
   /* quick 261117-bi1 (R1): окно вплотную к рабочей области — скругление окна и слоя рамки снято, иначе оно срезало бы угловой пиксель кнопки закрытия. */

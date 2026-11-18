@@ -48,6 +48,9 @@ const migrationHashes: Record<string, string> = {
   // applied nowhere, the owner applies it by hand (ОЖИДАЕТ ВЛАДЕЛЬЦА). Any later change needs a new forward-only migration,
   // unless the independent review requires a fix before it is applied anywhere (then re-pin in that fix commit).
   "20261117000000_portia_qualification_rules.sql": "eb885d7d4b1a1c15bff18ccc2ae2b716fcc50dbef2908e03f49053de9d4ab3cb",
+  // Quick 261118: the owner may decide a row filed with their own nickname (self guard skips the owner). Pinned the day it was written;
+  // applied nowhere, the owner applies it by hand (ОЖИДАЕТ ВЛАДЕЛЬЦА).
+  "20261118000000_portia_owner_self_decision.sql": "cadb1475fd4b1f32412231a54b7de5a43cf3d378ac475ed4f6e18b8ce48972cc",
 };
 
 const baselineName = "20261101000000_portia_baseline.sql";

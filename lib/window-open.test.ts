@@ -118,10 +118,10 @@ test("openApp is declared once and, like focusApp, starts with the qualification
 
 test("every desktop icon, start panel button and search result opens its window through openApp", () => {
   const icons = source.match(/<DesktopIcon app="\w+"[^\n]*\/>/g) ?? [];
-  assert.equal(icons.length, 11);
+  assert.equal(icons.length, 12);
   for (const icon of icons) assert.ok(icon.includes("onOpen={openApp}"), icon.slice(0, 40));
   const buttons = source.match(/<StartPanelButton [^\n]*\/>/g) ?? [];
-  assert.equal(buttons.length, 5);
+  assert.equal(buttons.length, 6);
   for (const button of buttons) assert.ok(button.includes("openApp("), button.slice(0, 60));
   const search = bodyAfter("const openSearchResult = (result: SearchItem, position = 0) => {");
   // Seven record types plus the branch of a record that vanished: each opens its owner through openApp.
@@ -145,11 +145,11 @@ test("a window is opened only by openedWindow, apart from the forced qualificati
 });
 
 test("each app id has exactly one AppWindow surface, which unmounts when closed but not when minimised", () => {
-  for (const id of ["archive", "employees", "search", "info", "guide", "promotion", "broadcasts", "trash", "settings", "editor"]) {
+  for (const id of ["archive", "employees", "search", "info", "guide", "promotion", "broadcasts", "trash", "settings", "editor", "template"]) {
     assert.equal(source.split(`<AppWindow app="${id}"`).length - 1, 1, id);
   }
   assert.equal(source.split('(["sheet", "charter"] as const).map((app) => <AppWindow').length - 1, 1);
-  assert.equal(source.split("<AppWindow ").length - 1, 11);
+  assert.equal(source.split("<AppWindow ").length - 1, 12);
   assert.ok(source.indexOf("function AppWindow(") < source.indexOf("if (!state.open) return null;"));
 });
 

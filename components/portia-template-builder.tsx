@@ -242,7 +242,7 @@ async function measureCardPage(page: string): Promise<number> {
  * TemplateDossier kept in React state; every edit goes through the model's functions, so nothing here can reach the site, the
  * archive, an upload or browser storage. The finished work leaves only as a downloaded HTML or PNG file.
  */
-export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
+export function PortiaTemplateBuilder({ onClose, standalone = false }: { onClose: () => void; standalone?: boolean }) {
   const [dossier, setDossier] = useState<TemplateDossier>(() => emptyTemplateDossier());
   const [dossierTab, setDossierTab] = useState<DossierTab>("main");
   const [view, setView] = useState<BuilderView>("fields");
@@ -381,7 +381,7 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
   // The confirmation is modal inside this view: Tab and Shift+Tab cycle over its two buttons and leaving it puts the focus back on the control that opened it.
   const dismissConfirm = () => {
     setConfirmClose(false);
-    requestAnimationFrame(() => backRef.current?.focus());
+    requestAnimationFrame(() => (backRef.current ?? headingRef.current)?.focus());
   };
   const trapConfirmTab = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Tab") return;
@@ -407,25 +407,26 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
     : phase === "done" ? "Файл скачан на устройство." : "";
 
   return <div
-    className="template-builder promotion-app"
+    className={`template-builder promotion-app${standalone ? " is-standalone" : ""}`}
     onKeyDown={(event) => { if (event.key === "Escape" && confirmClose) { event.stopPropagation(); dismissConfirm(); } }}
   >
     <div className="template-shell">
       <header className="template-header">
         <div>
-          <span className="promotion-eyebrow">{"ПОВЫШЕНИЕ // ЗАДАНИЕ"}</span>
+          <span className="promotion-eyebrow">{standalone ? "ШАБЛОН // ДОСЬЕ" : "ПОВЫШЕНИЕ // ЗАДАНИЕ"}</span>
           <h1 ref={headingRef} tabIndex={-1}>Шаблон досье</h1>
         </div>
-        <button ref={backRef} type="button" className="promotion-action template-back" onClick={requestClose} disabled={busy}>Вернуться к повышению</button>
+        {/* Owner 2026-11-18: the standalone app has no «Закрыть шаблон» button; its window closes with the cross. */}
+        {!standalone && <button ref={backRef} type="button" className="promotion-action template-back" onClick={requestClose} disabled={busy}>Вернуться к повышению</button>}
       </header>
       <p className="template-note">Скачайте файл и отправьте проверяющему вне сайта.</p>
 
       {confirmClose && <section ref={confirmRef} onKeyDown={trapConfirmTab} className="template-confirm" role="alertdialog" aria-modal="true" aria-labelledby={`${idPrefix}-confirm-title`} aria-describedby={`${idPrefix}-confirm-text`}>
         <strong id={`${idPrefix}-confirm-title`}>Черновик ещё не скачан</strong>
-        <p id={`${idPrefix}-confirm-text`}>Если вернуться сейчас, набранное будет потеряно.</p>
+        <p id={`${idPrefix}-confirm-text`}>{standalone ? "Если закрыть сейчас, набранное будет потеряно." : "Если вернуться сейчас, набранное будет потеряно."}</p>
         <div className="template-confirm-actions">
           <button ref={stayRef} type="button" className="promotion-action" onClick={dismissConfirm}>Остаться и скачать</button>
-          <button type="button" className="promotion-action template-discard" onClick={onClose}>Вернуться без скачивания</button>
+          <button type="button" className="promotion-action template-discard" onClick={onClose}>{standalone ? "Закрыть без скачивания" : "Вернуться без скачивания"}</button>
         </div>
       </section>}
 

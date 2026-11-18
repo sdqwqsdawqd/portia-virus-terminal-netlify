@@ -264,11 +264,12 @@ test("26-12 route-*, lock-* and all non-class icons, their helpers, the type, th
   const sampleIconPaths = sliceOf(sample, "const iconPaths:", "// The badge for each canonical term");
   const keys = [...sampleIconPaths.matchAll(/\n  ("[a-z-]+"|[a-z]+):/g)].map((match) => match[1].replaceAll('"', ""));
   const kept = keys.filter((key) => !key.startsWith("class-"));
+  // Owner 2026-11-18: one icon was added after the sample, «template» (the app «Шаблон»); every sampled icon stays byte for byte.
   assert.ok(kept.includes("route-droplet") && kept.includes("lock-closed") && kept.length === 20, `kept icons: ${kept.join(",")}`);
   for (const key of kept) assert.equal(drawing(key), entryIn(sampleIconPaths, key), `${key} is unchanged since ${ICON_SAMPLE_COMMIT.slice(0, 7)}`);
   for (const helper of ["const drop =", "const lockBody ="]) assert.equal(lineOf(iconsSource, helper), lineOf(sample, helper), helper);
   const typeOf = (source: string) => /export type PortiaIconName =[\s\S]*?;\n/.exec(source)?.[0];
-  assert.equal(typeOf(iconsSource), typeOf(sample), "PortiaIconName keeps every key");
+  assert.equal(typeOf(iconsSource), typeOf(sample)?.replace('| "trash" | "editor"\n', '| "trash" | "editor" | "template"\n'), "PortiaIconName keeps every key (plus «template»)");
   assert.equal(iconMapBlock, sliceOf(sample, "export const classificationIcon", "// Content values are editor input"), "classificationIcon");
   assert.equal(sliceOf(iconsSource, "export function classificationIconFor", "\n}\n"), sliceOf(sample, "export function classificationIconFor", "\n}\n"), "classificationIconFor");
   assert.equal(sliceOf(iconsSource, "export function PortiaIcon(", "\n}\n"), sliceOf(sample, "export function PortiaIcon(", "\n}\n"), "PortiaIcon");

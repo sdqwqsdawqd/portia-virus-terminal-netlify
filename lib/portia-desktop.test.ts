@@ -114,7 +114,10 @@ test("component families import only their own seams and the known shared compon
   const allowed = {
     // portia-virus-card: the archive's virus card, shared with the template builder (D-55, 20-43).
     // portia-redacted: the static «ЗАСЕКРЕЧЕНО · нужен допуск N» placeholder (Phase 24, D-08/D-09).
-    "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion", "portia-virus-card", "portia-redacted"],
+    // portia-companion-items: the visitor's items of the assistant and the spider, kept on the device (2026-11-18).
+    // portia-companion-editor: the item editor dialog opened from the settings (owner 2026-11-18, round 2).
+    // portia-template-builder: the dossier template is its own app «Шаблон» since 2026-11-18 (it lived inside «Повышение»).
+    "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion", "portia-virus-card", "portia-redacted", "portia-template-builder", "portia-companion-items", "portia-companion-editor"],
     // portia-desktop-states: the shared «Доступ закрыт» panel the editor shows when the rights check fails (STAB-APP-09).
     // portia-image-framing: the block «Видимая часть» under a picture field (D-63, 20-53), shared with the template builder through ImageEditorField.
     // portia-users-tab: the «Пользователи» tab body (USR-01, Phase 22).
@@ -145,9 +148,9 @@ test("STAB-DESK-07: app ids, storage keys and API endpoints stay as pinned", () 
     for (const match of text.matchAll(/["`](\/api\/[a-z/-]+)/g)) found[match[1]] = (found[match[1]] ?? 0) + 1;
     return found;
   };
-  assert.equal(/type AppId = ([^;]+);/.exec(source)?.[1], '"archive" | "employees" | "search" | "info" | "guide" | "promotion" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor"');
+  assert.equal(/type AppId = ([^;]+);/.exec(source)?.[1], '"archive" | "employees" | "search" | "info" | "guide" | "promotion" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor" | "template"');
   // IN-05 (Phase 25): the two device-cache keys live only in lib/device-cache.ts; the desktop imports them.
-  assert.deepEqual(keys(source), ["portia-broadcasts-read-signature-v1", "portia-desktop-shortcuts-v3", "portia-guide-collapsed-v2", "portia-quests-seen-v1", "portia-taskbar-order-v1"]);
+  assert.deepEqual(keys(source), ["portia-broadcasts-read-signature-v1", "portia-desktop-shortcuts-v3", "portia-guide-expanded-v3", "portia-quests-seen-v1", "portia-taskbar-order-v1"]);
   assert.match(source, /import \{[^}]*\bCONTENT_CACHE_KEY\b[^}]*\bEMPLOYEES_CACHE_KEY\b[^}]*\} from "@\/lib\/device-cache";/);
   assert.deepEqual(keys(editorSource), ["portia-format-panel-v1"]);
   assert.deepEqual(endpoints(source), { "/api/content": 2, "/api/access": 1, "/api/employees": 1 });
@@ -180,8 +183,11 @@ test("promotion is a standalone desktop application with its own window geometry
 test("global search is built by buildSearchIndex from every existing collection and opens the owner app (D-13, D-14)", () => {
   assert.ok(source.includes("globalSearchAppIds.map"));
   assert.ok(source.includes("buildSearchIndex({"));
-  assert.ok(source.includes("matchSearch(searchIndex, globalQuery, availableRecordsLimit(windows.search.maximized))"));
-  assert.ok(source.includes("[searchIndex, globalQuery, windows.search.maximized]"));
+  // Owner 2026-11-18 (round 2): the search lists every match and draws the first 10 (up to 25 after «Показать ещё»).
+  assert.ok(source.includes("matchSearch(searchIndex, globalQuery)"));
+  assert.ok(source.includes("searchShownCount("), "the rendered rows are a slice of searchShownCount");
+  assert.ok(source.includes('className="global-search-more"'));
+  assert.ok(source.includes("[searchIndex, globalQuery]"), "the maximized flag no longer widens the list");
   assert.ok(!source.includes("const escapeSearch"), "one normalisation: normalizeSearch from lib/search-index");
   assert.ok(source.includes('openApp("employees")'));
   for (const collection of ["content.viruses", "content.infoSections", "content.guideSections", "content.broadcasts", "content.recycleFiles", "recycledViruses", "employees"]) {
@@ -334,13 +340,15 @@ test("window tiles keep their own size and the search shows the picked recommend
   assert.match(styles, /\.broadcast-grid\s*\{[^}]*align-items:\s*start/);
   assert.match(styles, /\.broadcast-grid > \.broadcast-empty\s*\{[^}]*grid-column:\s*1 \/ -1/);
   assert.match(styles, /\.guide-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*176px\),\s*176px\)\)/);
-  // Phase 26 (UI-06, D-01): a maximized window turns these tiles into a card grid, but only under the maximized hook; the
-  // normal window keeps the fixed 340px / 176px tiles above. No rule outside the hook gives them a stretched track.
+  // Phase 26 (UI-06, D-01): a maximized window turns the broadcast tiles into a card grid, but only under the maximized hook; the
+  // normal window keeps the fixed 340px tiles above. No rule outside the hook gives them a stretched track.
+  // Owner 2026-11-18 (round 2): the guide tiles stay 176px in a maximized window too (compact tiles, like «Информация»): no maximized rule touches their columns.
+  assert.ok(!/\.app-window\.is-maximized[^{}]*\.guide-grid[^{}]*\{/.test(styles), "guide-grid: no maximized rule changes the tiles");
   for (const tiles of ["broadcast-grid", "guide-grid"]) {
     const rules = [...styles.matchAll(new RegExp(String.raw`([^{}]*\.${tiles}\s*)\{([^}]*)\}`, "g"))];
     const stretched = rules.filter(([, selector, body]) => /grid-template-columns:[^;]*1fr/.test(body) && !selector.includes(".app-window.is-maximized"));
     assert.deepEqual(stretched.map(([, selector]) => selector.trim()).filter((selector) => !(tiles === "guide-grid" && selector === ".guide-grid")), [], `${tiles}: only the maximized rule may stretch`);
-    assert.ok(rules.some(([, selector]) => selector.includes(".app-window.is-maximized")), `${tiles}: a maximized rule exists`);
+    if (tiles === "broadcast-grid") assert.ok(rules.some(([, selector]) => selector.includes(".app-window.is-maximized")), `${tiles}: a maximized rule exists`);
   }
   assert.ok(source.includes("shownRecommendations.map("), "only the picked recommendations are rendered");
   assert.ok(!source.includes("content.searchRecommendations.map("));
@@ -554,8 +562,10 @@ test("animated shortcuts keep one precise vector artwork through the resting han
 });
 
 test("guide sections start folded and the compact back control does not cover card content", () => {
-  assert.ok(source.includes('const guideCollapsedStorageKey = "portia-guide-collapsed-v2"'));
-  assert.ok(source.includes("useState<string[]>(() => sections.map((section) => section.id))"));
+  // Owner 2026-11-18: the device stores the OPENED sections, so a section it never saw (a new one) starts folded too.
+  assert.ok(source.includes('const guideExpandedStorageKey = "portia-guide-expanded-v3"'));
+  assert.ok(source.includes("const [expanded, setExpanded] = useState<string[]>([]);"));
+  assert.ok(source.includes("const folded = !expanded.includes(section.id);"));
   assert.doesNotMatch(source, /initialCollapsed\.current/);
   const back = /\.guide-back-bar \{([^}]*)\}/.exec(styles)?.[1] ?? "";
   assert.match(back, /height:\s*36px/);
@@ -811,7 +821,7 @@ test("«Корзина» shows no restore or delete control on the desktop; the 
 test("«Таблица» and «Устав»: skeleton until onLoad, fatal panel after the 15s timeout, retry remounts the frame; sandbox and zoom stay (STAB-APP-06, T-19-20)", () => {
   const documents = desktopFamily.find((part) => part.file === "portia-desktop-documents.tsx")?.text ?? "";
   const start = documents.indexOf("export function EmbeddedDocument");
-  const embedded = documents.slice(start, documents.indexOf("// v2 starts every section folded", start));
+  const embedded = documents.slice(start, documents.indexOf("// Owner 2026-11-18: v3 stores the sections", start));
   assert.match(embedded, /<iframe[^>]*key=\{frameKey\}[^>]*onLoad=/);
   assert.ok(embedded.includes("sandbox={embedSandbox}"));
   assert.equal(count(documents, "sandbox={embedSandbox}"), 2, "the document frame and the YouTube frame");
@@ -1176,7 +1186,7 @@ test("UI-09 tracer: useShortcutPlacement measures .desktop-icons with a ResizeOb
   // The desktop hands the ref of nav.desktop-icons to the hook and the placed spots to every shortcut.
   assert.ok(source.includes("useShortcutPlacement(desktopIconsRef"), "the desktop calls the hook with the nav ref");
   assert.match(source, /<nav className="desktop-icons" ref=\{desktopIconsRef\}/);
-  assert.equal((source.match(/placed=\{placedShortcut\(shortcutPlacement, "/g) ?? []).length, 11, "all eleven shortcuts get their placed spot");
+  assert.equal((source.match(/placed=\{placedShortcut\(shortcutPlacement, "/g) ?? []).length, 12, "all twelve shortcuts get their placed spot");
   assert.ok(source.includes('"--shortcut-content-height"'), "the workspace grows to the content height");
   // A placed spot wins on this width only; the PC default and the saved-position style stay as they were.
   assert.ok(shortcutsSource.includes("placed ? placedShortcutLayout(placed.position) : position ? savedShortcutLayout(position) : defaultShortcutLayout[shortcutId]"));
@@ -1234,4 +1244,15 @@ test("UI-09: at 521–900px a shortcut label wraps inside the icon width, two li
   }
   // The PC label is not touched: no rule for the label outside this width.
   assert.doesNotMatch(styles.replace(block, ""), /\.desktop-icon-label/);
+});
+
+test("owner 2026-11-18: «Справочник» draws every tile through GuideTile and has no sections column (round 3)", () => {
+  const documents = lf(readFileSync(new URL("../components/portia-desktop-documents.tsx", import.meta.url), "utf8"));
+  assert.equal((documents.match(/className=\{`guide-tile/g) ?? []).length, 1, "the tile markup exists once");
+  assert.equal((documents.match(/<GuideTile /g) ?? []).length, 2, "the section grid and the block «Карточки» use it");
+  assert.doesNotMatch(documents, /guide-index|guide-layout|Разделы справочника/);
+  assert.ok(documents.includes('return <div className="guide-app" ref={scroller} tabIndex={-1}>'));
+  // A tile is always 4:3: the cover never gets the free ratio of an old frame.
+  assert.ok(documents.includes("tileFraming(item.coverFraming)") && /ratio !== undefined \? \{ x: framing\.x, y: framing\.y, zoom: framing\.zoom \}/.test(documents));
+  assert.match(styles, /\.guide-tile-cover img \{[^}]*object-position: 50% 50%/);
 });

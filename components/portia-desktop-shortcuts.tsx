@@ -6,7 +6,7 @@ import { appMeta, type AppId } from "@/components/portia-desktop-window";
 import { originOf, type OpenOrigin } from "@/lib/window-open";
 import { clampShortcutPosition, placeShortcuts, shortcutCell, shortcutDropArea, type Rect, type ShortcutCell } from "@/lib/shortcut-layout";
 
-export type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "guide" | "promotion" | "settings" | "charter" | "sheet" | "trash";
+export type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "guide" | "promotion" | "settings" | "charter" | "sheet" | "trash" | "template";
 export type ShortcutPosition = { x: number; y: number };
 type ShortcutLayoutStyle = React.CSSProperties & {
   "--shortcut-left": string;
@@ -26,6 +26,7 @@ const defaultShortcutLayout: Record<DesktopShortcutId, ShortcutLayoutStyle> = {
   settings: shortcutLayout({ left: 124, top: 20 }),
   guide: shortcutLayout({ left: 124, top: 124 }),
   promotion: shortcutLayout({ left: 124, top: 228 }),
+  template: shortcutLayout({ left: 124, top: 332 }),
   charter: shortcutLayout({ left: 14, bottom: 18 }),
   sheet: shortcutLayout({ left: 124, bottom: 18 }),
   trash: shortcutLayout({ right: 14, top: 20 }),
