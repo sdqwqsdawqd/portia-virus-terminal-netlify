@@ -70,15 +70,17 @@ export function deriveAccentTokens(picked: unknown): Record<string, string> | nu
   const base = fit(0.14, 0.02 * k, H, 0);
   const deep = fit(0.18, 0.03 * k, H, 0);
 
-  // Owner 2026-11-18 (round 2): the assistant and the logo must keep their saturation under any pick and follow the picker smoothly.
-  // Default-look zone: a very dark, very light or near-grey pick leaves the artwork as drawn (hue-rotate(0deg)); the old greying and the
-  // multiplication by k, which drained the colour, are gone.
+  // Owner 2026-11-18 (round 3): Vivian and the logo follow every pick, the black and white ones too. Two smooth ramps, no zones with an edge:
+  // - colour: the pick's chroma decides how much of the tint stays (0 below 0.02 = grey artwork, full from 0.06), so a grey pick greys her;
+  // - lightness: a dark pick darkens her (down to brightness .35 at L .1), a light pick lightens her (up to 1.9 at L .97), 1 in between.
   // A tinted pick is solved from a fixed table, not by a search (T-10-02: the cost does not depend on the input). CSS hue-rotate is not an OKLCH
   // rotation, so for 72 rotations (every 5 deg) the table holds the saturate() that restores each reference's own chroma (never below 1, at most 2)
   // and the hue the references reach (their circular midpoint). The hue is unwrapped along the rotation into one running sequence that closes
   // after a full turn, so neighbouring picks land between neighbouring samples; the target hue is interpolated linearly between its bracketing samples.
+  const smooth = (v: number, lo: number, hi: number) => { const t = clamp((v - lo) / (hi - lo), 0, 1); return t * t * (3 - 2 * t); };
+  const keep = smooth(lch[1], 0.02, 0.06);
+  const light = lch[0] < 0.55 ? 0.35 + 0.65 * smooth(lch[0], 0.1, 0.55) : 1 + 0.9 * smooth(lch[0], 0.75, 0.97);
   const filterFor = (refs: string[]) => {
-    if (lch[0] < 0.25 || lch[0] > 0.93 || lch[1] < 0.03) return "hue-rotate(0deg)";
     const rgbs = refs.map((r) => [1, 3, 5].map((i) => parseInt(r.slice(i, i + 2), 16)));
     const own = rgbs.map((rgb) => oklch(rgb)[1]);
     const signed = (from: number, to: number) => ((to - from + 540) % 360) - 180;
@@ -111,8 +113,9 @@ export function deriveAccentTokens(picked: unknown): Record<string, string> | nu
         break;
       }
     }
-    const turn = ((Math.round(d) + 180) % 360 + 360) % 360 - 180;
-    return "hue-rotate(" + (turn || 0) + "deg) saturate(" + Number(clamp(s, 1, 2).toFixed(2)) + ")";
+    const turn = keep > 0 ? ((Math.round(d) + 180) % 360 + 360) % 360 - 180 : 0;
+    const b = Number(light.toFixed(2));
+    return "hue-rotate(" + (turn || 0) + "deg) saturate(" + Number((clamp(s, 1, 2) * keep).toFixed(2)) + ")" + (b !== 1 ? " brightness(" + b + ")" : "");
   };
 
   return {

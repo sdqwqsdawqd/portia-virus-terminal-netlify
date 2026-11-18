@@ -1246,12 +1246,12 @@ test("UI-09: at 521–900px a shortcut label wraps inside the icon width, two li
   assert.doesNotMatch(styles.replace(block, ""), /\.desktop-icon-label/);
 });
 
-test("owner 2026-11-18 (round 2): «Справочник» draws every tile through GuideTile and has a sections index", () => {
+test("owner 2026-11-18: «Справочник» draws every tile through GuideTile and has no sections column (round 3)", () => {
   const documents = lf(readFileSync(new URL("../components/portia-desktop-documents.tsx", import.meta.url), "utf8"));
   assert.equal((documents.match(/className=\{`guide-tile/g) ?? []).length, 1, "the tile markup exists once");
   assert.equal((documents.match(/<GuideTile /g) ?? []).length, 2, "the section grid and the block «Карточки» use it");
-  assert.ok(documents.includes('<nav className="guide-index" aria-label="Разделы справочника">'));
-  assert.ok(documents.includes('<div className="guide-layout">'));
+  assert.doesNotMatch(documents, /guide-index|guide-layout|Разделы справочника/);
+  assert.ok(documents.includes('return <div className="guide-app" ref={scroller} tabIndex={-1}>'));
   // A tile is always 4:3: the cover never gets the free ratio of an old frame.
   assert.ok(documents.includes("tileFraming(item.coverFraming)") && /ratio !== undefined \? \{ x: framing\.x, y: framing\.y, zoom: framing\.zoom \}/.test(documents));
   assert.match(styles, /\.guide-tile-cover img \{[^}]*object-position: 50% 50%/);

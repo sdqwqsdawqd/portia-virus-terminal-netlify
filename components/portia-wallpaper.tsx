@@ -62,23 +62,36 @@ const helices = [
   { x: 880, amplitude: 18, period: 144, opacity: 0.12 },
 ].map((column) => ({ ...column, ...helixColumn(column.x, 0, HELIX_LOOP * 3, column.amplitude, column.period) }));
 
-// Owner 2026-11-18 (round 2): the tilted helices are one parallel family, not a mix of angles and directions.
-// Same angle (axis from upper-left to lower-right), amplitude, period and opacity; the centres lie on the lines x - y = -200, -420, -640,
-// evenly spaced, in the lower left, so they never meet each other or the vertical columns (the leftmost column starts at x 862).
-// Each one is drawn along its own axis (five loops long, centred on its point, so its ends stay off screen) and drifts along it by one loop
-// in the same direction at the same pace as the vertical scroll. Only transform animates; reduced and off motion stop it through the global
+// Owner 2026-11-18 (round 3): more tilted helices, joined into one woven band. Five helices share angle, amplitude, period and opacity; their
+// centres step by (75, -75), so each one lies exactly beside its neighbour (75 x sqrt 2 = 106 units apart across the axis) on the lines
+// x - y = -740 ... -140, in the lower left, clear of the vertical columns (the leftmost starts at x 862). Their loops run in step, so at
+// every widest point (every half period) a thin dashed bridge joins a helix to the next one: the family reads as one lattice, not five lines.
+// Each helix is drawn along its own axis (five loops long, centred on its point, so its ends stay off screen) and the whole band drifts along
+// it by one loop at the pace of the vertical scroll. Only transform animates; reduced and off motion stop it through the global
 // `.desktop-wallpaper *` rule.
+const TILT_STEP = 75;
 const tiltedHelices = [
-  { x: 350, y: 550, angle: -45, amplitude: 20, period: 240, opacity: 0.12 },
-  { x: 240, y: 660, angle: -45, amplitude: 20, period: 240, opacity: 0.12 },
-  { x: 130, y: 770, angle: -45, amplitude: 20, period: 240, opacity: 0.12 },
-].map((helix) => ({ ...helix, ...helixColumn(0, -HELIX_LOOP * 2.5, HELIX_LOOP * 5, helix.amplitude, helix.period) }));
+  { x: 150, y: 890, angle: -45, amplitude: 20, period: 240, opacity: 0.13 },
+  { x: 225, y: 815, angle: -45, amplitude: 20, period: 240, opacity: 0.13 },
+  { x: 300, y: 740, angle: -45, amplitude: 20, period: 240, opacity: 0.13 },
+  { x: 375, y: 665, angle: -45, amplitude: 20, period: 240, opacity: 0.13 },
+  { x: 450, y: 590, angle: -45, amplitude: 20, period: 240, opacity: 0.13 },
+].map((helix, index, all) => {
+  const top = -HELIX_LOOP * 2.5, height = HELIX_LOOP * 5, gap = round(TILT_STEP * Math.SQRT2);
+  // A bridge from this helix's widest point to the facing widest point of the next one (none after the last).
+  const bridges = index === all.length - 1 ? "" : Array.from({ length: Math.floor(height / (helix.period / 2)) }, (_, step) => {
+    const y = top + helix.period / 4 + step * (helix.period / 2);
+    return `M${helix.amplitude} ${y}L${round(gap - helix.amplitude)} ${y}`;
+  }).join("");
+  return { ...helix, ...helixColumn(0, top, height, helix.amplitude, helix.period), bridges };
+});
 
 function WallpaperTiltedHelices() {
   return <svg className="desktop-wallpaper desktop-wallpaper-tilted" viewBox="0 0 1440 900" preserveAspectRatio="xMaxYMin slice">
     {tiltedHelices.map((helix) => <g key={`${helix.x}-${helix.y}`} transform={`translate(${helix.x} ${helix.y}) rotate(${helix.angle})`}>
       <g className="wallpaper-helix wallpaper-helix-drift" style={{ opacity: helix.opacity }}>
         <path d={helix.a} /><path d={helix.b} /><path d={helix.rungs} className="wallpaper-rungs" />
+        {helix.bridges ? <path d={helix.bridges} className="wallpaper-bridges" /> : null}
       </g>
     </g>)}
   </svg>;

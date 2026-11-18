@@ -832,15 +832,10 @@ const MAXIMIZED_WINDOWS: { app: string; outcome: "fixed" | "already conformant";
     assertFillsWindow(".info-library");
   } },
   { app: "guide", outcome: "fixed", check: () => {
-    // Owner 2026-11-18 (round 2) replaces the UAT 2026-11-16 stretched grid and full-pane article: a maximized «Справочник» is built like
-    // «Информация» — a sections index column (the columns of .info-library), compact fixed tiles that do not grow, the open card in an 820px reading column.
-    assert.equal(lastDeclaration(portiaCss, ".guide-index", "display"), "none", "the index is hidden outside a maximized window");
-    assert.equal(lastDeclaration(portiaCss, at(".guide-index"), "display", DESKTOP), "block");
-    assert.equal(lastDeclaration(portiaCss, at(".guide-layout"), "display", DESKTOP), "grid");
-    assert.equal(lastDeclaration(portiaCss, at(".guide-layout"), "grid-template-columns", DESKTOP), lastDeclaration(portiaCss, ".info-library", "grid-template-columns", DESKTOP));
-    assert.equal(lastDeclaration(portiaCss, at(".guide-layout"), "grid-template-columns", DESKTOP), "minmax(210px, 28%) minmax(0, 1fr)");
-    assert.equal(lastDeclaration(portiaCss, at(".guide-layout"), "height", DESKTOP), "calc(100% - 46px)");
-    assert.equal(lastDeclaration(portiaCss, at(".guide-app"), "height", DESKTOP), "100%");
+    // Owner 2026-11-18 (round 2) replaced the UAT 2026-11-16 stretched grid and full-pane article with compact fixed tiles that do not grow and
+    // the open card in an 820px reading column; round 3 drops the sections column again: the whole window holds the sections.
+    assert.doesNotMatch(portiaCss, /\.guide-index|\.guide-layout/, "no sections column");
+    assert.equal(lastDeclaration(portiaCss, ".guide-app", "height"), "calc(100% - 46px)");
     assert.equal(lastDeclaration(portiaCss, at(".guide-grid"), "grid-template-columns", DESKTOP), undefined, "the tiles keep their 176px");
     assert.equal(lastDeclaration(portiaCss, ".guide-grid", "grid-template-columns", DESKTOP), "repeat(auto-fill, minmax(min(100%, 176px), 176px))");
     assert.equal(lastDeclaration(portiaCss, ".guide-page", "max-width"), "820px");
