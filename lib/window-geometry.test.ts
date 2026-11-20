@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { dragGeometry, fitGeometry, resizeGeometry } from "./window-geometry.ts";
+import { dragGeometry, fitGeometry, previewRect, refitGeometry, resizeGeometry, titlebarReachable } from "./window-geometry.ts";
 
 const minimum = { width: 680, height: 320 };
 
@@ -37,28 +37,30 @@ test("dragging the title bar moves the window and keeps its size", () => {
   assert.deepEqual(dragGeometry(at, 50, -30, desk), { x: 150, y: 50, width: 600, height: 400 });
 });
 
-test("dragging far right keeps the full window inside the same eight-pixel inset as the left", () => {
-  const next = dragGeometry(at, 5000, 5000, desk);
-  assert.equal(next.x, desk.width - at.width - 8);
-  assert.equal(next.y, desk.height - at.height - 8);
+// owner 2026-11-20 OWN-06 supersedes 18-04 variant A: a window may leave the screen to the left, right and bottom.
+test("dragging far left puts the whole window behind the left edge, size unchanged", () => {
+  assert.deepEqual(dragGeometry({ x: 100, y: 100, width: 400, height: 300 }, -900, 0, { width: 1200, height: 800 }), { x: -400, y: 100, width: 400, height: 300 });
 });
 
-test("dragging past the top or left stops at the symmetric inset", () => {
-  const next = dragGeometry(at, -5000, -5000, desk);
-  assert.equal(next.x, 8);
-  assert.equal(next.y, 8);
+test("dragging far right or down stops where the window is entirely beyond the edge", () => {
+  const next = dragGeometry({ x: 100, y: 100, width: 400, height: 300 }, 5000, 5000, { width: 1200, height: 800 });
+  assert.deepEqual(next, { x: 1200, y: 800, width: 400, height: 300 });
 });
 
-test("a window wider than the workspace is fitted before horizontal dragging", () => {
-  assert.deepEqual(dragGeometry(at, 50, 0, { width: 120, height: 900 }), { x: 8, y: 80, width: 104, height: 400 });
+test("the title bar never goes above the workspace", () => {
+  assert.equal(dragGeometry({ x: 100, y: 100, width: 400, height: 300 }, 0, -500, { width: 1200, height: 800 }).y, 0);
 });
 
-test("resize then drag preserves the resized width and mirrored horizontal limits", () => {
+test("a window wider than the workspace keeps its size while dragging", () => {
+  assert.deepEqual(dragGeometry(at, 50, 0, { width: 120, height: 900 }), { x: 120, y: 80, width: 600, height: 400 });
+});
+
+test("resize then drag preserves the resized width and the new limits", () => {
   const bounds = { width: 1000, height: 700 };
   const resized = resizeGeometry({ x: 100, y: 80, width: 700, height: 400 }, "e", 120, 0, bounds, minimum);
   assert.equal(resized.width, 820);
-  assert.equal(dragGeometry(resized, 5000, 0, bounds).x, 172);
-  assert.equal(dragGeometry(resized, -5000, 0, bounds).x, 8);
+  assert.equal(dragGeometry(resized, 5000, 0, bounds).x, 1000);
+  assert.equal(dragGeometry(resized, -5000, 0, bounds).x, -820);
 });
 
 const roomy = { width: 1600, height: 900 };
@@ -87,67 +89,43 @@ test("on a screen smaller than the minimum, a resize gives way to the screen", (
   assert.deepEqual([next.width, next.height], [484, 284]);
 });
 
-test("drag and resize at the 8px inset, one pixel outside and one pixel inside stay inside it", () => {
-  const widthRoom = roomy.width - at.width - 8;
-  const heightRoom = roomy.height - at.height - 8;
-  for (const [dx, dy, x, y] of [
-    [8 - at.x, 8 - at.y, 8, 8], [7 - at.x, 7 - at.y, 8, 8], [9 - at.x, 9 - at.y, 9, 9],
-    [widthRoom - at.x, heightRoom - at.y, widthRoom, heightRoom], [widthRoom + 1 - at.x, heightRoom + 1 - at.y, widthRoom, heightRoom], [widthRoom - 1 - at.x, heightRoom - 1 - at.y, widthRoom - 1, heightRoom - 1],
-  ] as const) {
-    const next = dragGeometry(at, dx, dy, roomy);
-    assert.deepEqual([next.x, next.y], [x, y]);
-  }
+test("resize still keeps the 8px inset, one pixel outside and one pixel inside", () => {
   assert.equal(resizeGeometry(frame, "w", 8 - frame.x - 1, 0, roomy, minimum).x, 8);
   assert.equal(resizeGeometry(frame, "n", 0, 8 - frame.y - 1, roomy, minimum).y, 8);
   assert.equal(resizeGeometry(frame, "e", roomy.width - 8 - frame.x - frame.width + 1, 0, roomy, minimum).width, roomy.width - 8 - frame.x);
   assert.equal(resizeGeometry(frame, "s", 0, roomy.height - 8 - frame.y - frame.height + 1, roomy, minimum).height, roomy.height - 8 - frame.y);
 });
 
-test("a window taller than the workspace is fitted before vertical dragging", () => {
-  assert.deepEqual(dragGeometry(at, 0, 50, { width: 1600, height: 120 }), { x: 100, y: 8, width: 600, height: 104 });
+test("a window taller than the workspace keeps its size while dragging down", () => {
+  assert.deepEqual(dragGeometry(at, 0, 50, { width: 1600, height: 120 }), { x: 100, y: 120, width: 600, height: 400 });
 });
 
-test("fractional bounds (DPR 1.25) give equal unrounded insets", () => {
+test("fractional bounds (DPR 1.25): fit keeps equal unrounded insets, drag reaches the exact edge", () => {
   const dpr = { width: 1535.2, height: 763.2 };
   const fitted = fitGeometry({ x: 5000, y: 5000, width: 5000, height: 5000 }, dpr, minimum);
   assert.ok(Math.abs(fitted.x - (dpr.width - fitted.x - fitted.width)) < 1e-9);
   assert.ok(Math.abs(fitted.y - (dpr.height - fitted.y - fitted.height)) < 1e-9);
-  const far = dragGeometry({ x: 100, y: 100, width: 1535.2, height: 5000 }, 5000, 5000, dpr);
-  assert.ok(Math.abs(far.x - (dpr.width - far.x - far.width)) < 1e-9);
-  assert.ok(Math.abs(far.y - (dpr.height - far.y - far.height)) < 1e-9);
-  assert.equal(far.width, 1535.2 - 16);
-  const narrow = dragGeometry({ x: 100, y: 100, width: 1000, height: 700 }, 5000, 5000, dpr);
-  assert.ok(Math.abs(narrow.x - (dpr.width - 1000 - 8)) < 1e-9 && narrow.x !== Math.round(narrow.x));
+  const far = dragGeometry({ x: 100, y: 100, width: 1000, height: 700 }, 5000, 5000, dpr);
+  assert.equal(far.x, dpr.width);
+  assert.equal(far.y, dpr.height);
 });
 
-test("zero or tiny bounds never produce negative geometry", () => {
+test("zero or tiny bounds never produce a negative top or a smaller window", () => {
   for (const bounds of [{ width: 0, height: 0 }, { width: 10, height: 10 }]) {
     const next = dragGeometry(at, 50, 50, bounds);
-    assert.ok(next.x >= 0 && next.y >= 0 && next.width >= 0 && next.height >= 0);
+    assert.ok(next.y >= 0);
+    assert.equal(next.width, at.width);
+    assert.equal(next.height, at.height);
   }
 });
 
-// Phase 26 UI-11a (todo 2026-10-28, item 9): the reachable inset is the same 8px on the left and on the right,
-// from a mirrored start, for drag by -Δ/+Δ, for east/west resize to the edge, and for fitGeometry.
-test("mirrored start (Phase 26 UI-11a): left and right insets are equal for drag, resize and fit", () => {
+// Phase 26 UI-11a: the reachable inset of resize and fit is the same 8px on the left and on the right (drag no longer clamps, OWN-06).
+test("mirrored start (Phase 26 UI-11a): left and right insets are equal for resize and fit", () => {
   const near = (actual: number, expected: number, label: string) => assert.ok(Math.abs(actual - expected) < 1e-9, `${label}: ${actual} != ${expected}`);
   for (const bounds of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }, { width: 1536, height: 864 }, { width: 1535.2, height: 763.2 }]) {
     for (const size of [{ width: 680, height: 320 }, { width: 900, height: 600 }]) {
-      const starts = [8, bounds.width - size.width - 8];
-      for (const startX of starts) {
+      for (const startX of [8, bounds.width - size.width - 8]) {
         const start = { x: startX, y: 40, width: size.width, height: size.height };
-        for (const delta of [1, 50, 5000]) {
-          const left = dragGeometry(start, -delta, 0, bounds);
-          const right = dragGeometry(start, delta, 0, bounds);
-          assert.equal(left.width, size.width);
-          assert.equal(right.width, size.width);
-          assert.ok(left.x >= 8 - 1e-9 && bounds.width - (left.x + left.width) >= 8 - 1e-9, `drag -${delta} stays inside`);
-          assert.ok(right.x >= 8 - 1e-9 && bounds.width - (right.x + right.width) >= 8 - 1e-9, `drag +${delta} stays inside`);
-        }
-        const farLeft = dragGeometry(start, -5000, 0, bounds);
-        const farRight = dragGeometry(start, 5000, 0, bounds);
-        near(farLeft.x, 8, "far left inset");
-        near(bounds.width - (farRight.x + farRight.width), 8, "far right inset");
         const east = resizeGeometry(start, "e", 5000, 0, bounds, minimum);
         const west = resizeGeometry(start, "w", -5000, 0, bounds, minimum);
         near(bounds.width - (east.x + east.width), 8, "east resize inset");
@@ -157,10 +135,50 @@ test("mirrored start (Phase 26 UI-11a): left and right insets are equal for drag
       const fitRight = fitGeometry({ x: 5000, y: 40, ...size }, bounds, minimum);
       near(fitLeft.x, 8, "fit left inset");
       near(bounds.width - (fitRight.x + fitRight.width), 8, "fit right inset");
-      const mirroredLeft = fitGeometry({ x: 8, y: 40, ...size }, bounds, minimum);
-      const mirroredRight = fitGeometry({ x: bounds.width - size.width - 8, y: 40, ...size }, bounds, minimum);
-      near(mirroredLeft.x, 8, "fit keeps mirrored left start");
-      near(bounds.width - (mirroredRight.x + mirroredRight.width), 8, "fit keeps mirrored right start");
     }
   }
+});
+
+// OWN-06: reachability of the title bar, refit on browser resize, the taskbar preview map.
+const room = { width: 1200, height: 800 };
+
+test("titlebarReachable: at least 48px of the title bar stays inside, and the window is not below the bottom", () => {
+  assert.equal(titlebarReachable({ x: 100, y: 100, width: 400, height: 300 }, room), true);
+  assert.equal(titlebarReachable({ x: -352, y: 100, width: 400, height: 300 }, room), true, "exactly 48px visible");
+  assert.equal(titlebarReachable({ x: -353, y: 100, width: 400, height: 300 }, room), false);
+  assert.equal(titlebarReachable({ x: 1152, y: 100, width: 400, height: 300 }, room), true, "48px at the right edge");
+  assert.equal(titlebarReachable({ x: 1153, y: 100, width: 400, height: 300 }, room), false);
+  assert.equal(titlebarReachable({ x: 100, y: 799, width: 400, height: 300 }, room), true);
+  assert.equal(titlebarReachable({ x: 100, y: 800, width: 400, height: 300 }, room), false);
+});
+
+test("a window dragged by dragGeometry to the far edges is reported as unreachable", () => {
+  const start = { x: 100, y: 100, width: 400, height: 300 };
+  for (const [dx, dy] of [[-5000, 0], [5000, 0], [0, 5000]] as const) {
+    assert.equal(titlebarReachable(dragGeometry(start, dx, dy, room), room), false);
+  }
+});
+
+test("refitGeometry shrinks a window larger than the workspace and pulls it inside on that axis", () => {
+  assert.deepEqual(refitGeometry({ x: 300, y: 50, width: 2000, height: 400 }, { width: 960, height: 600 }, minimum), { x: 8, y: 50, width: 944, height: 400 });
+  assert.deepEqual(refitGeometry({ x: 300, y: 50, width: 700, height: 2000 }, { width: 960, height: 600 }, minimum), { x: 300, y: 8, width: 700, height: 584 });
+});
+
+test("refitGeometry leaves a partly carried window where it is", () => {
+  const away = { x: -300, y: 100, width: 700, height: 400 };
+  assert.deepEqual(refitGeometry(away, room, minimum), away);
+  const right = { x: 1100, y: 700, width: 700, height: 400 };
+  assert.deepEqual(refitGeometry(right, room, minimum), right);
+});
+
+test("refitGeometry only moves a window whose top went above the workspace", () => {
+  assert.deepEqual(refitGeometry({ x: 100, y: -40, width: 700, height: 400 }, room, minimum), { x: 100, y: 0, width: 700, height: 400 });
+});
+
+test("previewRect gives the window place in percent of the workspace, beyond the frame too", () => {
+  assert.deepEqual(previewRect({ x: 300, y: 200, width: 600, height: 400 }, room), { left: 25, top: 25, width: 50, height: 50 });
+  assert.deepEqual(previewRect({ x: -300, y: 0, width: 600, height: 400 }, room), { left: -25, top: 0, width: 50, height: 50 });
+  assert.equal(previewRect({ x: 1500, y: 100, width: 600, height: 400 }, room).left, 125);
+  assert.deepEqual(previewRect(undefined, room), { left: 0, top: 0, width: 100, height: 100 });
+  assert.deepEqual(previewRect({ x: 1, y: 1, width: 1, height: 1 }, { width: 0, height: 0 }), { left: 0, top: 0, width: 100, height: 100 });
 });

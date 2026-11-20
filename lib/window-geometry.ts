@@ -35,14 +35,55 @@ export function resizeGeometry(start: WindowGeometry, edge: ResizeEdge, dx: numb
   return { x, y, width, height };
 }
 
-/** Moves a window by its title bar; symmetric 8px inset on all four sides, so the title bar is always reachable. */
+
+/**
+ * Moves a window by its title bar. Owner 2026-11-20 (OWN-06) replaced the 8px inset of 18-04: the window may leave the
+ * screen to the left, right and bottom, down to being entirely beyond the edge; its top never goes above the workspace
+ * (the title bar stays grabbable) and its size never changes.
+ */
 export function dragGeometry(start: WindowGeometry, dx: number, dy: number, bounds: Bounds): WindowGeometry {
-  const width = Math.min(start.width, Math.max(0, bounds.width - margin * 2));
-  const height = Math.min(start.height, Math.max(0, bounds.height - margin * 2));
-  const clamp = (value: number, size: number, room: number) => {
-    const low = room >= margin * 2 ? margin : 0;
-    const high = room >= margin * 2 ? room - size - margin : 0;
-    return Math.min(Math.max(low, value), Math.max(low, high));
+  const { width, height } = start;
+  const x = Math.min(Math.max(-width, start.x + dx), Math.max(-width, bounds.width));
+  const y = Math.min(Math.max(0, start.y + dy), Math.max(0, bounds.height));
+  return { x, y, width, height };
+}
+
+export const titlebarHeight = 46;
+/** The least width of the title bar that must stay inside the screen for a window to count as reachable. */
+export const reachableTitlebarWidth = 48;
+
+/** True while enough of the title bar is on the screen to grab it: at least 48px across, and the window not below the bottom edge. */
+export function titlebarReachable(geometry: WindowGeometry, bounds: Bounds, height = titlebarHeight): boolean {
+  const visibleWidth = Math.min(geometry.x + geometry.width, bounds.width) - Math.max(geometry.x, 0);
+  const visibleHeight = Math.min(geometry.y + height, bounds.height) - Math.max(geometry.y, 0);
+  return visibleWidth >= reachableTitlebarWidth && visibleHeight > 0;
+}
+
+/**
+ * Refits after the browser was resized. Only a window larger than the workspace shrinks (and is pulled inside on that
+ * axis); a window the owner carried partly or wholly off the screen stays where it is. Its top never rises above the workspace.
+ */
+export function refitGeometry(geometry: WindowGeometry, bounds: Bounds, minimum: Bounds): WindowGeometry {
+  const fitted = fitGeometry(geometry, bounds, minimum);
+  const shrankWidth = fitted.width !== geometry.width;
+  const shrankHeight = fitted.height !== geometry.height;
+  return {
+    x: shrankWidth ? fitted.x : geometry.x,
+    y: shrankHeight ? fitted.y : Math.max(0, geometry.y),
+    width: fitted.width,
+    height: fitted.height,
   };
-  return { x: clamp(start.x + dx, width, bounds.width), y: clamp(start.y + dy, height, bounds.height), width, height };
+}
+
+export type PreviewRect = { left: number; top: number; width: number; height: number };
+
+/** Where the window sits on the taskbar preview map, in percent of the workspace; values below 0 or above 100 mean beyond the edge. */
+export function previewRect(geometry: WindowGeometry | undefined, bounds: Bounds): PreviewRect {
+  if (!geometry || bounds.width <= 0 || bounds.height <= 0) return { left: 0, top: 0, width: 100, height: 100 };
+  return {
+    left: (geometry.x / bounds.width) * 100,
+    top: (geometry.y / bounds.height) * 100,
+    width: (geometry.width / bounds.width) * 100,
+    height: (geometry.height / bounds.height) * 100,
+  };
 }

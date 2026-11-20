@@ -9,7 +9,7 @@ import { DesktopWallpaper } from "@/components/portia-wallpaper";
 import { accentIds, bootSeenStorageKey, desktopSettingsStorageKey, motionModes, spiderModes } from "@/lib/accent-boot";
 import { accentTokenNames, deriveAccentTokens } from "@/lib/accent-custom";
 import { CustomColorPicker } from "@/components/custom-color-picker";
-import { fitGeometry, type WindowGeometry } from "@/lib/window-geometry";
+import { fitGeometry, refitGeometry, titlebarReachable, type WindowGeometry } from "@/lib/window-geometry";
 import { exitedWindow, openedWindow, originOf, visibleWindowCount, windowAppears, type OpenOrigin, type WindowState } from "@/lib/window-open";
 import { acceptFetchedContent, isNewerAnswer, normalizeDocumentLinks, viewerKeyOf } from "@/lib/content-sync";
 import { CONTENT_CACHE_KEY, EMPLOYEES_CACHE_KEY, cacheMatchesSource, cacheMatchesViewer, clearDeviceContentCaches, deviceCacheSource, stampCacheSource } from "@/lib/device-cache";
@@ -1433,14 +1433,14 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
 
   const minimizeApp = (appId: AppId) => requestExit(appId, "minimize");
 
-  // Shrinking the browser refits every window so its frame and controls stay reachable.
+  // Shrinking the browser shrinks a window larger than the workspace; a window carried off the screen stays (OWN-06), the taskbar marks it.
   useEffect(() => {
     const refit = () => {
       if (window.innerWidth <= 900) return;
       const bounds = workspaceBounds();
       setWindows((state) => Object.fromEntries((Object.keys(state) as AppId[]).map((id) => {
         const geometry = state[id].geometry;
-        return [id, geometry ? { ...state[id], geometry: fitGeometry(geometry, bounds, minimumWindowSize(id)) } : state[id]];
+        return [id, geometry ? { ...state[id], geometry: refitGeometry(geometry, bounds, minimumWindowSize(id)) } : state[id]];
       })) as Record<AppId, WindowState>);
     };
     window.addEventListener("resize", refit);
@@ -1966,6 +1966,14 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
         : assistantTipIndex >= 0
           ? richTextLine(content.formattedText[portiaTextKey.assistantAdvice], content.assistantAdvice, assistantTipIndex)
           : undefined;
+  // OWN-06: a window whose title bar is out of reach is marked on its taskbar button.
+  const watchesReach = typeof document !== "undefined" && Object.values(windows).some((state) => state.open && !state.minimized && !state.maximized && Boolean(state.geometry));
+  const taskbarBounds = watchesReach ? workspaceBounds() : { width: 0, height: 0 };
+  const outOfReach = (app: AppId) => {
+    const state = windows[app];
+    if (!state.geometry || taskbarBounds.width <= 0) return false;
+    return state.open && !state.minimized && !state.maximized && !state.exiting && !titlebarReachable(state.geometry, taskbarBounds);
+  };
   return (
     <>
       <BootScreen visible={booting} level={viewerLevel} />
@@ -2261,7 +2269,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
             if (opening && event.detail === 0) window.requestAnimationFrame(() => startPanelRef.current?.querySelector("button")?.focus());
           }} aria-expanded={startOpen}><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA</span></button>
           <div className="taskbar-apps" role="toolbar" aria-label="Открытые программы">
-            {taskbarOrder.filter((app) => windows[app].open).map((app) => <button key={app} data-taskbar-app={app} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}${bouncingApps[app] ? " is-bouncing" : ""}`} type="button" onKeyDown={onTaskbarKeyDown(app)} onPointerDown={beginTaskbarDrag(app)} onPointerMove={moveTaskbarDrag} onPointerUp={endTaskbarDrag} onPointerCancel={endTaskbarDrag} onLostPointerCapture={endTaskbarDrag} onClick={(event) => {
+            {taskbarOrder.filter((app) => windows[app].open).map((app) => <button key={app} data-taskbar-app={app} data-unreachable={outOfReach(app) ? "true" : undefined} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}${bouncingApps[app] ? " is-bouncing" : ""}`} type="button" onKeyDown={onTaskbarKeyDown(app)} onPointerDown={beginTaskbarDrag(app)} onPointerMove={moveTaskbarDrag} onPointerUp={endTaskbarDrag} onPointerCancel={endTaskbarDrag} onLostPointerCapture={endTaskbarDrag} onClick={(event) => {
               if (suppressTaskbarClick.current) { suppressTaskbarClick.current = false; return; }
               // A window on its way out comes back, like a minimised one.
               if (windows[app].minimized || windows[app].exiting) openApp(app, originOf(event.currentTarget, "taskbar"));

@@ -485,13 +485,34 @@ test("PortiaImage sizes the box before the picture and keeps motion under the mo
   assert.match(styles, /html\[data-motion\]:not\(\[data-motion="off"\]\) \.portia-image img \{ transition: opacity var\(--motion-fast\)/);
 });
 
-test("window drag uses the live frame width and symmetric workspace bounds", () => {
+// Owner 2026-11-20 OWN-06 supersedes 18-04 variant A (the symmetric 8px inset): windows may leave the screen.
+test("window drag uses the live frame width and lets the window leave the screen (OWN-06)", () => {
   assert.ok(source.includes("width: rect.width"));
   assert.ok(source.includes("width: operation.parentWidth"));
   assert.ok(source.includes("dragGeometry(operation"));
   const geometry = readFileSync(new URL("./window-geometry.ts", import.meta.url), "utf8");
-  assert.ok(geometry.includes("bounds.width - width - margin"));
-  assert.doesNotMatch(geometry, /bounds\.width - 160/);
+  const drag = geometry.slice(geometry.indexOf("export function dragGeometry"), geometry.indexOf("export const titlebarHeight"));
+  assert.doesNotMatch(drag, /margin/, "no 8px inset in the drag rule");
+  assert.ok(drag.includes("Math.max(-width, start.x + dx)"), "the left limit is the window width beyond the edge");
+  assert.ok(drag.includes("Math.max(0, start.y + dy)"), "the top never rises above the workspace");
+  assert.ok(source.includes("windows may leave the screen, OWN-06"));
+});
+
+test("OWN-06: the taskbar marks a window whose title bar is out of reach, and a browser resize does not bring it back", () => {
+  assert.ok(source.includes('data-unreachable={outOfReach(app) ? "true" : undefined}'));
+  const start = source.indexOf("const outOfReach = ");
+  assert.ok(start >= 0);
+  const outOfReach = source.slice(start, start + 600);
+  assert.ok(outOfReach.includes("windows[app]"));
+  assert.ok(outOfReach.includes("!state.minimized && !state.maximized && !state.exiting"));
+  assert.ok(outOfReach.includes("!titlebarReachable(state.geometry, taskbarBounds)"));
+  const refit = source.slice(source.indexOf("const refit = () => {"), source.indexOf('window.addEventListener("resize", refit)'));
+  assert.ok(refit.includes("refitGeometry(geometry, bounds, minimumWindowSize(id))"));
+  assert.ok(!refit.includes(" fitGeometry(geometry"), "a partly carried window is not pulled back by the browser resize");
+  assert.ok(styles.includes(".taskbar-app[data-unreachable]::before"));
+  const markStart = styles.indexOf(".taskbar-app[data-unreachable]::before");
+  const mark = styles.slice(markStart, styles.indexOf("}", markStart));
+  assert.ok(mark.includes("border-bottom: 2px dashed var(--teal)"), "a dashed accent mark, no new colour");
 });
 
 test("shared shortcut hover feedback never translates the icon container", () => {

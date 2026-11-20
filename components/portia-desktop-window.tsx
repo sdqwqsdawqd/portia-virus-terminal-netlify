@@ -114,6 +114,7 @@ export function AppWindow({ app, state, active, onFocus, onMinimize, onMaximize,
     onGeometry(app, geometry);
   };
 
+  // The window keeps its size and may leave the screen to the left, right and bottom: windows may leave the screen, OWN-06.
   const moveDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     const operation = dragRef.current;
     if (!operation || operation.pointerId !== event.pointerId) return;

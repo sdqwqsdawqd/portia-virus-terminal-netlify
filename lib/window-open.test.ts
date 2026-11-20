@@ -215,6 +215,6 @@ test("a locked qualification window cannot be dragged, resized, maximised, close
 
 test("a resize of the browser refits every window that has a geometry", () => {
   const refit = source.slice(source.indexOf("const refit = () => {"), source.indexOf('window.addEventListener("resize", refit)'));
-  assert.ok(refit.includes("fitGeometry(geometry, bounds, minimumWindowSize(id))"));
+  assert.ok(refit.includes("refitGeometry(geometry, bounds, minimumWindowSize(id))"), "OWN-06: refit shrinks only; a window carried off the screen stays");
   assert.ok(refit.includes("Object.keys(state)"));
 });
