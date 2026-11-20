@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: v1.4
 milestone_name: Доступ и единый стиль
-current_phase: 26
-current_phase_name: Единый стиль сайта
+current_phase: "26.1"
+current_phase_name: Правки владельца
 status: executing
-stopped_at: Completed PORTIA-26-20-PLAN.md
-last_updated: "2026-11-20T11:12:22.926Z"
-last_activity: 2026-11-18
-last_activity_desc: Phase PORTIA-26 execution resumed (wave continue)
-state_head: 647e84ef125b7bb71b7d5652971fde8e512b3d96
+stopped_at: Completed 26.1-01-PLAN.md
+last_updated: "2026-11-20T12:22:30.305Z"
+last_activity: 2026-11-20
+last_activity_desc: Phase 26.1 execution started
+state_head: 49eb1fea0528351b30125de09471523d557bdcf2
 progress:
   total_phases: 8
   completed_phases: 3
-  total_plans: 70
-  completed_plans: 70
+  total_plans: 84
+  completed_plans: 71
 ---
 
 Total Phases: 6
@@ -26,14 +26,14 @@ Total Phases: 6
 See: .planning/PROJECT.md (updated 2026-11-09)
 
 **Core value:** Участник открывает сайт и сразу находит нужную запись; редактор правит её без потерь и без путаницы — и всё это выглядит как цельная «PORTIA OS».
-**Current focus:** Phase PORTIA-26 — Единый стиль сайта
+**Current focus:** Phase 26.1 — Правки владельца
 
 ## Current Position
 
-Phase: PORTIA-26 (Единый стиль сайта) — READY TO EXECUTE
-Plan: 14 of 14
-Status: Executing Phase PORTIA-26
-Last activity: 2026-11-18 - Completed quick task 261118-2ha: спокойные спирали, мини-редактор предметов, акцент без потери насыщенности, компактный «Справочник» как «Информация», поиск 10/25
+Phase: 26.1 (Правки владельца) — EXECUTING
+Plan: 2 of 14
+Status: Ready to execute
+Last activity: 2026-11-20 — Phase 26.1 execution started
 
 Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 — принятый риск; Phase 22 не закрыта)
 
@@ -111,6 +111,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-26 P18 | 35 min | 3 tasks | 4 files |
 | Phase PORTIA-26 P19 | 25 min | 2 tasks | 6 files |
 | Phase PORTIA-26 P20 | 25 min | 2 tasks | 3 files |
+| Phase 26.1 P01 | 25min | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -360,6 +361,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-26]: 26-18: кнопка корзины вируса — в div.virus-editor-head рядом с вкладками досье (margin-left: auto); вставка D-21 PORTIA-26-G10; e2e-селекторы .editor-section-column у Информации/Справочника устарели — отложено до линии Playwright (Phase 27)
 - [Phase PORTIA-26]: 26-19: выбор допуска — кнопка-сводка с раскрываемыми пластинами 32px (44px на телефоне); панель .etab-bar не сжимается (flex-shrink: 0) в колоночном flex «Повышения»
 - [Phase PORTIA-26]: [26-20] Названия классов в карточке вируса — целые слова: clamp шрифта 12-15px по ширине ячейки, слово под знак, сетка 3/2/1 колонка по ширине панели (380px/254px); правило шаблона D-65 не менялось
+- [Phase 26.1]: 26.1-01: Справочник — плитки до 5 в ряд (min 132px), кегль названия по длине через guideTileTitleFit, обложка 16:10, карточка и вложенные карточки на всю ширину; видео в карточке оставлено 820px (вопрос владельцу)
 
 ### Pending Todos
 
@@ -418,8 +420,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-17T02:52:12.645Z
-Stopped at: Completed PORTIA-26-20-PLAN.md
+Last session: 2026-11-20T12:22:29.044Z
+Stopped at: Completed 26.1-01-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
