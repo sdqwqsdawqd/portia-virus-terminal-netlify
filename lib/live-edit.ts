@@ -2,23 +2,35 @@ import type { ImageFraming } from "./image-framing.ts";
 import { broadcastFeed, questDateError, type BroadcastTab } from "./broadcasts.ts";
 import { MAX_BLOCKS, MAX_CONDITIONS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS, MAX_TABLE_ROWS } from "./content-limits.ts";
 import { addBroadcast, makeId, removeBroadcast, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation, removeRecycleFile, removeRecycledVirus } from "./editor-items.ts";
-import { classificationOptions, findGuide, findInfo, portiaTextKey, type Broadcast, type GuideBlock, type GuideCard, type InfoBlock, type InfoSubsection, type PortiaContent, type RichTextDocument, type ScientistLog, type Virus } from "./portia-content.ts";
+import { classificationOptions, findGuide, findInfo, portiaTextKey, type Broadcast, type GuideBlock, type GuideCard, type InfoBlock, type InfoSubsection, type PortiaContent, type RichTextDocument, type RichTextStyle, type ScientistLog, type Virus } from "./portia-content.ts";
 import { parseYoutubeId } from "./portia-content-normalize.ts";
 import { ACCESS_LEVELS } from "./access-levels.ts";
 import { splitEmbeddedMedia } from "./rich-text-media.ts";
+import { compactRuns, expandStyles, replaceRichTextRuns } from "./rich-text-style.ts";
 
 // LIVE-01..05 (26.1-10): the pure model of the live editing mode. The editor shows the visitor's own view of an app on the draft and edits it in place;
 // every function here edits the editor's draft inside one changeDraft call (the draft is already a copy), so one call is one undo step.
 
-/** The apps the live mode covers (owner 2026-11-20): «Поиск» and «Сотрудники» have no live mode. */
+/** The apps the live mode covers: exactly six (owner 2026-11-20); the tabs without one are in LIVE_EXCLUDED. */
 export type LiveApp = "guide" | "info" | "broadcasts" | "viruses" | "recycle" | "assistant";
-export const LIVE_EXCLUDED = ["search", "employees"] as const;
 
-/** The editor tabs that have a live mode so far, and the app each one shows. */
-export const LIVE_TABS = ["guide", "info", "broadcasts", "viruses", "recycle"] as const;
+/**
+ * The editor tabs that have no live mode, each with its reason. «Поиск» and «Сотрудники»: the owner's decision (2026-11-20; the drafts of the employees of 26.1-02 stay as they are, OWN-07).
+ * «Пользователи», «Повышение», «Доступ»: management tools - there is no view of the visitor that is edited in place, and their data is not in the shared draft.
+ */
+export const LIVE_EXCLUDED: Readonly<Record<"search" | "employees" | "users" | "promo" | "access", string>> = {
+  search: "решение владельца 2026-11-20",
+  employees: "решение владельца 2026-11-20",
+  users: "нет вида участника: инструмент управления, данные не в общем черновике",
+  promo: "нет вида участника: инструмент управления, данные не в общем черновике",
+  access: "нет вида участника: инструмент управления, данные не в общем черновике",
+};
+
+/** The editor tabs that have a live mode, and the app each one shows. */
+export const LIVE_TABS = ["guide", "info", "broadcasts", "viruses", "recycle", "assistant"] as const;
 export type LiveTab = (typeof LIVE_TABS)[number];
 
-const liveAppOfTab: Record<LiveTab, LiveApp> = { guide: "guide", info: "info", broadcasts: "broadcasts", viruses: "viruses", recycle: "recycle" };
+const liveAppOfTab: Record<LiveTab, LiveApp> = { guide: "guide", info: "info", broadcasts: "broadcasts", viruses: "viruses", recycle: "recycle", assistant: "assistant" };
 
 /** The app the live mode of an editor tab shows; null where the tab has none. */
 export function liveAppForTab(tab: string): LiveApp | null {
@@ -60,7 +72,81 @@ export type LiveTarget =
   | { kind: "log-text"; virusId: string; logId: string }
   /** «Корзина» (26.1-12): the name and the original place of a file are plain lines; its text is formatted text under portiaTextKey.recycle(fileId) (`caption`: the text under a picture). */
   | { kind: "recycle-file-name" | "recycle-file-location"; fileId: string }
-  | { kind: "recycle-file-text"; fileId: string; caption?: boolean };
+  | { kind: "recycle-file-text"; fileId: string; caption?: boolean }
+  /** «Вивьян» (26.1-13): one phrase of a group; the formatting of the whole group is one document under portiaTextKey.assistant<Group>, one line per phrase. */
+  | { kind: "assistant-phrase"; group: LivePhraseGroup; index: number };
+
+/** The four groups of the phrases of the assistant, in the order of the editor's tab: advice, after the patience is out, long idleness, activity. */
+export type LivePhraseGroup = "advice" | "offended" | "idle" | "activity";
+export const LIVE_PHRASE_GROUPS: readonly LivePhraseGroup[] = ["advice", "offended", "idle", "activity"];
+
+const PHRASE_KEY: Record<LivePhraseGroup, string> = { advice: portiaTextKey.assistantAdvice, offended: portiaTextKey.assistantOffended, idle: portiaTextKey.assistantIdle, activity: portiaTextKey.assistantActivity };
+
+/** The phrases of a group as the editor's field lists them. */
+export function livePhraseLines(draft: PortiaContent, group: LivePhraseGroup): string[] {
+  if (group === "advice") return draft.assistantAdvice ?? [];
+  if (group === "offended") return draft.assistantOffendedPhrases ?? [draft.assistantOffendedPhrase];
+  return (group === "idle" ? draft.assistantIdlePhrases : draft.assistantActivityPhrases) ?? [];
+}
+
+/** The document of the formatting of a group, fitted to its lines (one text, the lines joined by a line break); a plain document when nothing is stored. */
+function livePhraseDocument(draft: PortiaContent, group: LivePhraseGroup): RichTextDocument {
+  const text = livePhraseLines(draft, group).join("\n");
+  const stored = draft.formattedText[PHRASE_KEY[group]];
+  if (!stored?.runs?.length) return { runs: [{ text }] };
+  return stored.runs.map((run) => run.text).join("") === text ? stored : replaceRichTextRuns(stored, text);
+}
+
+/** The formatting of one phrase, cut out of the document of its group the way the visitor's bubble cuts it; undefined when the group has no stored formatting. */
+export function livePhraseSlice(draft: PortiaContent, group: LivePhraseGroup, index: number): RichTextDocument | undefined {
+  if (!draft.formattedText[PHRASE_KEY[group]]?.runs?.length) return undefined;
+  const line = readPhrases(draft, group)[index];
+  return line ? compactRuns(line.text, line.styles) : undefined;
+}
+
+type PhraseLine = { text: string; styles: RichTextStyle[] };
+
+/** The phrases of a group, each with the style of every one of its characters. */
+function readPhrases(draft: PortiaContent, group: LivePhraseGroup): PhraseLine[] {
+  const styles = expandStyles(livePhraseDocument(draft, group));
+  let offset = 0;
+  return livePhraseLines(draft, group).map((text) => {
+    const line = { text, styles: Array.from({ length: text.length }, (_, at) => styles[offset + at] ?? {}) };
+    offset += text.length + 1;
+    return line;
+  });
+}
+
+/** Writes the phrases back: the list in the shape of the editor's field and one document for the whole group (the lines joined by a line break, a plain separator between them). */
+function writePhrases(draft: PortiaContent, group: LivePhraseGroup, lines: PhraseLine[]): void {
+  const texts = lines.map((line) => line.text);
+  if (group === "advice") draft.assistantAdvice = texts;
+  else if (group === "offended") { draft.assistantOffendedPhrases = texts; draft.assistantOffendedPhrase = texts.find((item) => item.trim()) ?? ""; }
+  else if (group === "idle") draft.assistantIdlePhrases = texts;
+  else draft.assistantActivityPhrases = texts;
+  draft.formattedText[PHRASE_KEY[group]] = compactRuns(texts.join("\n"), lines.flatMap((line, at) => (at ? [{}, ...line.styles] : line.styles)));
+}
+
+/**
+ * Writes one phrase. `document` is its own formatting (from the format panel); without it the styles the phrase had are kept where the text is the same (as typing in the editor's field does).
+ * A line break makes a new phrase, as it does in the editor's field. False, and nothing written, when the phrase is gone.
+ */
+export function applyLivePhrase(draft: PortiaContent, target: Extract<LiveTarget, { kind: "assistant-phrase" }>, value: string, document?: RichTextDocument): boolean {
+  const lines = readPhrases(draft, target.group);
+  const old = lines[target.index];
+  if (!Number.isInteger(target.index) || !old) return false;
+  const own = document && document.runs.map((run) => run.text).join("") === value ? document : replaceRichTextRuns(compactRuns(old.text, old.styles), value);
+  const styles = expandStyles(own);
+  let offset = 0;
+  const parts = value.split("\n").map((text) => {
+    const part = { text, styles: styles.slice(offset, offset + text.length) };
+    offset += text.length + 1;
+    return part;
+  });
+  lines.splice(target.index, 1, ...parts);
+  writePhrases(draft, target.group, lines);
+  return true;
+}
 
 /** The five formatted texts of a virus card: section 02, section 04 and the three PPU metrics. */
 export type LiveVirusField = "external" | "physiology" | "ppu-health" | "ppu-speed" | "ppu-abilities";
@@ -135,7 +221,13 @@ export function liveTextKey(target: LiveTarget): string {
   if (target.kind === "mutation-description") return portiaTextKey.mutation(target.virusId, target.index);
   if (target.kind === "log-text") return `scientist:${target.logId}`;
   if (target.kind === "recycle-file-text") return portiaTextKey.recycle(target.fileId);
+  if (target.kind === "assistant-phrase") return PHRASE_KEY[target.group];
   return "";
+}
+
+/** The key the format panel knows a place by: the stored key, except a phrase, which has one key of its own (the stored formatting of its group is one document for all its phrases). */
+export function liveFormatKey(target: LiveTarget): string {
+  return target.kind === "assistant-phrase" ? `${PHRASE_KEY[target.group]}#${target.index}` : liveTextKey(target);
 }
 
 /** A switch of an entry of «Сводки»: shown to visitors (any entry), important (news only). */
@@ -294,6 +386,7 @@ export function applyLiveText(draft: PortiaContent, target: LiveTarget, value: s
       if (target.kind === "recycle-file-name") file.name = line; else if (target.kind === "recycle-file-location") file.location = line; else file.content = value;
       return true;
     }
+    case "assistant-phrase": return applyLivePhrase(draft, target, value);
     case "virus-text": {
       const virus = findLiveVirus(draft, target.virusId);
       if (!virus) return false;

@@ -2953,6 +2953,22 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
   .live-surface .archive-grid { height: auto; }
   .live-surface .virus-list .live-index-row { flex: 0 0 auto; min-width: 210px; }
 }
+/* 26.1-13: «Вивьян» — каждая фраза в своём пузыре участника (те же классы), группы по моменту, когда она говорит; пузырь лежит в потоке страницы, а не у значка помощника. */
+.assistant-live { display: grid; gap: 22px; max-width: 760px; min-width: 0; }
+.assistant-live-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; }
+.assistant-live-head h1, .assistant-live-group h2 { margin: 0; color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 700 13px/1.35 var(--sans); letter-spacing: .08em; text-transform: uppercase; }
+.assistant-live-group { display: grid; gap: 10px; min-width: 0; }
+.assistant-live-list { display: grid; gap: 10px; min-width: 0; }
+.assistant-live-row { position: relative; display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.live-surface .assistant-live-bubble { position: relative; right: auto; bottom: auto; flex: 1 1 auto; width: auto; max-width: 520px; min-width: 0; box-sizing: border-box; filter: none !important; animation: none !important; }
+.live-surface .assistant-live-bubble::after { display: none; }
+.live-surface .assistant-live-bubble .assistant-formatted-text, .live-surface .assistant-live-bubble .assistant-formatted-text * { font-family: var(--assistant-font) !important; font-size: 12px !important; font-weight: 700 !important; letter-spacing: .099em; line-height: 1.4; overflow-wrap: anywhere; }
+.live-surface .assistant-live-bubble .live-rich { min-height: 0; }
+.live-surface .assistant-live-bubble .live-rich-edit { gap: 6px; }
+.assistant-live-group[data-group="offended"] .assistant-live-bubble { border-color: #a76d34; }
+.assistant-live-group[data-group="offended"] .assistant-live-bubble > span:not(.assistant-formatted-text) { color: #efb84e; }
+.assistant-live-group[data-group="offended"] .assistant-formatted-text > span { color: #ffd98c !important; }
+.assistant-live-empty { padding: 10px 12px; border: 1px dashed var(--line); color: var(--muted); font: 12px var(--sans); }
 /* users-tab:start — Phase 22 «Пользователи» (USR-01..USR-09): sharp corners, values from 22-UI-SPEC, nothing else in the file changes */
 .tab-count { min-width: 24px; margin-left: 8px; padding: 0 8px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px/1.35 var(--mono); text-align: center; }
 .users-tab { display: grid; gap: 24px; min-width: 0; }

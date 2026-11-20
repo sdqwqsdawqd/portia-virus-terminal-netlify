@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS } from "./content-limits.ts";
-import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText, liveRecycleKeys } from "./live-edit.ts";
+import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText, liveRecycleKeys, applyLivePhrase, liveFormatKey, livePhraseLines, livePhraseSlice } from "./live-edit.ts";
 import { broadcastFeed } from "./broadcasts.ts";
 import { portiaTextKey, type PortiaContent } from "./portia-content.ts";
 
@@ -21,13 +21,13 @@ function draftWithGuide(): PortiaContent {
 }
 
 test("LIVE-01: the live mode knows its tabs; search and employees are not among them", () => {
-  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle"]);
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant"]);
   assert.equal(liveAppForTab("info"), "info", "26.1-11: «Информация» has its live mode");
   assert.equal(liveAppForTab("guide"), "guide");
   assert.equal(liveAppForTab("users"), null);
   assert.equal(liveAppForTab("search"), null, "owner 2026-11-20: no live search");
   assert.equal(liveAppForTab("employees"), null, "owner 2026-11-20: no live employees");
-  assert.deepEqual([...LIVE_EXCLUDED].sort(), ["employees", "search"]);
+  assert.deepEqual(Object.keys(LIVE_EXCLUDED).sort(), ["access", "employees", "promo", "search", "users"]);
 });
 
 test("LIVE-02: a section title and a card title change in place and nothing else", () => {
@@ -541,7 +541,7 @@ function draftWithBroadcasts(): PortiaContent {
 }
 
 test("LIVE-01 (26.1-11): «Сводка» has its live mode", () => {
-  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle"]);
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant"]);
   assert.equal(liveAppForTab("broadcasts"), "broadcasts");
 });
 
@@ -895,7 +895,7 @@ function draftWithBin(): PortiaContent {
 
 test("LIVE-01 (26.1-12): the tab «Корзина» has its live mode", () => {
   assert.equal(liveAppForTab("recycle"), "recycle");
-  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle"]);
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant"]);
 });
 
 test("LIVE-02 (26.1-12): the name, the place and the text of a file of the bin change in place; the text is kept whole and keyed like the editor's field", () => {
@@ -1014,4 +1014,101 @@ test("LIVE-01/02/05 (26.1-12): the live «Корзина» draws the visitor's c
   assert.doesNotMatch(read("components/portia-desktop-dossier.tsx"), /embedMedia=\{false\}/); // planner-discipline-allow: embedMedia={false}
   assert.match(read("components/portia-virus-card.tsx"), /embedMedia = true/);
   assert.match(read("components/portia-virus-card.tsx"), /useLiveEdit\("recycle"\)/, "a virus of the bin asks for the tools of the bin");
+});
+
+// ---- 26.1-13: «Вивьян» (the phrases of the assistant) and the border of the live mode ----
+
+function draftWithAssistant(): PortiaContent {
+  return {
+    assistantAdvice: ["Первый совет", "Второй совет", "Третий совет"],
+    assistantOffendedPhrase: "Обида один",
+    assistantOffendedPhrases: ["Обида один", "Обида два"],
+    assistantIdlePhrases: ["Бездействие"],
+    assistantActivityPhrases: ["Активность"],
+    assistantPatienceSeconds: 3,
+    assistantPatienceVariants: [3],
+    assistantIdleEnabled: true,
+    assistantActivityEnabled: true,
+    assistantAutoTimingMode: "random",
+    assistantAutoIntervalSeconds: 60,
+    assistantAutoMinSeconds: 45,
+    assistantAutoMaxSeconds: 120,
+    // the first line is bold, the third is red: an edit of the second must keep both
+    formattedText: { [portiaTextKey.assistantAdvice]: { runs: [{ text: "Первый совет", style: { fontWeight: 700 } }, { text: "\nВторой совет\n" }, { text: "Третий совет", style: { color: "#ff0000" } }] } },
+  } as unknown as PortiaContent;
+}
+
+test("LIVE-01 (26.1-13): the live mode has exactly six apps; the five others are named with the reason", () => {
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant"]);
+  assert.equal(liveAppForTab("assistant"), "assistant");
+  for (const tab of ["search", "employees", "users", "promo", "access"]) assert.equal(liveAppForTab(tab), null, tab);
+  assert.match(LIVE_EXCLUDED.search, /решение владельца 2026-11-20/);
+  assert.match(LIVE_EXCLUDED.employees, /решение владельца 2026-11-20/);
+  for (const tab of ["users", "promo", "access"] as const) assert.match(LIVE_EXCLUDED[tab], /нет вида участника/, tab);
+  // every tab of the editor is either live or excluded, never both and never neither
+  for (const tab of ["viruses", "info", "guide", "broadcasts", "recycle", "search", "assistant", "employees", "users", "promo", "access"]) {
+    assert.equal((LIVE_TABS as readonly string[]).includes(tab) !== (tab in LIVE_EXCLUDED), true, tab);
+  }
+});
+
+test("LIVE-02/03 (26.1-13): a phrase changes in place; only its line changes and the styles of the other lines stay", () => {
+  const draft = draftWithAssistant();
+  assert.equal(applyLiveText(draft, { kind: "assistant-phrase", group: "advice", index: 1 }, "Новый совет"), true);
+  assert.deepEqual(draft.assistantAdvice, ["Первый совет", "Новый совет", "Третий совет"]);
+  const doc = draft.formattedText[portiaTextKey.assistantAdvice];
+  assert.equal(doc.runs.map((run) => run.text).join(""), "Первый совет\nНовый совет\nТретий совет");
+  assert.deepEqual(doc.runs[0], { text: "Первый совет", style: { fontWeight: 700 } });
+  assert.deepEqual(doc.runs[doc.runs.length - 1], { text: "Третий совет", style: { color: "#ff0000" } });
+  assert.deepEqual(draft.assistantOffendedPhrases, ["Обида один", "Обида два"], "another group is untouched");
+});
+
+test("LIVE-02 (26.1-13): a phrase with its own formatting writes that formatting into the group document at its place", () => {
+  const draft = draftWithAssistant();
+  assert.equal(applyLivePhrase(draft, { kind: "assistant-phrase", group: "advice", index: 1 }, "Второй совет", { runs: [{ text: "Второй", style: { color: "#00ff00" } }, { text: " совет" }] }), true);
+  const doc = draft.formattedText[portiaTextKey.assistantAdvice];
+  assert.deepEqual(doc.runs.map((run) => [run.text, run.style]), [["Первый совет", { fontWeight: 700 }], ["\n", undefined], ["Второй", { color: "#00ff00" }], [" совет\n", undefined], ["Третий совет", { color: "#ff0000" }]]);
+  assert.deepEqual(livePhraseSlice(draft, "advice", 1)?.runs, [{ text: "Второй", style: { color: "#00ff00" } }, { text: " совет" }], "the slice of the line is what the visitor's bubble draws");
+  assert.equal(livePhraseSlice(draftWithAssistant(), "idle", 0), undefined, "no stored formatting: the plain text is drawn");
+});
+
+test("LIVE-02 (26.1-13): the group «обида» keeps the single phrase in step with the list, as the editor's field does", () => {
+  const draft = draftWithAssistant();
+  assert.equal(applyLiveText(draft, { kind: "assistant-phrase", group: "offended", index: 0 }, "Я в обиде"), true);
+  assert.deepEqual(draft.assistantOffendedPhrases, ["Я в обиде", "Обида два"]);
+  assert.equal(draft.assistantOffendedPhrase, "Я в обиде");
+  assert.deepEqual(livePhraseLines(draft, "idle"), ["Бездействие"]);
+  assert.deepEqual(livePhraseLines(draft, "activity"), ["Активность"]);
+});
+
+test("LIVE-02 (26.1-13): a gone phrase changes nothing and says so; a line break in a phrase makes a new phrase", () => {
+  const draft = draftWithAssistant();
+  const before = JSON.stringify(draft);
+  assert.equal(applyLiveText(draft, { kind: "assistant-phrase", group: "advice", index: 3 }, "x"), false);
+  assert.equal(applyLiveText(draft, { kind: "assistant-phrase", group: "advice", index: -1 }, "x"), false);
+  assert.equal(JSON.stringify(draft), before);
+  assert.equal(applyLiveText(draft, { kind: "assistant-phrase", group: "advice", index: 2 }, "Третий\nчетвёртый"), true);
+  assert.deepEqual(draft.assistantAdvice, ["Первый совет", "Второй совет", "Третий", "четвёртый"]);
+});
+
+test("LIVE-05 (26.1-13): the text key of a phrase is the stored key of its group, the format key is one per phrase", () => {
+  assert.equal(liveTextKey({ kind: "assistant-phrase", group: "advice", index: 2 }), portiaTextKey.assistantAdvice);
+  assert.equal(liveTextKey({ kind: "assistant-phrase", group: "offended", index: 0 }), portiaTextKey.assistantOffended);
+  assert.equal(liveTextKey({ kind: "assistant-phrase", group: "idle", index: 0 }), portiaTextKey.assistantIdle);
+  assert.equal(liveTextKey({ kind: "assistant-phrase", group: "activity", index: 0 }), portiaTextKey.assistantActivity);
+  const keys = [0, 1, 2].map((index) => liveFormatKey({ kind: "assistant-phrase", group: "advice", index }));
+  assert.equal(new Set(keys).size, 3, "two phrases never share a format key, so the format panel never mixes their lines");
+  assert.equal(liveFormatKey({ kind: "virus-name", virusId: "v" }), "");
+});
+
+test("LIVE-01/02/05 (26.1-13): the live «Вивьян» draws the bubbles of the visitor in four groups, in the provider of the seam", () => {
+  const seam = read("components/portia-editor-live.tsx");
+  assert.match(seam, /data-live-app="assistant"/);
+  assert.match(seam, /function AssistantSurface\(/);
+  assert.match(seam, /className="assistant-bubble/, "the bubble carries the visitor's own class");
+  assert.match(seam, /assistant-formatted-text/, "the text of a phrase is drawn with the visitor's class");
+  assert.match(seam, /kind: "assistant-phrase"/);
+  assert.doesNotMatch(seam, /embedMedia=\{false\}/); // planner-discipline-allow: embedMedia={false}
+  assert.match(seam, /<FormattedText\b[^>]*eagerMedia/, "a GIF of a phrase at rest is loaded at once and plays");
+  assert.match(seam, /<EmbeddedMediaStrip text=\{text\} eager \/>/, "while a phrase is edited its GIFs stay on show under the field");
+  assert.match(seam, /if \(app === "assistant"\) return <AssistantSurface bridge=\{bridge\} \/>;/);
 });

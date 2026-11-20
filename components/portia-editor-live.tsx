@@ -13,8 +13,8 @@ import { EmbeddedMediaStrip, FormattedText } from "@/components/portia-virus-car
 import { localDateKey, type BroadcastTab } from "@/lib/broadcasts";
 import type { ImageFraming } from "@/lib/image-framing";
 import {
-  applyLiveAdd, applyLiveCards, applyLiveChoice, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveLogText, applyLiveMove, applyLiveRemove, applyLiveText, findLiveVirus, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveNewId, liveRecycleKeys, liveRemovedKeys, liveTextKey,
-  type LiveAddKind, type LiveApp, type LiveCardsTarget, type LiveChoiceTarget, type LiveContainer, type LiveDateTarget, type LiveFlagTarget, type LiveImageTarget, type LiveList, type LiveRemovable, type LiveTarget,
+  applyLiveAdd, applyLiveCards, applyLiveChoice, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveLogText, applyLiveMove, applyLivePhrase, applyLiveRemove, applyLiveText, findLiveVirus, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveFormatKey, liveNewId, livePhraseLines, livePhraseSlice, liveRecycleKeys, liveRemovedKeys, liveTextKey, LIVE_PHRASE_GROUPS,
+  type LiveAddKind, type LiveApp, type LivePhraseGroup, type LiveCardsTarget, type LiveChoiceTarget, type LiveContainer, type LiveDateTarget, type LiveFlagTarget, type LiveImageTarget, type LiveList, type LiveRemovable, type LiveTarget,
 } from "@/lib/live-edit";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
 import { findGuide, findInfo, type PortiaContent, type RichTextDocument } from "@/lib/portia-content";
@@ -66,6 +66,7 @@ export const liveCopy = {
     "recycle-file-name": "Имя файла",
     "recycle-file-location": "Исходное расположение",
     "recycle-file-text": "Текст файла",
+    "assistant-phrase": "Фраза помощника",
   } satisfies Record<LiveTarget["kind"], string>,
   placeholders: {
     "guide-section-title": "Название раздела",
@@ -99,6 +100,7 @@ export const liveCopy = {
     "recycle-file-name": "Имя файла",
     "recycle-file-location": "Расположение",
     "recycle-file-text": "Нажмите, чтобы написать",
+    "assistant-phrase": "Нажмите, чтобы написать",
   } satisfies Record<LiveTarget["kind"], string>,
   dateStart: "Начало",
   dateEnd: "Окончание",
@@ -120,6 +122,10 @@ export const liveCopy = {
   infectedLabel: "Фото после заражения",
   choiceEmpty: "Не указан",
   trashEmpty: "Корзина пуста",
+  assistantTitle: "Вивьян",
+  assistantGroups: { advice: "Советы", offended: "Фразы обиды", idle: "Фразы бездействия", activity: "Фразы активности" } satisfies Record<LivePhraseGroup, string>,
+  assistantHeadings: { advice: "ВИВЬЯН // СОВЕТ", offended: "ВИВЬЯН // ОБИДЕЛАСЬ", idle: "ВИВЬЯН // ВЫ ЗДЕСЬ?", activity: "ВИВЬЯН // НАБЛЮДЕНИЕ" } satisfies Record<LivePhraseGroup, string>,
+  assistantEmpty: "Фраз пока нет",
   richEmpty: "Нажмите, чтобы написать",
   lists: { "guide-sections": "раздел", "guide-cards": "карточка", "guide-blocks": "блок", "info-sections": "раздел", "info-subsections": "подраздел", "info-blocks": "блок", viruses: "вирус", recycle: "файл" } satisfies Record<LiveList["kind"], string>,
   removeLabel: "Удалить",
@@ -191,6 +197,7 @@ export function LiveSurface({ tab, bridge }: { tab: string; bridge: LiveEditorBr
   if (app === "broadcasts") return <BroadcastsSurface bridge={bridge} />;
   if (app === "viruses") return <VirusesSurface bridge={bridge} />;
   if (app === "recycle") return <RecycleSurface bridge={bridge} />;
+  if (app === "assistant") return <AssistantSurface bridge={bridge} />;
   return null;
 }
 
@@ -378,6 +385,36 @@ function RecycleSurface({ bridge }: { bridge: LiveEditorBridge }) {
   </div>;
 }
 
+/**
+ * «Вивьян» as the visitor sees her: every phrase is her bubble (the visitor's own classes and the visitor's FormattedText, so a GIF of a phrase plays), grouped by the
+ * moment she says it. A phrase is edited in place of its bubble; the formatting of a group is one document, which the model cuts per phrase (lib/live-edit.ts).
+ */
+function AssistantSurface({ bridge }: { bridge: LiveEditorBridge }) {
+  const live = createLiveApi("assistant", bridge);
+  return <div className="live-surface" data-live-app="assistant">
+    <LiveEditContext.Provider value={live}>
+      <div className="assistant-live">
+        <div className="assistant-live-head"><h1>{liveCopy.assistantTitle}</h1></div>
+        {LIVE_PHRASE_GROUPS.map((group) => {
+          const lines = livePhraseLines(bridge.draft, group);
+          return <section key={group} className="assistant-live-group" data-group={group} aria-label={liveCopy.assistantGroups[group]}>
+            <h2>{liveCopy.assistantGroups[group]}</h2>
+            <div className="assistant-live-list">
+              {lines.map((line, index) => <div key={index} className="assistant-live-row">
+                <div className="assistant-bubble assistant-live-bubble">
+                  <span>{liveCopy.assistantHeadings[group]}</span>
+                  {live.rich({ kind: "assistant-phrase", group, index }, { text: line, document: livePhraseSlice(bridge.draft, group, index), className: "assistant-formatted-text" })}
+                </div>
+              </div>)}
+              {!lines.length && <div className="assistant-live-empty empty-state"><span>{liveCopy.assistantEmpty}</span></div>}
+            </div>
+          </section>;
+        })}
+      </div>
+    </LiveEditContext.Provider>
+  </div>;
+}
+
 /** The tools of the live mode of `app`, over the editor's bridge. */
 /** `onAdded` hears of every element the bar adds (its kind, its id, the container), so a surface can put the new section or subsection on show. */
 export type LiveHooks = { onAdded?: (kind: LiveAddKind, id: string, container: LiveContainer) => void };
@@ -510,7 +547,8 @@ export function LiveFlag({ bridge, target, checked }: { bridge: LiveEditorBridge
 }
 
 /** The display area of the editor's field for a place: it names the look (light paper or dark) the text has for the visitor. */
-function richAreaOf(target: LiveTarget): "lead" | "metric" | "mutation" | "scientist" | "caption" | "trash" | "broadcast" | "info" {
+function richAreaOf(target: LiveTarget): "lead" | "metric" | "mutation" | "scientist" | "caption" | "trash" | "broadcast" | "info" | "assistant" {
+  if (target.kind === "assistant-phrase") return "assistant";
   if (target.kind === "broadcast-body") return "broadcast";
   if (target.kind === "virus-text") return target.field.startsWith("ppu-") ? "metric" : "lead";
   if (target.kind === "mutation-description") return "mutation";
@@ -526,7 +564,10 @@ function richAreaOf(target: LiveTarget): "lead" | "metric" | "mutation" | "scien
 export function LiveRich({ bridge, target, text, document, className }: { bridge: LiveEditorBridge; target: LiveTarget; text: string; document?: RichTextDocument; className?: string }) {
   const [editing, setEditing] = useState(false);
   const key = liveTextKey(target);
-  useEffect(() => { if (editing) findFormatField(key)?.focus(); }, [editing, key]);
+  // A phrase of the assistant is a line of the document of its group: its own format key keeps the format panel from mixing it with its neighbours.
+  const formatKey = liveFormatKey(target);
+  const phrase = target.kind === "assistant-phrase";
+  useEffect(() => { if (editing) findFormatField(formatKey)?.focus(); }, [editing, formatKey]);
   if (!editing) {
     return <div
       className="live-rich live-editable"
@@ -536,10 +577,17 @@ export function LiveRich({ bridge, target, text, document, className }: { bridge
       onClick={() => setEditing(true)}
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setEditing(true); } }}
       onFocus={(event) => { if (event.currentTarget.matches(":focus-visible")) setEditing(true); }}
-    ><FormattedText className={className} text={text} document={document} emptyText={liveCopy.richEmpty} /></div>;
+    ><FormattedText className={className} text={text} document={document} emptyText={liveCopy.richEmpty} eagerMedia /></div>;
   }
   return <div
     className="live-rich-edit"
+    // One line, one phrase: Enter ends the edit instead of breaking the line (a pasted line break still makes a new phrase, see applyLivePhrase).
+    onKeyDownCapture={phrase ? (event) => {
+      if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setEditing(false);
+    } : undefined}
     onBlur={(event) => {
       const next = event.relatedTarget instanceof Element ? event.relatedTarget : null;
       // The format panel and the field's own parts keep the field open.
@@ -553,12 +601,14 @@ export function LiveRich({ bridge, target, text, document, className }: { bridge
       tall
       value={text}
       document={document}
-      formatKey={key}
+      formatKey={formatKey}
       onActivate={bridge.activateFormatter}
-      // The text of a scientist record lives in the record (content and richContent), the other formatted texts in draft.formattedText under their key.
+      // The text of a scientist record lives in the record (content and richContent), a phrase of the assistant in the document of its group, the other formatted texts in draft.formattedText under their key.
       onChange={(value, nextDocument) => target.kind === "log-text"
         ? bridge.changeDraft((next) => { applyLiveLogText(next, target, value, nextDocument); })
-        : bridge.changeFormattedText(key, value, nextDocument, (next, written) => { applyLiveText(next, target, written); })}
+        : target.kind === "assistant-phrase"
+          ? bridge.changeDraft((next) => { applyLivePhrase(next, target, value, nextDocument); })
+          : bridge.changeFormattedText(key, value, nextDocument, (next, written) => { applyLiveText(next, target, written); })}
     />
     <EmbeddedMediaStrip text={text} eager />
   </div>;
