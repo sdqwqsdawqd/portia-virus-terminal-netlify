@@ -48,12 +48,15 @@ export const classificationOptions = {
     { value: "Тезей", level: 2 },
     { value: "Абраксас", level: 3 },
   ],
+  // OWN-03 (owner 2026-11-20): six routes, then «Неизвестно» as a seventh choice that excludes the others (26.1-03, option-b).
+  // The same names as TRANSMISSION_CHOICES in lib/transmission-routes.ts (lib/transmission-routes.test.ts keeps them equal).
   transmission: [
-    { value: "Воздушно-капельный" },
-    { value: "Воздушно-пылевой" },
+    { value: "Аэрозольный" },
     { value: "Контактно-бытовой" },
     { value: "Фекально-оральный" },
-    { value: "Половой" },
+    { value: "Трансмиссивный" },
+    { value: "Гемоконтактный" },
+    { value: "Половой путь" },
     { value: "Неизвестно" },
   ],
   escapeRisk: [
@@ -112,6 +115,7 @@ export type Virus = {
   classification: {
     danger: string;
     spread: string;
+    // OWN-03: a list of routes joined by ", " (2026-11-20); read and write it only through lib/transmission-routes.ts.
     transmission: string;
     escapeRisk: string;
     mind: string;
