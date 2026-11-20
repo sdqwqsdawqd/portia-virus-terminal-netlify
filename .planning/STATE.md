@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: "26.1"
 current_phase_name: Правки владельца
 status: executing
-stopped_at: Completed 26.1-07-PLAN.md
-last_updated: "2026-11-20T16:55:41.339Z"
+stopped_at: Completed 26.1-08-PLAN.md
+last_updated: "2026-11-20T17:08:23.345Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 26.1 execution started
-state_head: b6f04a4a03007e876c1c0c32bd945803618b6938
+state_head: ecc761a7e2164cc0c74d4972d5d8f1a25d12dede
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 84
-  completed_plans: 77
+  completed_plans: 78
 ---
 
 Total Phases: 6
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: 26.1 (Правки владельца) — EXECUTING
-Plan: 8 of 14
+Plan: 9 of 14
 Status: Ready to execute
 Last activity: 2026-11-20 — Phase 26.1 execution started
 
@@ -118,6 +118,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase 26.1 P05 | n/a | 2 tasks | 7 files |
 | Phase 26.1 P06 | n/a | 3 tasks | 7 files |
 | Phase 26.1 P07 | n/a | 3 tasks | 9 files |
+| Phase 26.1 P08 | n/a | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -375,6 +376,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 26.1]: 26.1-06: typed text inherits a style only when the characters on both sides share it; panel size is stored with its place under portia-format-panel-v1; the 44px header row stays (UI-05)
 - [Phase 26.1]: 26.1-07: окно доступно при >=48px заголовка по горизонтали и не ниже нижнего края; refit уменьшает только окно больше области, унесённое остаётся
 - [Phase 26.1]: 26.1-07: РАЗВЕРНУТЬ из превью возвращает недоступное окно внутрь экрана перед разворачиванием
+- [Phase 26.1]: 26.1-08: ручки порядка скрыты (position absolute, clip-path), перенос удержанием 400 мс/6px на зоне строки; ColumnSwapHandle перенесён в шов вставкой PORTIA-26.1-HOLD
 
 ### Pending Todos
 
@@ -433,8 +435,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-20T16:55:40.123Z
-Stopped at: Completed 26.1-07-PLAN.md
+Last session: 2026-11-20T17:08:22.078Z
+Stopped at: Completed 26.1-08-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
