@@ -392,27 +392,54 @@ export function DossierTabs({ active, changed, onSelect, tabs }: { active: Dossi
   </nav>;
 }
 
-// OWN-03 (owner 2026-11-20): the routes of transmission are several, so the field is a group of checkboxes, not a select. The value stays the one
-// canonical string of lib/transmission-routes.ts; the choices, their exclusive «Неизвестно» and the string itself are that module's, not ours.
+// OWN-03 (owner 2026-11-20; clarification 12, 26.1-15): the routes of transmission are several, so the field is a compact drop-down: one line with the chosen routes,
+// and on a press a panel of checkboxes. The value stays the one canonical string of lib/transmission-routes.ts; the choices, their exclusive «Неизвестно» and
+// the string itself are that module's, not ours.
 export function TransmissionRoutesField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const toggle = useRef<HTMLButtonElement>(null);
+  const labelId = useId();
+  const valueId = useId();
+  const panelId = useId();
   const selected = parseTransmissionRoutes(value);
   const known = new Set(TRANSMISSION_CHOICES.map((choice) => choice.name));
   const extras = selected.filter((item) => !known.has(item));
-  return <fieldset className="route-picker">
-    <legend>{label}</legend>
-    {TRANSMISSION_CHOICES.map((choice) => {
-      const icon = classificationIconFor(choice.name);
-      return <label key={choice.name} className="route-option">
-        <input type="checkbox" checked={selected.includes(choice.name)} onChange={() => onChange(toggleTransmissionRoute(value, choice.name))} />
-        {icon && <PortiaIcon name={icon} className="route-icon" />}
-        <span className="route-option-text"><strong>{choice.name}</strong><small>{choice.description}</small></span>
-      </label>;
-    })}
-    {extras.map((extra) => <div key={extra} className="route-option route-extra">
-      <span className="route-option-text"><strong>{extra}</strong></span>
-      <button type="button" className="secondary-control" onClick={() => onChange(formatTransmissionRoutes(selected.filter((item) => item !== extra)))}>Убрать</button>
-    </div>)}
-  </fieldset>;
+  // A press anywhere outside closes the panel; a press inside it never does.
+  useEffect(() => {
+    if (!open) return;
+    const onOutside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false); };
+    document.addEventListener("pointerdown", onOutside);
+    return () => document.removeEventListener("pointerdown", onOutside);
+  }, [open]);
+  return <div className="route-dropdown classification-editor-field" ref={root}
+    onKeyDown={(event) => { if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); setOpen(false); toggle.current?.focus(); } }}
+    onBlur={(event) => { if (open && event.relatedTarget && !root.current?.contains(event.relatedTarget as Node)) setOpen(false); }}>
+    <span className="route-dropdown-label" id={labelId}>{label}</span>
+    <button type="button" className="route-dropdown-toggle" ref={toggle} aria-haspopup="true" aria-expanded={open} aria-controls={open ? panelId : undefined} aria-labelledby={`${labelId} ${valueId}`} onClick={() => setOpen((was) => !was)}>
+      <span className="route-dropdown-value" id={valueId}>
+        {selected.length === 0 ? <em>Не указан</em> : selected.map((name) => {
+          const icon = classificationIconFor(name);
+          return <span className="route-dropdown-chosen" key={name}>{icon && <PortiaIcon name={icon} className="route-icon" />}{name}</span>;
+        })}
+      </span>
+      <span className="route-dropdown-chevron" aria-hidden="true">{open ? "▴" : "▾"}</span>
+    </button>
+    {open && <div className="route-dropdown-panel" id={panelId} role="group" aria-labelledby={labelId}>
+      {TRANSMISSION_CHOICES.map((choice) => {
+        const icon = classificationIconFor(choice.name);
+        return <label key={choice.name} className="route-option">
+          <input type="checkbox" checked={selected.includes(choice.name)} onChange={() => onChange(toggleTransmissionRoute(value, choice.name))} />
+          {icon && <PortiaIcon name={icon} className="route-icon" />}
+          <span className="route-option-text"><strong>{choice.name}</strong><small>{choice.description}</small></span>
+        </label>;
+      })}
+      {extras.map((extra) => <div key={extra} className="route-option route-extra">
+        <span className="route-option-text"><strong>{extra}</strong></span>
+        <button type="button" className="secondary-control" onClick={() => onChange(formatTransmissionRoutes(selected.filter((item) => item !== extra)))}>Убрать</button>
+      </div>)}
+    </div>}
+  </div>;
 }
 
 export function ClassificationField({ label, classificationKey, value, onChange }: {

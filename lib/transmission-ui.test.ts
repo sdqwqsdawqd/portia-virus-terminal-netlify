@@ -5,7 +5,7 @@ import { lf } from "./component-source.ts";
 import { templateCardCss, templateExportViolations, templateCardDocument } from "./portia-template-export.ts";
 import { TRANSMISSION_CHOICES } from "./transmission-routes.ts";
 
-// OWN-03 (owner 2026-11-20), the screens: several routes of transmission are chosen with checkboxes in the shared ClassificationField
+// OWN-03 (owner 2026-11-20; clarification 12, 26.1-15: a compact drop-down), the screens: several routes of transmission are chosen with checkboxes in a panel of the shared ClassificationField
 // (the editor, the recycle bin and the template builder all use it), and the virus card draws every route with its own icon and, on a
 // press, the owner's description. The model (parse, format, toggle, descriptions) is lib/transmission-routes.ts, tested there.
 // These are source tests: the components are .tsx and cannot be rendered here. Browser looks are the owner's check, not a pass.
@@ -29,16 +29,36 @@ const field = sliceOf(dossier, /export function TransmissionRoutesField/, /\nexp
 const classificationField = sliceOf(dossier, /export function ClassificationField/, /\ntype ConfirmAction/);
 const cell = sliceOf(card, /function TransmissionCell/, /\nexport function VirusCardBody/);
 
-test("OWN-03 the route picker is a group of checkboxes: legend, one option per choice, icon, name, description", () => {
+test("OWN-03 the route picker is a compact drop-down: one button with the chosen routes, a panel of seven checkboxes with icon, name and description", () => {
   assert.match(field, /export function TransmissionRoutesField\(\{ label, value, onChange \}/);
-  assert.match(field, /<fieldset className="route-picker"/);
-  assert.match(field, /<legend>\{label\}<\/legend>/);
+  assert.match(field, /<div className="route-dropdown classification-editor-field"/);
+  assert.match(field, /<button type="button" className="route-dropdown-toggle"/);
+  assert.match(field, /aria-haspopup="true"/);
+  assert.match(field, /aria-expanded=\{open\}/);
+  assert.match(field, /aria-controls=\{open \? panelId : undefined\}/);
+  assert.match(field, /aria-labelledby=\{`\$\{labelId\} \$\{valueId\}`\}/, "the visible label and the chosen routes name the button");
+  assert.match(field, /<span className="route-dropdown-label" id=\{labelId\}>\{label\}<\/span>/, "the visible label of the field");
+  assert.match(field, /\{open && <div className="route-dropdown-panel" id=\{panelId\} role="group" aria-labelledby=\{labelId\}>/, "the panel is drawn only while open");
+  assert.doesNotMatch(field, /fieldset|legend/, "the big group of checkboxes is gone");
   assert.match(field, /TRANSMISSION_CHOICES\.map\(/);
   assert.match(field, /<label key=\{choice\.name\} className="route-option"/);
   assert.match(field, /type="checkbox"/);
   assert.match(field, /checked=\{selected\.includes\(choice\.name\)\}/);
   assert.match(field, /<PortiaIcon name=\{icon\} className="route-icon"/);
   assert.match(field, /choice\.description/);
+  assert.match(field, /<em>Не указан<\/em>/, "no route: «Не указан»");
+  assert.match(field, /<span className="route-dropdown-chosen" key=\{name\}>/, "every chosen route is shown whole: icon and name");
+});
+
+test("OWN-03 the drop-down: Escape closes and returns the focus to the button; a press outside and focus leaving close; Enter and Space are the button's own", () => {
+  assert.match(field, /const \[open, setOpen\] = useState\(false\)/, "closed by default");
+  assert.match(field, /event\.key === "Escape" && open\) \{ event\.preventDefault\(\); event\.stopPropagation\(\); setOpen\(false\); toggle\.current\?\.focus\(\);/);
+  assert.match(field, /document\.addEventListener\("pointerdown", [a-zA-Z]+\)/, "a press outside is heard on the document while open");
+  assert.match(field, /root\.current\?\.contains\(event\.target as Node\)/);
+  assert.match(field, /document\.removeEventListener\("pointerdown", [a-zA-Z]+\)/, "and it is taken off");
+  assert.match(field, /onBlur=\{\(event\) => \{[^}]*event\.relatedTarget[^}]*root\.current\?\.contains\(event\.relatedTarget as Node\)[^}]*setOpen\(false\)/, "focus that leaves the whole drop-down closes it; a null target is a press, the document handles that");
+  assert.match(field, /onClick=\{\(\) => setOpen\(\(was\) => !was\)\}/);
+  assert.doesNotMatch(field, /"Enter"|" "|"Space"/, "Enter and Space open the button natively");
 });
 
 test("OWN-03 a choice is changed only through toggleTransmissionRoute; the draft gets the canonical string; clearing gives an empty value", () => {
@@ -63,7 +83,7 @@ test("OWN-03 the shared ClassificationField draws the picker for the transmissio
 });
 
 test("T-26.1-08 route values reach the screen as React text only; the icon is looked up by the site's own table", () => {
-  for (const [where, source] of [["picker", field], ["card", cell]] as const) {
+  for (const [where, source] of [["drop-down", field], ["card", cell]] as const) {
     assert.doesNotMatch(source, /dangerouslySetInnerHTML|innerHTML/, `${where}: no raw markup`);
   }
   assert.match(cell, /classificationIconFor\(name\)/);
@@ -93,12 +113,21 @@ test("OWN-03 a route opens the owner's description on a press: one at a time, ar
   assert.match(cell, /<p className="route-description"/);
 });
 
-test("OWN-03 the styles: picker, option, list, item, description; a phone-sized tap target; the file of the template carries them too", () => {
-  for (const selector of [".route-picker", ".route-option", ".route-icon", ".route-list", ".route-item", ".route-description"]) {
+test("OWN-03 the styles: drop-down, toggle, panel, option, list, item, description; a phone-sized tap target; the file of the template carries the card ones", () => {
+  for (const selector of [".route-dropdown", ".route-dropdown-toggle", ".route-dropdown-panel", ".route-option", ".route-icon", ".route-list", ".route-item", ".route-description"]) {
     assert.ok(css.includes(`${selector} {`) || css.includes(`${selector},`) || css.includes(`${selector}:`) || css.includes(`${selector} `), `${selector} has a rule`);
   }
-  assert.match(css, /\.route-picker \{[^}]*grid-column: 1 \/ -1/);
-  assert.match(css, /\.route-picker \{[^}]*repeat\(auto-fill, minmax\(min\(100%, 260px\), 1fr\)\)/);
+  assert.ok(!css.includes(".route-picker"), "the big picker has no styles left");
+  assert.match(css, /\.route-dropdown \{[^}]*position: relative/);
+  assert.match(css, /\.route-dropdown-toggle \{[^}]*min-height: 32px/, "32px on a PC");
+  assert.doesNotMatch(css.match(/\.route-dropdown-toggle \{[^}]*\}/)?.[0] ?? "", /text-overflow|white-space: nowrap/, "the chosen routes wrap, never an ellipsis");
+  assert.match(css, /\.route-dropdown-value \{[^}]*flex-wrap: wrap/);
+  assert.match(css, /\.route-dropdown-panel \{[^}]*position: absolute/);
+  assert.match(css, /\.route-dropdown-panel \{[^}]*width: min\(420px, calc\(100vw - 32px\)\)/);
+  assert.match(css, /\.route-dropdown-panel \{[^}]*z-index: \d+/, "above the neighbours");
+  assert.match(css, /\.route-dropdown-panel \{[^}]*overflow-y: auto/, "scrolls when the room is short");
+  assert.match(css, /@media \(max-width: 900px\) \{\s*\.route-dropdown-toggle \{ min-height: var\(--tap-target\)/, "a phone-sized tap target");
+  assert.ok(css.indexOf(".route-dropdown-panel {") < css.indexOf("/* ui-unify:start"), "the rules stand before the last block, ui-unify");
   assert.match(css, /\.route-option:has\(input:checked\)/);
   assert.match(css, /\.route-option \{ min-height: var\(--tap-target\)/);
   assert.match(css, /\.route-description \{[^}]*font-size: 12px/);
@@ -115,9 +144,9 @@ function cssRule(selector: string) {
 }
 
 test("OWN-03 the exported file of the template carries the look of the routes and not a description opened in advance", () => {
-  const carried = templateCardCss([cssRule(".route-list"), cssRule(".route-item"), cssRule(".route-description"), cssRule(".route-picker")], {});
+  const carried = templateCardCss([cssRule(".route-list"), cssRule(".route-item"), cssRule(".route-description"), cssRule(".route-dropdown-panel")], {});
   for (const selector of [".route-list", ".route-item", ".route-description"]) assert.ok(carried.includes(`${selector}{`), `${selector} reaches the file`);
-  assert.ok(!carried.includes(".route-picker"), "the editor's picker is not a class of the card and does not travel");
+  assert.ok(!carried.includes(".route-dropdown"), "the editor's drop-down is not a class of the card and does not travel");
   // The captured card is the closed state: no description paragraph, every route button collapsed. The page is the closed policy's own.
   const markup = `<article class="record-view"><div class="class-cell transmission"><span>Способ распространения</span><strong class="route-list"><button type="button" class="route-item" aria-expanded="false">Аэрозольный</button></strong></div></article>`;
   const document = templateCardDocument(markup, carried, "Вирус");

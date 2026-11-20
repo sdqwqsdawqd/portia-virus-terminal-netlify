@@ -779,9 +779,17 @@ html[data-motion="full"] [data-sort-index][data-lifted="true"], html[data-motion
 .classification-select-wrap.level-2 > strong { background: #3d361d; color: #e5c95f; }
 .classification-select-wrap.level-3 > strong { background: #412522; color: #ef8b82; }
 .classification-select-wrap > strong.neutral { background: #1a2c31; color: #85bcc8; }
-/* OWN-03 (owner 2026-11-20): the routes of transmission are chosen with checkboxes, several at once. The group takes the whole row of the classification block. */
-.route-picker { grid-column: 1 / -1; min-width: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 6px; margin: 0; padding: 0; border: 0; }
-.route-picker > legend { padding: 0 0 6px; color: oklch(.614 calc(.027 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
+/* OWN-03 (owner 2026-11-20; clarification 12, 26.1-15): the routes of transmission are a compact drop-down: one line with the chosen routes, a panel of checkboxes on a press. */
+.route-dropdown { position: relative; min-width: min(100%, 340px); display: flex; flex-direction: column; gap: 6px; }
+.route-dropdown-label { color: oklch(.614 calc(.027 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
+.route-dropdown-toggle { width: 100%; min-height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 10px; border: 1px solid oklch(.383 calc(.033 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-field); background: oklch(.168 calc(.014 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.912 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 13px/1.35 var(--sans); text-align: left; cursor: pointer; }
+.route-dropdown-toggle:hover, .route-dropdown-toggle[aria-expanded="true"] { border-color: var(--teal-dim); }
+.route-dropdown-toggle:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+.route-dropdown-value { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; overflow-wrap: anywhere; }
+.route-dropdown-value em { color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font-style: normal; }
+.route-dropdown-chosen { display: inline-flex; align-items: center; gap: 6px; }
+.route-dropdown-chevron { flex: none; color: var(--teal); font-size: 11px; }
+.route-dropdown-panel { position: absolute; z-index: 20; top: 100%; left: 0; width: min(420px, calc(100vw - 32px)); max-height: min(70vh, 440px); overflow-y: auto; display: grid; gap: 4px; margin-top: 4px; padding: 6px; border: 1px solid var(--teal-dim); border-radius: var(--radius-field); background: oklch(.168 calc(.014 * var(--accent-chroma)) var(--accent-hue)); box-shadow: 0 12px 28px rgba(0,0,0,.45); }
 .route-option { min-width: 0; display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: start; gap: 8px; padding: 8px 10px; border: 1px solid oklch(.383 calc(.033 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-field); background: rgba(255,255,255,.015); cursor: pointer; }
 .route-option:hover { border-color: var(--teal-dim); }
 .route-option:has(input:checked) { border-color: var(--teal); background: var(--teal-soft); }
@@ -793,6 +801,7 @@ html[data-motion="full"] [data-sort-index][data-lifted="true"], html[data-motion
 .route-option-text small { color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font: 11px/1.4 var(--sans); }
 .route-extra { grid-template-columns: minmax(0, 1fr) auto; align-items: center; cursor: default; }
 @media (max-width: 900px) {
+  .route-dropdown-toggle { min-height: var(--tap-target); }
   .route-option { min-height: var(--tap-target); align-items: center; }
 }
 .global-format-launch { position: fixed; z-index: 129; top: 50%; right: 8px; width: auto; height: 38px; margin: 0; padding: 0; transform: translateY(-50%); pointer-events: none; }
