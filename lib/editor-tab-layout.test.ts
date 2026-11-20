@@ -584,7 +584,14 @@ test("OWN-07: «СОХРАНИТЬ ВСЕ» saves one employee after another thr
   assert.equal(employees.split('fetch("/api/employees", {\n        method: "PATCH"').length - 1, 1, "one PATCH call serves the single and the all-save");
   const dialog = employees.slice(employees.indexOf('title="Сохранить изменения?"'));
   assert.ok(dialog.includes("void saveAll().then((saved) => {") && dialog.includes("if (saved) onLeave(true);") && dialog.includes("else cancelLeave();"), "all saved closes; a refusal keeps the window and the drafts");
-  assert.ok(employees.includes("const continueLeave = () => {\n    store.reset();\n    onLeave(true);"), "«НЕ СОХРАНЯТЬ» drops the drafts and closes");
+  // 26.1 WR-07: «НЕ СОХРАНЯТЬ» answers the employee question only; the drafts are dropped when the editor goes away, so a cancelled outer «Закрыть редактор?» keeps them.
+  const leave = employees.slice(employees.indexOf("const continueLeave ="), employees.indexOf("const cancelLeave ="));
+  assert.ok(leave.includes("const continueLeave = () => {\n    onLeave(true);"), "«НЕ СОХРАНЯТЬ» lets the close go on");
+  assert.ok(!leave.includes("store.reset()"), "and does not drop the drafts before the editor closes");
+  const hook = employeesSeam.replace(/\r\n/g, "\n");
+  const hookBody = hook.slice(hook.indexOf("export function useEmployeeDraftStore"), hook.indexOf("const emptyDetails"));
+  assert.ok(hookBody.length > 0);
+  assert.ok(hookBody.includes("store.reset();") && hookBody.indexOf("off();") < hookBody.indexOf("store.reset();"), "the drafts go with the editor (unmount of the hook's owner)");
 });
 
 test("OWN-07: an employee with unsaved edits has a dot in the list and a name for a screen reader", () => {

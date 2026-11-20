@@ -39,6 +39,9 @@ export function useEmployeeDraftStore(): EmployeeDraftStore {
     return () => {
       off();
       window.removeEventListener("beforeunload", warn);
+      // WR-07 (26.1 review): the drafts are dropped when the editor really goes away, not when «НЕ СОХРАНЯТЬ» is pressed: a later «Отмена» of the
+      // outer «Закрыть редактор?» keeps the editor, and the drafts with it.
+      store.reset();
     };
   }, [store]);
   return store;
@@ -331,8 +334,9 @@ export function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, upload
     openEmployee(employee);
   };
   // After the answer to the close question: the window goes on closing, or stays.
+  // The drafts are not dropped here (WR-07): when the content has unsaved edits too, the editor asks «Закрыть редактор?» next, and its «Отмена» must find the drafts.
+  // They go with the editor, see useEmployeeDraftStore.
   const continueLeave = () => {
-    store.reset();
     onLeave(true);
   };
   const cancelLeave = () => {
