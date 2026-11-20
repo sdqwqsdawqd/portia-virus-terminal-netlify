@@ -11,6 +11,8 @@ import type { ImageFraming } from "@/lib/image-framing";
 import { isLocalMediaPath } from "@/lib/media-url";
 import { MAX_SCIENTIST_LOGS } from "@/lib/content-limits";
 import { passesTarget, type Box } from "@/lib/sort-order";
+import { classificationIconFor, PortiaIcon } from "@/components/portia-icons";
+import { TRANSMISSION_CHOICES, formatTransmissionRoutes, parseTransmissionRoutes, toggleTransmissionRoute } from "@/lib/transmission-routes";
 
 type ImagePlacement = "dossier" | "mutation" | "recycle" | "guide" | "employee";
 
@@ -280,12 +282,36 @@ export function DossierTabs({ active, changed, onSelect, tabs }: { active: Dossi
   </nav>;
 }
 
+// OWN-03 (owner 2026-11-20): the routes of transmission are several, so the field is a group of checkboxes, not a select. The value stays the one
+// canonical string of lib/transmission-routes.ts; the choices, their exclusive «Неизвестно» and the string itself are that module's, not ours.
+export function TransmissionRoutesField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  const selected = parseTransmissionRoutes(value);
+  const known = new Set(TRANSMISSION_CHOICES.map((choice) => choice.name));
+  const extras = selected.filter((item) => !known.has(item));
+  return <fieldset className="route-picker">
+    <legend>{label}</legend>
+    {TRANSMISSION_CHOICES.map((choice) => {
+      const icon = classificationIconFor(choice.name);
+      return <label key={choice.name} className="route-option">
+        <input type="checkbox" checked={selected.includes(choice.name)} onChange={() => onChange(toggleTransmissionRoute(value, choice.name))} />
+        {icon && <PortiaIcon name={icon} className="route-icon" />}
+        <span className="route-option-text"><strong>{choice.name}</strong><small>{choice.description}</small></span>
+      </label>;
+    })}
+    {extras.map((extra) => <div key={extra} className="route-option route-extra">
+      <span className="route-option-text"><strong>{extra}</strong></span>
+      <button type="button" className="secondary-control" onClick={() => onChange(formatTransmissionRoutes(selected.filter((item) => item !== extra)))}>Убрать</button>
+    </div>)}
+  </fieldset>;
+}
+
 export function ClassificationField({ label, classificationKey, value, onChange }: {
   label: string;
   classificationKey: keyof Virus["classification"];
   value: string;
   onChange: (value: string) => void;
 }) {
+  if (classificationKey === "transmission") return <TransmissionRoutesField label={label} value={value} onChange={onChange} />;
   const options = classificationOptions[classificationKey] as readonly { value: string; level?: number }[];
   const selected = options.find((option) => option.value === value);
   const level = selected?.level;

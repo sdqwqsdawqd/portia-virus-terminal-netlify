@@ -215,6 +215,8 @@ export type TemplateCssRule = Readonly<{ selector: string; declarations: string;
 const cardClasses: ReadonlySet<string> = new Set([
   "record-view", "record-body", "record-header", "record-code", "record-status", "record-document", "record-hero", "record-footer",
   "classification-panel", "classification-grid", "class-cell", "class-badge",
+  // OWN-03: the routes of transmission of the card (components/portia-virus-card.tsx) travel into the file with their look.
+  "route-list", "route-item", "route-description",
   "danger", "spread", "escape", "transmission", "mind", "appearance", "behavior", "level-1", "level-2", "level-3",
   "section-kicker", "dossier-section", "lead-copy", "metric-grid", "mutation-grid", "mutation-card", "mutation-index", "mutation-copy",
   "subject-media", "media-empty", "portia-image", "is-loaded", "is-fill", "formatted-content", "formatted-empty",

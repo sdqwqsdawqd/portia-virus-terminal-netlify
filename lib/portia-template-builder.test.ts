@@ -330,9 +330,10 @@ test("D-55 (20-37): the builder has no markup of its own for the preview", () =>
   expectMatch(code, /label="Предпросмотр шаблона"/);
 });
 
-test("D-55 (20-37): the card module imports only react, the content types, the icons and the media splitter", () => {
+test("D-55 (20-37): the card module imports only react, the content types, the icons, the media splitter and the pure routes table (OWN-03)", () => {
   const code = stripComments(read(cardPath));
-  assert.deepEqual(importsOf(code).sort(), ["@/components/portia-icons", "@/lib/portia-content", "@/lib/rich-text-media", "react"]);
+  // OWN-03 (26.1-04): lib/transmission-routes.ts imports nothing, so the card still reaches no desktop, editor, network or storage.
+  assert.deepEqual(importsOf(code).sort(), ["@/components/portia-icons", "@/lib/portia-content", "@/lib/rich-text-media", "@/lib/transmission-routes", "react"]);
   assert.deepEqual(ioTokens(code), []);
 });
 

@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { classificationOptions, portiaTextKey, type PortiaContent, type RichTextDocument, type Virus } from "@/lib/portia-content";
 import { classificationIconFor, PortiaIcon } from "@/components/portia-icons";
 import { splitEmbeddedMedia } from "@/lib/rich-text-media";
+import { parseTransmissionRoutes, transmissionDescription } from "@/lib/transmission-routes";
 
 /**
  * The virus card of the archive (header, classification, sections 01-05, footer), drawn once for two places: the public dossier
@@ -102,6 +103,26 @@ export type VirusCardBodyProps = {
   footer: readonly [ReactNode, ReactNode];
 };
 
+// OWN-03 (owner 2026-11-20): a virus has several routes of transmission. Each is a line with its own icon; a press opens the owner's text for it.
+// Closed by default, so the captured card of the template file has no open description. A value the table does not know is plain text without an icon.
+function TransmissionCell({ value }: { value: string }) {
+  const routes = parseTransmissionRoutes(value);
+  const [open, setOpen] = useState<string | null>(null);
+  if (routes.length === 0) return <strong><em className="formatted-empty">Не указан</em></strong>;
+  const description = open !== null && routes.includes(open) ? transmissionDescription(open) : undefined;
+  return <>
+    <strong className="route-list">
+      {routes.map((name) => {
+        const icon = classificationIconFor(name);
+        return <button type="button" className="route-item" key={name} aria-expanded={open === name && description !== undefined} onClick={() => setOpen(open === name ? null : name)} onKeyDown={(event) => { if (event.key === "Escape") setOpen(null); }}>
+          {icon && <PortiaIcon name={icon} className="class-badge" />}{name}
+        </button>;
+      })}
+    </strong>
+    {description !== undefined && <p className="route-description">{description}</p>}
+  </>;
+}
+
 export function VirusCardBody({ virus, formattedText, media, embedMedia = true, emptyText, after, footer }: VirusCardBodyProps) {
   const classification = [
     ["danger", "Общий уровень опасности", virus.classification.danger, "danger"], ["spread", "Распространение", virus.classification.spread, "spread"], ["escapeRisk", "Угроза и риск побега", virus.classification.escapeRisk, "escape"],
@@ -112,7 +133,7 @@ export function VirusCardBody({ virus, formattedText, media, embedMedia = true, 
   return <div className="record-body content-fade">
     <header className="record-header"><div><span className="record-code">{plain(virus.code)}</span><h2>{plain(virus.name)}</h2></div><div className="record-status"><span />{plain(virus.status)}</div></header>
     <div className="record-document">
-      <section className="record-hero">{media({ kind: "infected", alt: `Субъект после заражения вирусом ${virus.name}`, label: "Фото после заражения", recordId: `${virus.id}:infected`, priority: "hero" })}<div className="classification-panel"><div className="section-kicker"><span>01</span>КЛАССИФИКАЦИЯ</div><div className="classification-grid">{classification.map(([key, label, value, tone]) => { const level = classificationLevel(key, value); const badge = classificationIconFor(value); return <div className={`class-cell ${tone}${level ? ` level-${level}` : ""}`} key={label}><span>{label}</span><strong>{badge && <PortiaIcon name={badge} className="class-badge" />}{plain(value)}</strong>{level && <small>УРОВЕНЬ {level}</small>}</div>; })}</div></div></section>
+      <section className="record-hero">{media({ kind: "infected", alt: `Субъект после заражения вирусом ${virus.name}`, label: "Фото после заражения", recordId: `${virus.id}:infected`, priority: "hero" })}<div className="classification-panel"><div className="section-kicker"><span>01</span>КЛАССИФИКАЦИЯ</div><div className="classification-grid">{classification.map(([key, label, value, tone]) => { const level = classificationLevel(key, value); const badge = classificationIconFor(value); if (key === "transmission") return <div className={`class-cell ${tone}`} key={label}><span>{label}</span><TransmissionCell value={value} /></div>; return <div className={`class-cell ${tone}${level ? ` level-${level}` : ""}`} key={label}><span>{label}</span><strong>{badge && <PortiaIcon name={badge} className="class-badge" />}{plain(value)}</strong>{level && <small>УРОВЕНЬ {level}</small>}</div>; })}</div></div></section>
       <DossierSection index="02" title="ВНЕШНИЕ ХАРАКТЕРИСТИКИ"><FormattedText className="lead-copy" text={virus.external} document={formattedText[portiaTextKey.virus(virus.id, "external")]} {...text} /></DossierSection>
       <DossierSection index="03" title="ХАРАКТЕРИСТИКИ С PPU"><div className="metric-grid"><div><span>ЗДОРОВЬЕ</span><FormattedText text={virus.ppu.health} document={formattedText[portiaTextKey.virus(virus.id, "ppu-health")]} {...text} /></div><div><span>СКОРОСТЬ</span><FormattedText text={virus.ppu.speed} document={formattedText[portiaTextKey.virus(virus.id, "ppu-speed")]} {...text} /></div><div><span>СПОСОБНОСТИ</span><FormattedText text={virus.ppu.abilities} document={formattedText[portiaTextKey.virus(virus.id, "ppu-abilities")]} {...text} /></div></div></DossierSection>
       <DossierSection index="04" title="ФИЗИОЛОГИЯ"><FormattedText className="lead-copy" text={virus.physiology} document={formattedText[portiaTextKey.virus(virus.id, "physiology")]} {...text} /></DossierSection>

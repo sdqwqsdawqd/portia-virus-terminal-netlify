@@ -757,6 +757,22 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 .classification-select-wrap.level-2 > strong { background: #3d361d; color: #e5c95f; }
 .classification-select-wrap.level-3 > strong { background: #412522; color: #ef8b82; }
 .classification-select-wrap > strong.neutral { background: #1a2c31; color: #85bcc8; }
+/* OWN-03 (owner 2026-11-20): the routes of transmission are chosen with checkboxes, several at once. The group takes the whole row of the classification block. */
+.route-picker { grid-column: 1 / -1; min-width: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 6px; margin: 0; padding: 0; border: 0; }
+.route-picker > legend { padding: 0 0 6px; color: oklch(.614 calc(.027 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); letter-spacing: .06em; text-transform: uppercase; }
+.route-option { min-width: 0; display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: start; gap: 8px; padding: 8px 10px; border: 1px solid oklch(.383 calc(.033 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-field); background: rgba(255,255,255,.015); cursor: pointer; }
+.route-option:hover { border-color: var(--teal-dim); }
+.route-option:has(input:checked) { border-color: var(--teal); background: var(--teal-soft); }
+.route-option:has(input:focus-visible) { outline: 2px solid var(--teal); outline-offset: 2px; }
+.route-option input { width: 16px; height: 16px; margin: 1px 0 0; accent-color: var(--teal); }
+.route-icon { flex: none; width: 18px; height: 18px; color: var(--teal); }
+.route-option-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+.route-option-text strong { color: oklch(.857 calc(.021 * var(--accent-chroma)) var(--accent-hue)); font: 700 13px/1.3 var(--sans); }
+.route-option-text small { color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font: 11px/1.4 var(--sans); }
+.route-extra { grid-template-columns: minmax(0, 1fr) auto; align-items: center; cursor: default; }
+@media (max-width: 900px) {
+  .route-option { min-height: var(--tap-target); align-items: center; }
+}
 .global-format-launch { position: fixed; z-index: 129; top: 50%; right: 8px; width: auto; height: 38px; margin: 0; padding: 0; transform: translateY(-50%); pointer-events: none; }
 .global-format-launch > button { width: 38px; max-width: min(245px, calc(100vw - 30px)); min-height: 38px; display: inline-flex; align-items: center; justify-content: flex-start; gap: 7px; padding: 6px 9px; overflow: hidden; border: 1px solid oklch(.504 calc(.062 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-control); background: oklch(.187 calc(.02 * var(--accent-chroma)) var(--accent-hue) / .9); color: oklch(.868 calc(.042 * var(--accent-chroma)) var(--accent-hue)); box-shadow: 0 7px 22px rgba(0,0,0,.38); backdrop-filter: blur(7px); font: 700 11px var(--sans); letter-spacing: .04em; white-space: nowrap; cursor: pointer; pointer-events: auto; opacity: .76; transition: width 170ms ease, opacity 150ms ease, border-color 150ms ease, background-color 150ms ease; }
 .global-format-launch > button:hover, .global-format-launch > button:focus-visible, .global-format-launch > button[aria-expanded="true"] { width: min(245px, calc(100vw - 30px)); border-color: var(--teal); background: oklch(.212 calc(.028 * var(--accent-chroma)) var(--accent-hue) / .97); opacity: 1; }
@@ -1192,6 +1208,11 @@ html[data-motion="full"] .boot-lines p { clip-path: inset(0 100% 0 0); animation
 .class-cell.level-3 strong, .class-cell.level-3 small { color: #b43632; }
 .class-cell.transmission { grid-column: 1 / -1; }
 .class-cell.transmission strong { color: #0b7568; }
+/* OWN-03: the routes of the card are lines of buttons, each with its icon; a press opens the owner's description under them. Class-only selectors: the file of the template carries them. */
+.route-list { gap: 4px 14px; }
+.route-item { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 2px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.route-item:hover { text-decoration: underline; }
+.route-description { margin: 6px 0 0; color: oklch(.37 calc(.014 * var(--accent-chroma)) var(--accent-hue)); font-size: 12px; line-height: 1.5; }
 /* UAT 2026-11-16 gap 11 (UI-07): a class name is read in full, in whole words. "Предупреждение" is 14 glyphs x 0.6em x 12px = 101px; with the cell's 24px of padding
    and 1px of border a cell needs 126px. The name's size follows its cell (12-15px, 13px on a phone), a name that does not fit beside the badge goes under it,
    and the grid is 3 columns only while the panel holds three such cells (3 x 126 = 378px, 380px here), 2 columns while it holds two (2 x 126 = 252px, 254px here),
