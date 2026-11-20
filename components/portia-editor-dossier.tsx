@@ -282,9 +282,10 @@ export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: 
     className="order-drag-handle"
     type="button"
     aria-label={`Изменить порядок: ${label}`}
-    aria-keyshortcuts="ArrowUp ArrowDown"
+    aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"
     onKeyDown={(event) => {
-      const step = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
+      // Left and right say the same as up and down: tabs and table columns are read sideways.
+      const step = event.key === "ArrowUp" || event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : 0;
       if (!step) return;
       event.preventDefault();
       onMove(index, index + step);

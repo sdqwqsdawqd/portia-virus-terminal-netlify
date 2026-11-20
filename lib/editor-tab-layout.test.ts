@@ -792,7 +792,7 @@ test("OWN-09: the click after a drag is swallowed once, the page does not scroll
 test("OWN-09: the order button stays for the keyboard: label, arrows, the ≡ only inside the plaque", () => {
   assert.ok(handleSource.includes("aria-label={`Изменить порядок: ${label}`}"));
   assert.ok(handleSource.includes('className="order-drag-handle"'));
-  assert.ok(handleSource.includes('aria-keyshortcuts="ArrowUp ArrowDown"') || handleSource.includes('aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"'));
+  assert.ok(handleSource.includes('aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"'), "left and right are synonyms of up and down (tabs and columns read sideways)");
   assert.ok(!handleSource.includes("title="), "no tooltip (D-18)");
   assert.ok(dossierSeam.includes("owner 2026-11-20 (OWN-09): the row itself is held to drag; the button is the keyboard and screen reader way"), "the seam says why");
 });
@@ -822,4 +822,40 @@ test("OWN-09: the grids that kept a column for the handle give it up", () => {
   assert.equal(declared(".info-table-head", "grid-template-columns"), "minmax(0, 1fr) minmax(0, 1fr) auto");
   assert.equal(declared(".info-table-row", "grid-template-columns", PHONE), "minmax(0, 1fr)");
   assert.equal(declared(".recommendation-order-row", "grid-template-columns", PHONE), "minmax(0, 1fr)");
+});
+
+test("OWN-09: arrows on the order button: ↑ and ← one step back, ↓ and → one step on, the button keeps the focus", () => {
+  assert.ok(handleSource.includes('event.key === "ArrowUp" || event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : 0'));
+  assert.ok(handleSource.includes("onMove(index, index + step)"));
+  assert.ok(editor.includes("keepSectionHandleFocus"), "the editor still returns the focus to the button after a keyboard move");
+});
+
+test("OWN-09: where a hold may start: the head of a card, the whole row of a list or a table; never a field, a link, the action buttons or the delete button", () => {
+  assert.ok(handleSource.includes('element.closest("input, textarea, select, a")'), "fields and links");
+  assert.ok(handleSource.includes('element.closest(".nested-editor-actions, .info-table-row > button")'), "the actions of a card and the delete button of a table row");
+  assert.ok(handleSource.includes("nested !== null && nested !== row"), "a nested row belongs to its own handle");
+  assert.ok(handleSource.includes("isContentEditable"), "editable text");
+});
+
+test("OWN-09: on a mouse the hold zones show a grab hand, fields keep their own cursor; a lifted element shows grabbing everywhere inside", () => {
+  const MOUSE = "hover: hover";
+  assert.equal(declared(".editor-section-tabs nav > .editor-section-tab > button:not(.order-drag-handle)", "cursor", MOUSE), "grab");
+  assert.equal(declared("[data-sort-index] > .nested-editor-head", "cursor", MOUSE), "grab");
+  assert.equal(declared("[data-sort-index] > .nested-editor-head > .nested-editor-toggle", "cursor", MOUSE), "grab");
+  assert.equal(declared(".editor-record-row[data-sort-index] > button:not(.order-drag-handle)", "cursor", MOUSE), "grab");
+  assert.equal(declared(".info-table-row[data-sort-index]", "cursor", MOUSE), "grab");
+  assert.equal(declared(".info-table-head > [data-column]", "cursor", MOUSE), "grab");
+  assert.equal(declared(".info-table-row input", "cursor", MOUSE), undefined, "a field in a table row keeps the text cursor");
+  assert.match(declared('[data-sort-index][data-lifted="true"] *', "cursor") ?? "", /^grabbing/);
+  // The touch-action of a card head is not changed: a finger scrolls the page until the element is lifted.
+  assert.equal(declared(".nested-editor-head", "touch-action"), undefined);
+  assert.equal(declared("[data-sort-index] > .nested-editor-head", "touch-action"), undefined);
+});
+
+test("OWN-09: the e2e drag holds the head of the card 450 ms and no longer grabs the handle", () => {
+  const spec = lf(readFileSync(new URL("../tests/e2e/specs/editor-layout.spec.ts", import.meta.url), "utf8"));
+  assert.ok(!spec.includes("nested-editor-head .order-drag-handle"), "no helper drags by the handle");
+  assert.ok(spec.includes("button.nested-editor-toggle"), "the head of the card is the thing held");
+  assert.ok(spec.includes("waitForTimeout(450)"), "the hold lasts longer than 400 ms");
+  assert.ok(spec.includes('toHaveAttribute("data-lifted", "true")'), "the lifted card is checked before the move");
 });
