@@ -888,3 +888,62 @@ test("OWN-09: a lifted column header looks lifted too", () => {
   assert.equal(declared(`html[data-motion="full"] ${lifted}`, "translate"), "0 -2px");
   assert.match(declared(`${lifted} *`, "cursor") ?? "", /^grabbing/);
 });
+
+// 26.1-09 (OWN-10): the cards of a section are tabs, like the sections; the strip and its selection live in a seam (D-21), the editor only calls it.
+const cardTabsSeam = family.find((part) => part.file === "portia-editor-card-tabs.tsx")?.text ?? "";
+const cardTabsCode = stripComments(cardTabsSeam);
+
+test("owner 2026-11-20 OWN-10: the card tab strip is a seam: tabs of the same markup as the section tabs, the order button only with onMove, the selection by the pure rule", () => {
+  assert.ok(cardTabsSeam, "components/portia-editor-card-tabs.tsx exists and belongs to the portia-editor family");
+  assert.match(cardTabsSeam, /^"use client";/);
+  assert.match(cardTabsCode, /export function CardTabs\(/);
+  assert.match(cardTabsCode, /export function useCardTabSelection\(/);
+  assert.match(cardTabsCode, /export const cardTabsCopy = \{/);
+  assert.ok(cardTabsCode.includes('<div className="editor-card-tabs">') && cardTabsCode.includes("<nav aria-label={label} ref={navRef}>"), "div.editor-card-tabs > nav[aria-label]");
+  assert.ok(cardTabsCode.includes('className="editor-card-tab"'), "one span per tab");
+  assert.ok(cardTabsCode.includes('aria-current={item.id === activeId ? "true" : undefined}'), "the selected tab is aria-current");
+  assert.ok(cardTabsCode.includes("{onMove && <OrderDragHandle index={index} label={item.title || cardTabsCopy.item} onMove={onMove} />}"), "the order button only when the tabs can move");
+  assert.ok(cardTabsCode.includes("data-sort-index={onMove ? index : undefined}"), "a tab that cannot move is no sort row");
+  assert.ok(cardTabsCode.includes("item.title || cardTabsCopy.untitled"), "an empty title reads «Без названия»");
+  assert.ok(cardTabsCode.includes("if (items.length === 0) return null;"), "no strip without cards");
+  assert.match(cardTabsCode, /import \{ resolveCardTab[^}]*\} from "@\/lib\/card-tab-selection"/, "the choice is the pure rule");
+  assert.ok(cardTabsCode.includes("getBoundingClientRect") && !cardTabsCode.includes("scrollIntoView"), "only the strip scrolls sideways, the page does not jump");
+  assert.doesNotMatch(cardTabsCode, /dangerouslySetInnerHTML|title=\{/, "T-26.1-19: titles are text through React, no tooltip (D-18)");
+});
+
+test("owner 2026-11-20 OWN-10: guide cards are tabs: the strip before the list, only the selected card under it, a new card and a jump from the contents select it", () => {
+  assert.match(editor, /import \{ CardTabs, cardTabsCopy, useCardTabSelection \} from "@\/components\/portia-editor-card-tabs";/);
+  assert.ok(editor.includes("  const cardTabs = useCardTabSelection();\n"), "the selection is kept in the editor");
+  const guide = editorSlice('{tab === "guide" && (', '{tab === "recycle"');
+  const strip = guide.indexOf("<CardTabs label={cardTabsCopy.cards}");
+  const list = guide.indexOf('<div className="info-subsection-list" data-sort-group="guide-cards"');
+  assert.ok(strip > 0 && list > strip, "the strip stands before the list of cards");
+  const stripText = guide.slice(strip, list);
+  assert.ok(stripText.includes("items={section.cards.map((card) => ({ id: card.id, title: card.title }))}"), "the titles go as data");
+  assert.ok(stripText.includes("activeId={cardTabs.active(section.id, section.cards.map((card) => card.id))}"));
+  assert.ok(stripText.includes("moveArrayItem(target.cards, from, to)"), "a tab is moved among the cards of the section");
+  assert.ok(guide.includes("section.cards.map((card, cardIndex) => card.id === cardTabs.active(section.id, section.cards.map((item) => item.id)) && ("), "only the selected card is drawn");
+  assert.ok(stripText.includes("cardTabs.select(section.id, id)") && stripText.includes("setOpen([id], true)"), "a click selects and opens the card");
+  assert.ok(editor.includes("if (found?.card) cardTabs.select(found.section.id, id);"), "a jump from the contents selects the tab");
+  assert.ok(!editor.includes('"Карточки раздела"'), "D-58: the strip's name lives in the seam");
+});
+
+test("T-26.1-20: leaving a card by its tab closes the format panel for the fields of the section's cards; the draft is shared, hiding only stops drawing", () => {
+  const guide = editorSlice('{tab === "guide" && (', '{tab === "recycle"');
+  const strip = guide.slice(guide.indexOf("<CardTabs label={cardTabsCopy.cards}"), guide.indexOf('<div className="info-subsection-list" data-sort-group="guide-cards"'));
+  assert.ok(strip.includes("closeFormatterFor(...section.cards.flatMap((card) => card.blocks.map((block) => portiaTextKey.guideBlock(block.id))))"));
+  assert.ok(strip.indexOf("closeFormatterFor(") < strip.indexOf("cardTabs.select("), "the panel closes before the other card shows");
+});
+
+test("OWN-10: the card tab strip is one row that scrolls sideways, the current tab is accent-coloured, a phone tab has the tap target; the order button stays hidden", () => {
+  assert.equal(declared(".editor-card-tabs nav", "overflow-x"), "auto");
+  assert.equal(declared(".editor-card-tabs nav", "flex-wrap"), "nowrap");
+  assert.equal(declared(".editor-card-tabs nav button:not(.order-drag-handle)", "min-height"), "32px");
+  assert.equal(declared(".editor-card-tabs nav button:not(.order-drag-handle)", "min-height", PHONE), "var(--tap-target)");
+  assert.equal(declared('.editor-card-tabs nav button[aria-current="true"]', "color"), "var(--teal)");
+  assert.match(declared('.editor-card-tabs nav button[aria-current="true"]', "box-shadow") ?? "", /var\(--teal\)/);
+  assert.ok(!rules.some((rule) => rule.selectors.some((selector) => selector.startsWith(".editor-card-tabs") && /(^|[ >])button(\[|$)/.test(selector) && !selector.includes(":not(.order-drag-handle)") && !selector.includes("[aria-current")) ), "no rule resizes every button of the strip, the order button included");
+  assert.ok(styles.indexOf(".editor-card-tabs nav") < styles.indexOf("/* ui-unify:start"), "the block of ui-unify stays the last");
+  assert.ok(styles.trimEnd().endsWith("/* ui-unify:end */"));
+  assert.ok(styles.includes(".editor-card-tabs nav > .editor-card-tab[data-sort-index] > button:not(.order-drag-handle)"), "a movable tab shows the open hand on a mouse");
+});

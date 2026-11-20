@@ -103,6 +103,10 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //  19. PORTIA-26.1-HOLD (26.1-08; OWN-09, D-21) — столбцы таблицы переставляются удержанием заголовка, ручки ≡ нет: функция ColumnSwapHandle (с комментарием над ней) переехала в шов
 //      components/portia-editor-dossier.tsx, редактор только импортирует её оттуда (applyColumnSwapSeamHunk); вызовы в TableBlockEditor не менялись, русская подпись «Переставить столбец…»
 //      переехала вместе с функцией (D-58 берёт ожидаемый набор из образца после этой правки). Источник одобрения: 26.1-OWNER-REQUEST OWN-09 (2026-11-20, «убрать ручки везде») и план 26.1-08.
+//  20. PORTIA-26.1-TABS (26.1-09 Task 1; OWN-10, D-21) — карточки раздела «Справочника» — вкладки-полоски слева направо, как разделы; под ними только выбранная карточка, новая карточка
+//      выбирается сразу, переход из оглавления выбирает вкладку (applyGuideCardTabsHunk): импорт шва components/portia-editor-card-tabs.tsx, хук useCardTabSelection, строка CardTabs
+//      перед списком карточек и фильтр map по выбранной карточке; русских строк не добавлено (подписи вкладок лежат в шве, cardTabsCopy). Источник одобрения: 26.1-OWNER-REQUEST OWN-10
+//      (2026-11-20, «карточки внутри раздела — вкладками, слева направо, как разделы») и план 26.1-09.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -1186,6 +1190,46 @@ function applyColumnSwapSeamHunk(text: string): string {
   return replaceOnce(lines.join("\n"), "ClassificationField, ConfirmDialog, DossierTabs", "ClassificationField, ColumnSwapHandle, ConfirmDialog, DossierTabs", "column swap seam: import");
 }
 
+/**
+ * PORTIA-26.1-TABS (26.1-09 Task 1; OWN-10, D-21): карточки раздела «Справочника» — вкладки-полоски (components/portia-editor-card-tabs.tsx), под ними только выбранная карточка.
+ * Вставки: импорт шва, хук выбора рядом с флагом employeeDirty, выбор вкладки в jumpGuide, строка CardTabs перед списком карточек и фильтр map по выбранной карточке.
+ * Русских строк не добавлено: подпись «Карточки раздела» и «Без названия» лежат в шве (cardTabsCopy).
+ */
+function applyGuideCardTabsHunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    'import { ImageFramingEditor } from "@/components/portia-image-framing";\n',
+    'import { ImageFramingEditor } from "@/components/portia-image-framing";\nimport { CardTabs, cardTabsCopy, useCardTabSelection } from "@/components/portia-editor-card-tabs";\n',
+    "guide card tabs: import",
+  );
+  next = replaceOnce(next, "  const [employeeDirty, setEmployeeDirty] = useState(false);\n", "  const [employeeDirty, setEmployeeDirty] = useState(false);\n  const cardTabs = useCardTabSelection();\n", "guide card tabs: the selection hook");
+  next = replaceOnce(
+    next,
+    "  const jumpGuide = (id: string) => {\n    const found = findGuide(draft.guideSections, id);\n",
+    "  const jumpGuide = (id: string) => {\n    const found = findGuide(draft.guideSections, id);\n    if (found?.card) cardTabs.select(found.section.id, id);\n",
+    "guide card tabs: a jump to a card selects its tab",
+  );
+  return replaceOnce(
+    next,
+    [
+      '              <div className="info-subsection-list" data-sort-group="guide-cards" data-group-id={section.id}>',
+      '                {section.cards.length === 0 && <div className="editor-empty compact-empty">В разделе нет карточек. Добавьте первую кнопкой «+ ДОБАВИТЬ КАРТОЧКУ».</div>}',
+      "                {section.cards.map((card, cardIndex) => (",
+      "",
+    ].join("\n"),
+    [
+      "              <CardTabs label={cardTabsCopy.cards} items={section.cards.map((card) => ({ id: card.id, title: card.title }))} activeId={cardTabs.active(section.id, section.cards.map((card) => card.id))}",
+      "                onSelect={(id) => { closeFormatterFor(...section.cards.flatMap((card) => card.blocks.map((block) => portiaTextKey.guideBlock(block.id)))); cardTabs.select(section.id, id); setOpen([id], true); }}",
+      "                onMove={(from, to) => changeDraft((next) => { const target = findGuide(next.guideSections, section.id)?.section; if (target) moveArrayItem(target.cards, from, to); })} />",
+      '              <div className="info-subsection-list" data-sort-group="guide-cards" data-group-id={section.id}>',
+      '                {section.cards.length === 0 && <div className="editor-empty compact-empty">В разделе нет карточек. Добавьте первую кнопкой «+ ДОБАВИТЬ КАРТОЧКУ».</div>}',
+      "                {section.cards.map((card, cardIndex) => card.id === cardTabs.active(section.id, section.cards.map((item) => item.id)) && (",
+      "",
+    ].join("\n"),
+    "guide card tabs: the strip and the selected card",
+  );
+}
+
 /** Реестр одобренных правок (D-64): `apply` — порядок применения к образцу; `normalizeActual` — что вырезается из текущего файла перед сравнением. */
 const approvedEditorEdits: readonly { id: string; apply: (text: string) => string; normalizeActual?: (text: string) => string }[] = [
   { id: "D-57", apply: applyLaunchButtonHunk },
@@ -1211,6 +1255,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26.1-EMP", apply: applyEmployeesSeamHunk },
   { id: "PORTIA-26.1-EMP2", apply: applyEmployeesCloseHunk },
   { id: "PORTIA-26.1-HOLD", apply: applyColumnSwapSeamHunk },
+  { id: "PORTIA-26.1-TABS", apply: applyGuideCardTabsHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -1366,6 +1411,10 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.notEqual(firstDifference(expected, withoutColumnSwapSeam), null, "a file without the PORTIA-26.1-HOLD hunk is a difference");
   assert.throws(() => applyColumnSwapSeamHunk(expected), /exactly one approved anchor/, "the column swap seam hunk cannot be applied twice");
   assert.ok(!expected.includes("function ColumnSwapHandle"), "the approved editor no longer holds ColumnSwapHandle");
+  const withoutGuideCardTabs = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-TABS").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutGuideCardTabs), null, "a file without the PORTIA-26.1-TABS hunk is a difference");
+  assert.throws(() => applyGuideCardTabsHunk(expected), /exactly one approved anchor/, "the guide card tabs hunk cannot be applied twice");
+  assert.ok(expected.includes("<CardTabs label={cardTabsCopy.cards}"), "the approved editor shows the card tabs of a «Справочник» section");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

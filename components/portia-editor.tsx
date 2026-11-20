@@ -1,6 +1,7 @@
 "use client";
 
 import { ImageFramingEditor } from "@/components/portia-image-framing";
+import { CardTabs, cardTabsCopy, useCardTabSelection } from "@/components/portia-editor-card-tabs";
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { changedDossierTabs, changedSections, deniedSections, editorSections, revertSections, sectionLabels, type DossierTab, type EditorSection } from "@/lib/editor-changes";
@@ -494,6 +495,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   const [handledCloseRequest, setHandledCloseRequest] = useState(closeRequest);
   const closeAsked = closeRequest !== handledCloseRequest;
   const [employeeDirty, setEmployeeDirty] = useState(false);
+  const cardTabs = useCardTabSelection();
   const employeeDrafts = useEmployeeDraftStore();
   const leaving = employeeDirty && closeAsked;
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
@@ -787,6 +789,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   const guideCardIds = draft.guideSections.flatMap((section) => [section.id, ...section.cards.flatMap((card) => [card.id, ...card.blocks.map((block) => block.id)])]);
   const jumpGuide = (id: string) => {
     const found = findGuide(draft.guideSections, id);
+    if (found?.card) cardTabs.select(found.section.id, id);
     setOpen(found ? [found.section.id, id] : [id], true);
     jumpToCard(id);
   };
@@ -1447,9 +1450,12 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
               <ImageEditorField label="Фото раздела" value={section.photo} placement="guide" maxHint="За заголовком раздела: низкая полоса во всю ширину" removeLabel="Убрать фото" uploadState={uploadState} uploadMessage={uploadMessage} framing={section.photoFraming} framingBox="band" onFramingChange={(frame) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { if (frame) item.photoFraming = frame; else delete item.photoFraming; }))}
                 onChange={(value) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.photo = value; }))}
                 onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.photo = url; })))} />
+              <CardTabs label={cardTabsCopy.cards} items={section.cards.map((card) => ({ id: card.id, title: card.title }))} activeId={cardTabs.active(section.id, section.cards.map((card) => card.id))}
+                onSelect={(id) => { closeFormatterFor(...section.cards.flatMap((card) => card.blocks.map((block) => portiaTextKey.guideBlock(block.id)))); cardTabs.select(section.id, id); setOpen([id], true); }}
+                onMove={(from, to) => changeDraft((next) => { const target = findGuide(next.guideSections, section.id)?.section; if (target) moveArrayItem(target.cards, from, to); })} />
               <div className="info-subsection-list" data-sort-group="guide-cards" data-group-id={section.id}>
                 {section.cards.length === 0 && <div className="editor-empty compact-empty">В разделе нет карточек. Добавьте первую кнопкой «+ ДОБАВИТЬ КАРТОЧКУ».</div>}
-                {section.cards.map((card, cardIndex) => (
+                {section.cards.map((card, cardIndex) => card.id === cardTabs.active(section.id, section.cards.map((item) => item.id)) && (
                   <CollapsibleCard key={card.id} id={card.id} sortIndex={cardIndex} label={`КАРТОЧКА ${guideNo(cardIndex)}`} title={card.title} open={isOpen(card.id)} onToggle={() => toggleCard(card.id)}
                     handle={<OrderDragHandle index={cardIndex} label={card.title || "карточка"} itemId={card.id} onMoveAcross={(groupId, toIndex) => changeDraft((next) => moveGuideCard(next, card.id, groupId, toIndex))}
                       onMove={(from, to) => {
