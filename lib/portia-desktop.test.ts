@@ -117,14 +117,18 @@ test("component families import only their own seams and the known shared compon
     // portia-companion-items: the visitor's items of the assistant and the spider, kept on the device (2026-11-18).
     // portia-companion-editor: the item editor dialog opened from the settings (owner 2026-11-18, round 2).
     // portia-template-builder: the dossier template is its own app «Шаблон» since 2026-11-18 (it lived inside «Повышение»).
-    "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion", "portia-virus-card", "portia-redacted", "portia-template-builder", "portia-companion-items", "portia-companion-editor"],
+    // portia-live-edit: LIVE-04, the shared context of the live editing mode; the desktop only reads it (useLiveEdit), the editor seam provides it.
+    "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion", "portia-virus-card", "portia-redacted", "portia-template-builder", "portia-companion-items", "portia-companion-editor", "portia-live-edit"],
     // portia-desktop-states: the shared «Доступ закрыт» panel the editor shows when the rights check fails (STAB-APP-09).
     // portia-image-framing: the block «Видимая часть» under a picture field (D-63, 20-53), shared with the template builder through ImageEditorField.
     // portia-users-tab: the «Пользователи» tab body (USR-01, Phase 22).
     // portia-level-picker: the shared «Нужен допуск 1–5» control of the editor forms (Phase 24, D-16).
     // portia-image-rewrite: the «change the address of a picture» hook beside the level picker (Phase 25, D-13/D-14); it keeps the editor file's requests and texts out of it.
     // portia-icons: OWN-03, the route picker of the shared classification field draws the route icons (26.1-04).
-    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states", "portia-image-framing", "portia-users-tab", "portia-level-picker", "portia-image-rewrite", "portia-icons"],
+    // portia-live-edit: LIVE-04, the shared context the editor seam provides.
+    // portia-desktop-documents: LIVE-02, the editor draws the visitor's view of the app in live mode (the «Справочник» page on the draft).
+    // portia-virus-card: LIVE-05, the live text shows the visitor's FormattedText with its GIFs, and the strip of GIFs under the field being edited.
+    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states", "portia-image-framing", "portia-users-tab", "portia-level-picker", "portia-image-rewrite", "portia-icons", "portia-live-edit", "portia-desktop-documents", "portia-virus-card"],
   } as const;
   for (const [main, family] of [["portia-desktop", desktopFamily], ["portia-editor", editorFamily]] as const) {
     const members = family.map((part) => part.file.replace(/\.tsx$/, ""));

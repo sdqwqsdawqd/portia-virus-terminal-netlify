@@ -2841,6 +2841,51 @@ html[data-motion="off"] .assistant-button:hover + .assistant-items, html[data-mo
 @media (max-width: 900px) {
   .editor-card-tabs nav button:not(.order-drag-handle) { min-height: var(--tap-target); }
 }
+/* LIVE-01..05 (26.1-10): живой режим вкладки «Редактор» — настоящий вид приложения на данных черновика с инструментами правки на месте.
+   Инструменты рисует только шов редактора; вид самого приложения — прежние правила участника. Блок стоит перед users-tab и ui-unify, поэтому селекторы кнопок на ступень точнее, чем общие правила кнопок. */
+.live-surface { width: 100%; min-width: 0; }
+.live-surface .guide-app { height: auto; overflow: visible; }
+.etab-actions button.live-toggle { min-height: 32px; padding: 0 12px; font-size: 11px; letter-spacing: .08em; }
+.etab-actions button.live-toggle[aria-pressed="true"] { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); }
+.live-editable { outline: 1px dashed transparent; outline-offset: 2px; cursor: text; }
+.live-editable:hover, .live-editable:focus, .live-editable:focus-visible { outline-color: var(--teal); }
+span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55; }
+.live-rich { display: block; min-height: 1.6em; }
+.live-rich-edit { display: grid; gap: 8px; min-width: 0; }
+.embedded-media-strip { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.embedded-media-strip .embedded-rich-media { margin: 0; }
+.live-surface [data-sort-index] { position: relative; min-width: 0; }
+@media (hover: hover) and (pointer: fine) {
+  .live-surface [data-sort-index]:not([data-sort-alone]) { cursor: grab; }
+  .live-surface [data-sort-index] .live-editable, .live-surface [data-sort-index] .live-tools { cursor: auto; }
+  .live-surface [data-sort-index] .live-editable { cursor: text; }
+}
+.live-tile > .guide-tile { width: 100%; }
+.live-block:hover { outline: 1px dashed var(--line); outline-offset: 6px; }
+.live-tools { position: relative; }
+.live-surface .live-tools button.live-button { min-height: 28px; padding: 0 10px; font-size: 11px; }
+.live-add-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; }
+.live-add-label { color: var(--muted); font: 700 11px var(--sans); letter-spacing: .08em; text-transform: uppercase; }
+.live-image { position: relative; min-height: 36px; }
+.live-image > .live-image-tools { position: absolute; top: 6px; left: 6px; z-index: 3; }
+.live-section-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.live-fold { display: flex; flex: none; align-items: center; min-height: 32px; padding: 0 4px; border: 0; background: transparent; cursor: pointer; }
+.guide-section-head.has-photo .live-fold { position: relative; z-index: 2; }
+.live-remove-wrap { position: absolute; top: 6px; right: 6px; z-index: 4; }
+.guide-section-head > .live-remove-wrap { position: relative; top: auto; right: auto; margin-left: 8px; }
+.guide-table .live-remove-wrap, .guide-table .live-editable + .live-remove-wrap { position: static; margin-left: 6px; }
+.live-remove { width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); background: var(--panel-2); color: #b96a63; font: 700 14px/1 var(--sans); cursor: pointer; opacity: .75; }
+.live-remove:hover, .live-remove:focus-visible { border-color: var(--danger); color: var(--danger); opacity: 1; }
+.live-popover { position: absolute; top: calc(100% + 4px); left: 0; z-index: 20; display: grid; gap: 10px; width: min(var(--field-max), 90vw); padding: 12px; border: 1px solid var(--line); background: var(--panel); box-shadow: 0 12px 28px rgba(0, 0, 0, .4); }
+.live-video { display: grid; gap: 4px; }
+.live-video input { width: 100%; max-width: var(--field-max); }
+.live-cards-list { display: grid; gap: 8px; max-height: 260px; margin: 0; padding: 0; border: 0; overflow: auto; }
+.live-cards-group { display: grid; gap: 4px; }
+.live-cards-group label { display: flex; align-items: center; gap: 8px; font: 400 12px var(--sans); }
+@media (max-width: 900px) {
+  .etab-actions button.live-toggle, .live-surface .live-tools button.live-button { min-height: var(--tap-target); }
+  .live-remove { width: var(--tap-target); height: var(--tap-target); }
+}
 /* users-tab:start — Phase 22 «Пользователи» (USR-01..USR-09): sharp corners, values from 22-UI-SPEC, nothing else in the file changes */
 .tab-count { min-width: 24px; margin-left: 8px; padding: 0 8px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px/1.35 var(--mono); text-align: center; }
 .users-tab { display: grid; gap: 24px; min-width: 0; }

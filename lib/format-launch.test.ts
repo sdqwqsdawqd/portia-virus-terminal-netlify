@@ -113,6 +113,10 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //  22. PORTIA-26.1-TABS3 (26.1-09 Task 3; OWN-10, D-21) — вкладка «База вирусов»: мутации и записи учёных вкладками-полосками, под ними только выбранная; у мутаций вкладки только переключают
 //      (тексты привязаны к номеру, порядка нет), у записей — по id (applyVirusItemTabsHunk): строки CardTabs и фильтры map; русских строк не добавлено (подписи в шве).
 //      Источник одобрения: 26.1-OWNER-REQUEST OWN-10 (2026-11-20, «то же в других приложениях с похожей системой») и план 26.1-09.
+//  23. PORTIA-26.1-LIVE (26.1-10; LIVE-01..05, D-21) — живой режим: кнопка «ЖИВОЙ РЕЖИМ» в панели действий вкладки, при включённом режиме тела вкладок заменяет LiveSurface
+//      (applyLiveModeHunk): импорт шва, хук useLiveMode, кнопка live.toggle перед действиями, обёртка тел вкладок и мост редактора одной строкой пропа bridge (черновик, правки,
+//      форматирование, загрузка, выбор в вкладках), чтобы планы 26.1-11…13 не трогали редактор. Русских строк не добавлено (все тексты в шве, liveCopy).
+//      Источник одобрения: ROADMAP 26.1 LIVE-01..04, решение владельца 3 (26.1-OWNER-REQUEST, 2026-11-20) и план 26.1-10.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -1306,6 +1310,43 @@ function applyVirusItemTabsHunk(text: string): string {
   );
 }
 
+/**
+ * PORTIA-26.1-LIVE (26.1-10; LIVE-01..05, D-21): живой режим вкладок черновика. Вставки: импорт шва components/portia-editor-live.tsx, хук useLiveMode рядом с closeFormatterFor
+ * (при переключении режима панель оформления закрывается), кнопка live.toggle перед действиями панели вкладки, обёртка тел вкладок (при live.on рисуется LiveSurface с мостом редактора,
+ * иначе прежние тела без изменений). Русских строк не добавлено: подписи и тексты режима лежат в шве (liveCopy).
+ */
+function applyLiveModeHunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    'import { createPortal } from "react-dom";\n',
+    'import { createPortal } from "react-dom";\nimport { LiveSurface, useLiveMode } from "@/components/portia-editor-live";\n',
+    "live mode: import",
+  );
+  next = replaceOnce(
+    next,
+    "  const closeFormatterFor = (...keys: string[]) => dropFormatFields((key) => keys.includes(key));\n",
+    "  const closeFormatterFor = (...keys: string[]) => dropFormatFields((key) => keys.includes(key));\n  const live = useLiveMode(tab, () => { setFormatTarget(null); setFormatterOpen(false); });\n",
+    "live mode: the hook",
+  );
+  next = replaceOnce(
+    next,
+    "  const draftActions = <>\n",
+    "  const draftActions = <>\n    {live.toggle}\n",
+    "live mode: the toggle in the action buttons",
+  );
+  next = replaceOnce(
+    next,
+    '      {tab === "viruses" && (\n',
+    [
+      "      {live.on ? <LiveSurface tab={tab} bridge={{ draft, changeDraft, changeFormattedText, activateFormatter, closeFormatterFor, uploadImage, uploadState, uploadMessage, guideSection: activeGuideSection, setGuideSection: setSelectedGuideSection, infoSection: activeInfoSection, setInfoSection: setSelectedInfoSection, virusId: selectedVirusId, setVirusId: setSelectedVirusId, recycledVirusId: selectedRecycledVirusId, setRecycledVirusId: setSelectedRecycledVirusId, recycleFileId: selectedRecycleFileId, setRecycleFileId: setSelectedRecycleFileId, broadcastTab: broadcastEditorTab, setBroadcastTab: selectBroadcastTab }} /> : <>",
+      '      {tab === "viruses" && (',
+      "",
+    ].join("\n"),
+    "live mode: the surface instead of the tab bodies",
+  );
+  return replaceOnce(next, "      )}\n\n      <EditorDraftBarContext.Provider value={draftBar}>\n", "      )}\n      </>}\n\n      <EditorDraftBarContext.Provider value={draftBar}>\n", "live mode: the end of the tab bodies");
+}
+
 /** Реестр одобренных правок (D-64): `apply` — порядок применения к образцу; `normalizeActual` — что вырезается из текущего файла перед сравнением. */
 const approvedEditorEdits: readonly { id: string; apply: (text: string) => string; normalizeActual?: (text: string) => string }[] = [
   { id: "D-57", apply: applyLaunchButtonHunk },
@@ -1334,6 +1375,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26.1-TABS", apply: applyGuideCardTabsHunk },
   { id: "PORTIA-26.1-TABS2", apply: applyInfoSubsectionTabsHunk },
   { id: "PORTIA-26.1-TABS3", apply: applyVirusItemTabsHunk },
+  { id: "PORTIA-26.1-LIVE", apply: applyLiveModeHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -1436,7 +1478,7 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.throws(() => applyInfoAddSectionHunk(expected), /exactly one bottom add-section button/, "a file without the bottom button cannot be turned into the expected one");
   // Без правки D-62 (только D-57) файл отличается от ожидаемого.
   assert.notEqual(firstDifference(expected, applyLaunchButtonHunk(sample)), null, "a file without the D-62 hunk is a difference");
-  const withoutUsers = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-22" && edit.id !== "PORTIA-26-R01").reduce((text, edit) => edit.apply(text), sample);
+  const withoutUsers = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-22" && edit.id !== "PORTIA-26-R01" && edit.id !== "PORTIA-26.1-LIVE").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutUsers), null, "a file without the PORTIA-22 hunk is a difference");
   const withoutLevels = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-24") && edit.id !== "PORTIA-25" && !edit.id.startsWith("PORTIA-26")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutLevels), null, "a file without the PORTIA-24 hunk is a difference");
@@ -1447,10 +1489,10 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutTabShell = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutTabShell), null, "a file without the PORTIA-26-06 hunk is a difference");
   assert.throws(() => applyTabShellHunk(expected), /exactly one approved anchor/, "the tab shell hunk cannot be applied twice");
-  const withoutTabBodies = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-06b" && edit.id !== "PORTIA-26-R01" && !edit.id.startsWith("PORTIA-26-07") && !edit.id.startsWith("PORTIA-26-G")).reduce((text, edit) => edit.apply(text), sample);
+  const withoutTabBodies = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-06b" && edit.id !== "PORTIA-26-R01" && edit.id !== "PORTIA-26.1-LIVE" && !edit.id.startsWith("PORTIA-26-07") && !edit.id.startsWith("PORTIA-26-G")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutTabBodies), null, "a file without the PORTIA-26-06b hunk is a difference");
   assert.throws(() => applyTabBodiesHunk(expected), /exactly one approved anchor/, "the tab bodies hunk cannot be applied twice");
-  const withoutSectionNav = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26-07") && edit.id !== "PORTIA-26-R01" && !edit.id.startsWith("PORTIA-26-G")).reduce((text, edit) => edit.apply(text), sample);
+  const withoutSectionNav = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26-07") && edit.id !== "PORTIA-26-R01" && edit.id !== "PORTIA-26.1-LIVE" && !edit.id.startsWith("PORTIA-26-G")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutSectionNav), null, "a file without the PORTIA-26-07 hunk is a difference");
   assert.throws(() => applySectionNavHunk(expected), /exactly one approved anchor/, "the section nav hunk cannot be applied twice");
   const withoutInfoBroadcastNav = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-07b" && edit.id !== "PORTIA-26-G04").reduce((text, edit) => edit.apply(text), sample);
@@ -1464,7 +1506,7 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutCardToggleName = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-13").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutCardToggleName), null, "a file without the PORTIA-26-13 hunk is a difference");
   assert.throws(() => applyCardToggleNameHunk(expected), /exactly one approved anchor/, "the card toggle name hunk cannot be applied twice");
-  const withoutReviewDraftBar = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-R01").reduce((text, edit) => edit.apply(text), sample);
+  const withoutReviewDraftBar = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-R01" && edit.id !== "PORTIA-26.1-LIVE").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutReviewDraftBar), null, "a file without the PORTIA-26-R01 hunk is a difference");
   assert.throws(() => applyReviewDraftBarHunk(expected), /exactly one approved anchor/, "the review draft bar hunk cannot be applied twice");
   const withoutReviewLiveRegion = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-R05").reduce((text, edit) => edit.apply(text), sample);
@@ -1501,6 +1543,10 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.notEqual(firstDifference(expected, withoutVirusItemTabs), null, "a file without the PORTIA-26.1-TABS3 hunk is a difference");
   assert.throws(() => applyVirusItemTabsHunk(expected), /exactly one approved anchor/, "the virus item tabs hunk cannot be applied twice");
   assert.ok(expected.includes("<CardTabs label={cardTabsCopy.mutations}") && expected.includes("<CardTabs label={cardTabsCopy.logs}"), "the approved editor shows the tabs of the mutations and the scientist records");
+  const withoutLiveMode = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-LIVE").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutLiveMode), null, "a file without the PORTIA-26.1-LIVE hunk is a difference");
+  assert.throws(() => applyLiveModeHunk(expected), /exactly one approved anchor/, "the live mode hunk cannot be applied twice");
+  assert.ok(expected.includes("<LiveSurface tab={tab}") && expected.includes("live.toggle"), "the approved editor shows the live mode surface and its toggle");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

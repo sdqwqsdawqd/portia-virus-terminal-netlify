@@ -79,6 +79,16 @@ export function FormattedText({ text, document, className = "", trimLeadingBlank
   return <span className={`formatted-content${className ? ` ${className}` : ""}`}>{nodes}</span>;
 }
 
+/**
+ * LIVE-05 (26.1-10): only the pictures and GIFs a text links to, drawn by the same EmbeddedImage as FormattedText, with no text.
+ * The live editor shows it under the field being edited, so a GIF keeps playing while its link is typed. Nothing when the text links to no picture.
+ */
+export function EmbeddedMediaStrip({ text, eager = false }: { text: string; eager?: boolean }) {
+  const media = splitEmbeddedMedia(text).flatMap((segment) => (segment.kind === "media" ? [segment] : []));
+  if (!media.length) return null;
+  return <div className="embedded-media-strip">{media.map((segment) => <EmbeddedImage key={`media-${segment.start}`} src={segment.url} eager={eager} />)}</div>;
+}
+
 export function DossierSection({ index, title, children }: { index: string; title: string; children: ReactNode }) {
   return <section className="dossier-section"><div className="section-kicker"><span>{index}</span>{title}</div>{children}</section>;
 }

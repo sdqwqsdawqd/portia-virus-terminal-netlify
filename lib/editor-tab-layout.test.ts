@@ -832,7 +832,7 @@ test("OWN-09: arrows on the order button: ↑ and ← one step back, ↓ and →
 
 test("OWN-09: where a hold may start: the head of a card, the whole row of a list or a table; never a field, a link, the action buttons or the delete button", () => {
   assert.ok(handleSource.includes('element.closest("input, textarea, select, a")'), "fields and links");
-  assert.ok(handleSource.includes('element.closest(".nested-editor-actions, .info-table-row > button")'), "the actions of a card and the delete button of a table row");
+  assert.ok(handleSource.includes('element.closest(".nested-editor-actions, .info-table-row > button, .live-tools")'), "the actions of a card, the delete button of a table row and the tools of the live mode (26.1-10)");
   assert.ok(handleSource.includes("nested !== null && nested !== row"), "a nested row belongs to its own handle");
   assert.ok(handleSource.includes("isContentEditable"), "editable text");
 });

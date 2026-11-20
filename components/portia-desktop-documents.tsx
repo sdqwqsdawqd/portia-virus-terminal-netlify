@@ -12,6 +12,7 @@ import type { ImageFraming } from "@/lib/image-framing";
 import { FormattedText } from "@/components/portia-desktop-dossier";
 import { PortiaImage, useVisibleTimeout } from "@/components/portia-desktop-media";
 import { AppFatalPanel, AppSkeleton } from "@/components/portia-desktop-states";
+import { useLiveEdit } from "@/components/portia-live-edit";
 
 // D-19: one permission set for every third-party frame. Scripts and same-origin let the viewers run, popups escape the sandbox so links open as normal tabs;
 // no top-navigation flag, so a frame can never move the PORTIA tab. If a device needs more, add only that one flag.
@@ -103,11 +104,15 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
   /** Phase 24 (D-20): set while the open card became closed; the page then shows the block of that level. */
   lostLevel?: number | null;
 }) {
+  // LIVE-04 (26.1-10): the editor's live mode puts its tools in a context; a visitor's page has none and keeps the markup below as it was.
+  const live = useLiveEdit("guide");
   const scroller = useRef<HTMLDivElement>(null);
   const page = useRef<HTMLElement>(null);
   // Folded sections live on this device only (D-08): first visit starts with compact section headers only.
   const [expanded, setExpanded] = useState<string[]>([]);
   const [expandedLoaded, setExpandedLoaded] = useState(false);
+  // The live mode shows every section open and folds only for this session, so a section made a moment ago is not hidden under its own head.
+  const [liveFolded, setLiveFolded] = useState<string[]>([]);
   const returnTo = useRef<{ cardId: string; scrollTop: number; sections: string } | null>(null);
   // Owner 2026-11-18: cards opened from the block «Карточки» of another card; «Назад» goes back up this chain before it returns to the grid.
   const [parentCards, setParentCards] = useState<string[]>([]);
@@ -181,7 +186,7 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
       <article className="guide-page" tabIndex={-1} ref={page}>
         <span className="eyebrow">{found.section.title || "Без названия"}</span>
         {/* The title carries the mark: a long page centred as a whole would hide its top. */}
-        <h1 className={hitId === card.id ? "search-hit" : undefined} {...(hitId === card.id ? { "data-search-hit": "true", "aria-current": "true" as const } : {})}>{card.title || "Без названия"}</h1>
+        <h1 className={hitId === card.id ? "search-hit" : undefined} {...(hitId === card.id ? { "data-search-hit": "true", "aria-current": "true" as const } : {})}>{live ? live.text({ kind: "guide-card-title", cardId: card.id }, card.title) : card.title || "Без названия"}</h1>
         {!card.blocks.length && <p className="guide-section-empty">В карточке пока нет содержимого</p>}
         <div className="guide-blocks">{card.blocks.map((block) => <GuideBlockView key={block.id} block={block} formattedText={formattedText} cardTitle={card.title} sections={sections} onOpenCard={openNested} />)}</div>
       </article>
@@ -196,15 +201,20 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
       if (row.kind === "redacted") return <section className="guide-section" key={row.slot}><RedactedPlaceholder variant="bar" level={row.requiredLevel} /></section>;
       const section = row.item;
       const folded = !expanded.includes(section.id);
+      const shut = live ? liveFolded.includes(section.id) : folded;
       const gridId = `guide-grid-${section.id}`;
       const cardRows = mergePlaceholders(section.cards, placeholders?.cards[section.id]);
       return <section className="guide-section" key={section.id}>
-        <button type="button" className={`guide-section-head${section.photo ? " has-photo" : ""}`} aria-expanded={!folded} aria-controls={gridId} onClick={() => setExpanded((current) => current.includes(section.id) ? current.filter((id) => id !== section.id) : [...current, section.id])}>
+        {live ? <div className={`guide-section-head${section.photo ? " has-photo" : ""}`}>
+          {section.photo && <PortiaImage src={section.photo} alt="" recordId={`${section.id}:band`} priority="lazy" icon="guide" className="guide-section-band is-fill is-quiet" framing={section.photoFraming} />}
+          <span className="guide-section-title" id={`${gridId}-title`}>{live.text({ kind: "guide-section-title", sectionId: section.id }, section.title)}</span>
+          <button type="button" className="live-fold" aria-expanded={!shut} aria-controls={gridId} aria-labelledby={`${gridId}-title`} onClick={() => setLiveFolded((current) => current.includes(section.id) ? current.filter((id) => id !== section.id) : [...current, section.id])}><span className="guide-section-chevron" aria-hidden="true" /></button>
+        </div> : <button type="button" className={`guide-section-head${section.photo ? " has-photo" : ""}`} aria-expanded={!folded} aria-controls={gridId} onClick={() => setExpanded((current) => current.includes(section.id) ? current.filter((id) => id !== section.id) : [...current, section.id])}>
           {section.photo && <PortiaImage src={section.photo} alt="" recordId={`${section.id}:band`} priority="lazy" icon="guide" className="guide-section-band is-fill is-quiet" framing={section.photoFraming} />}
           <span className="guide-section-title">{section.title || "Без названия"}</span>
           <span className="guide-section-chevron" aria-hidden="true" />
-        </button>
-        <div className="guide-grid" id={gridId} hidden={folded}>
+        </button>}
+        <div className="guide-grid" id={gridId} hidden={shut}>
           {!cardRows.length && <p className="guide-section-empty">В разделе пока нет карточек</p>}
           {cardRows.map((cardRow) => {
             if (cardRow.kind === "redacted") return <RedactedPlaceholder key={cardRow.slot} variant="tile" level={cardRow.requiredLevel} />;

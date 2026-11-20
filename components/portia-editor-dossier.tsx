@@ -58,7 +58,7 @@ function holdTargetOf(target: EventTarget | null, row: HTMLElement): HoldTarget 
   return {
     tag: element.closest("input, textarea, select, a")?.tagName ?? element.tagName,
     editable: element instanceof HTMLElement && element.isContentEditable,
-    insideActions: element.closest(".nested-editor-actions, .info-table-row > button") !== null,
+    insideActions: element.closest(".nested-editor-actions, .info-table-row > button, .live-tools") !== null,
     nestedRow: nested !== null && nested !== row,
   };
 }

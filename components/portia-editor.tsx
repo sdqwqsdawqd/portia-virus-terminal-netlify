@@ -4,6 +4,7 @@ import { ImageFramingEditor } from "@/components/portia-image-framing";
 import { CardTabs, cardTabsCopy, useCardTabSelection } from "@/components/portia-editor-card-tabs";
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { LiveSurface, useLiveMode } from "@/components/portia-editor-live";
 import { changedDossierTabs, changedSections, deniedSections, editorSections, revertSections, sectionLabels, type DossierTab, type EditorSection } from "@/lib/editor-changes";
 import { draftEdits, partialSave, rebaseDecision, SaveConflictError, SectionClosedError, saveStatusText, type DraftEdit, type SaveStatus } from "@/lib/editor-save-status";
 import { closedMessage, closedSectionsOf, openTabIds, tabRegistry, type TabDef } from "@/lib/editor-tabs";
@@ -747,6 +748,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   };
   // The panel's stored commit for a deleted item would write its formatting back; peers too (CR-01).
   const closeFormatterFor = (...keys: string[]) => dropFormatFields((key) => keys.includes(key));
+  const live = useLiveMode(tab, () => { setFormatTarget(null); setFormatterOpen(false); });
 
   // The format panel keeps a target in the tab being hidden; leaving it open could write old text back (Pitfall 7).
   const selectDossierTab = (id: DossierTab) => {
@@ -1134,6 +1136,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   const statusText = saveStatusText(status, partial ?? undefined);
   // Review WR-01: the draft is shared by every tab. The draft tabs have the bar below; on any other tab the same buttons and reasons go through EditorDraftBarContext into that tab's bar.
   const draftActions = <>
+    {live.toggle}
     <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
     <button type="button" className="secondary-control" disabled={!dirty} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") setDialog("discard"); }}>ОТМЕНИТЬ</button>
     <button type="button" className="primary-control" disabled={!dirty || saveBlocked} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") void save(); }}>СОХРАНИТЬ</button>
@@ -1284,6 +1287,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
 
       <FormatLaunchButton target={formatTarget} open={formatterOpen} onToggle={() => setFormatterOpen((current) => !current)} />
 
+      {live.on ? <LiveSurface tab={tab} bridge={{ draft, changeDraft, changeFormattedText, activateFormatter, closeFormatterFor, uploadImage, uploadState, uploadMessage, guideSection: activeGuideSection, setGuideSection: setSelectedGuideSection, infoSection: activeInfoSection, setInfoSection: setSelectedInfoSection, virusId: selectedVirusId, setVirusId: setSelectedVirusId, recycledVirusId: selectedRecycledVirusId, setRecycledVirusId: setSelectedRecycledVirusId, recycleFileId: selectedRecycleFileId, setRecycleFileId: setSelectedRecycleFileId, broadcastTab: broadcastEditorTab, setBroadcastTab: selectBroadcastTab }} /> : <>
       {tab === "viruses" && (
         <div className="virus-editor-layout etab-body" ref={layoutRef} data-mobile-view={recordOpen && selectedVirus ? "record" : "list"}>
           <button type="button" className="secondary-control editor-back-to-list" onClick={() => showRecord(false)}>← К списку</button>
@@ -1704,6 +1708,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
           <p className="editor-guidance">Если за выбранный промежуток пользователь ничего не делал, Вивьян выберет фразу бездействия. Если он нажимал, печатал, прокручивал страницу или двигал указатель — фразу активности</p>
         </div>
       )}
+      </>}
 
       <EditorDraftBarContext.Provider value={draftBar}>
         {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} uploadMessage={uploadMessage} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} drafts={employeeDrafts} />}
