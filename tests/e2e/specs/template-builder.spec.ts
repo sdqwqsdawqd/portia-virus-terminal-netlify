@@ -373,22 +373,42 @@ test("[STAB-TMPL-01] classification: a changed value shows in the preview and th
   expect(writes).toEqual([]);
 });
 
+/**
+ * One axis of the classification form. Six axes are selects; the routes of transmission (the third field) are the drop-down of
+ * 26.1-15: a press opens a panel of checkboxes, a second press closes it. A single route is chosen, the drop-down is closed again.
+ */
+async function chooseClassValue(fields: Locator, index: number, value: string) {
+  const field = fields.nth(index);
+  const dropdown = field.locator(".route-dropdown-toggle");
+  if ((await dropdown.count()) === 0) {
+    await field.locator("select").selectOption(value);
+    return;
+  }
+  await dropdown.click();
+  await field.getByRole("checkbox", { name: value }).check();
+  await dropdown.click();
+  await expect(dropdown).toHaveAttribute("aria-expanded", "false");
+}
+
 // D-55 (20-37): the preview is the archive's own card (VirusCardBody): coloured class icons, the section kickers 01-05, no scientist records.
 test("[STAB-TMPL-01] D-55 the preview is the archive card with coloured class icons", async ({ page }) => {
   const writes = trackWrites(page);
   const { builder } = await openBuilder(page);
   await nameField(builder).fill("Вирус с иконками");
   const group = builder.locator("section.editor-group", { has: page.getByRole("heading", { name: "Классификация" }) });
-  const selects = group.locator("select");
-  await expect(selects).toHaveCount(7);
+  // 26.1-04/26.1-15 (OWN-03): six axes are selects, the routes of transmission are a compact drop-down with a checkbox per route.
+  const fields = group.locator(".classification-editor-field");
+  await expect(fields).toHaveCount(7);
+  await expect(group.locator("select")).toHaveCount(6);
+  await expect(group.locator(".route-dropdown")).toHaveCount(1);
   // Axis order of the form: danger, spread, transmission, escapeRisk, mind, appearance, behavior.
-  await selects.nth(0).selectOption("Апейрон");
-  await selects.nth(1).selectOption("Номос");
-  await selects.nth(2).selectOption("Контактно-бытовой");
-  await selects.nth(3).selectOption("Риск");
-  await selects.nth(4).selectOption("Люцидиум");
-  await selects.nth(5).selectOption("Ксеноморф");
-  await selects.nth(6).selectOption("Инфернар");
+  await chooseClassValue(fields, 0, "Апейрон");
+  await chooseClassValue(fields, 1, "Номос");
+  await chooseClassValue(fields, 2, "Контактно-бытовой");
+  await chooseClassValue(fields, 3, "Риск");
+  await chooseClassValue(fields, 4, "Люцидиум");
+  await chooseClassValue(fields, 5, "Ксеноморф");
+  await chooseClassValue(fields, 6, "Инфернар");
 
   const preview = builder.getByLabel("Предпросмотр шаблона");
   await showPreview(builder);
@@ -1065,8 +1085,10 @@ async function measureClassValues(page: Page, scope = ".template-card-preview"):
     const cell = strong.closest(".class-cell")!;
     const tops = new Set<number>();
     let right = 0;
-    for (const node of Array.from(strong.childNodes)) {
-      if (node.nodeType !== Node.TEXT_NODE || (node.textContent ?? "").trim() === "") continue;
+    // 26.1-04: the cell of the routes holds its text in buttons (.route-item), so every text node below the strong counts, not only its direct children.
+    const walker = document.createTreeWalker(strong, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if ((node.textContent ?? "").trim() === "") continue;
       const range = document.createRange();
       range.selectNodeContents(node);
       for (const rect of Array.from(range.getClientRects())) {
@@ -1098,9 +1120,9 @@ function expectClassValuesWhole(measures: ClassValueMeasure[], where: string) {
 
 async function chooseLongestClassValues(builder: Locator) {
   await openTab(builder, "Основное");
-  const fields = builder.locator(".classification-editor-field select");
+  const fields = builder.locator(".classification-editor-field");
   await expect(fields).toHaveCount(classAxes.length);
-  for (const [index, value] of longestClassValues.entries()) await fields.nth(index).selectOption(value);
+  for (const [index, value] of longestClassValues.entries()) await chooseClassValue(fields, index, value);
 }
 
 test("[STAB-TMPL-01] D-60 class values stay whole in the preview and in the downloaded HTML", async ({ page, browser, isMobile }, testInfo) => {
