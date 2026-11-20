@@ -219,7 +219,7 @@ test("26-12 every class sign: line 1.5 with round caps, currentColor only, no da
 });
 
 // Everything except the class signs stays as it was at the sample commit (D-05; the owner's amendment in 26-ICON-DECISION.md
-// keeps the byte check for route-*, lock-* and the other icons, the class map, its keys and the canonical terms).
+// keeps the byte check for lock-* and the other icons, the class map, its keys and the canonical terms; OWN-03 frees the route icons only).
 // The guard reads the sample from git history, so it needs a full clone; it fails with a clear message instead of skipping.
 const ICON_SAMPLE_COMMIT = "cf8038f42270cacd600eb347faaf36f1c52294ba";
 const ICONS_PATH = "components/portia-icons.tsx";
@@ -259,18 +259,55 @@ function lineOf(source: string, start: string) {
   return line;
 }
 
-test("26-12 route-*, lock-* and all non-class icons, their helpers, the type, the class map and PortiaIcon equal ICON_SAMPLE_COMMIT byte for byte", () => {
+// Owner 2026-11-20, OWN-03: route icons are redrawn; everything else stays byte for byte. The route drawings, the helper `drop`
+// (used only by the old route drawings), the route keys of the type and the route lines of the class map are not compared with the
+// sample; their own rules are in the next tests. The type and the class map are compared line by line without the lines naming a route.
+const withoutRouteLines = (text: string | undefined) => (text ?? "").split("\n").filter((line) => !line.includes("route-")).join("\n");
+
+test("26-12 lock-* and all non-class, non-route icons, their helpers, the type, the class map and PortiaIcon equal ICON_SAMPLE_COMMIT byte for byte", () => {
   const sample = readSampleIcons();
   const sampleIconPaths = sliceOf(sample, "const iconPaths:", "// The badge for each canonical term");
   const keys = [...sampleIconPaths.matchAll(/\n  ("[a-z-]+"|[a-z]+):/g)].map((match) => match[1].replaceAll('"', ""));
-  const kept = keys.filter((key) => !key.startsWith("class-"));
+  const kept = keys.filter((key) => !key.startsWith("class-") && !key.startsWith("route-"));
   // Owner 2026-11-18: one icon was added after the sample, «template» (the app «Шаблон»); every sampled icon stays byte for byte.
-  assert.ok(kept.includes("route-droplet") && kept.includes("lock-closed") && kept.length === 20, `kept icons: ${kept.join(",")}`);
+  assert.ok(kept.includes("lock-closed") && kept.includes("search") && kept.length === 14, `kept icons: ${kept.join(",")}`);
   for (const key of kept) assert.equal(drawing(key), entryIn(sampleIconPaths, key), `${key} is unchanged since ${ICON_SAMPLE_COMMIT.slice(0, 7)}`);
-  for (const helper of ["const drop =", "const lockBody ="]) assert.equal(lineOf(iconsSource, helper), lineOf(sample, helper), helper);
+  assert.equal(lineOf(iconsSource, "const lockBody ="), lineOf(sample, "const lockBody ="), "const lockBody =");
   const typeOf = (source: string) => /export type PortiaIconName =[\s\S]*?;\n/.exec(source)?.[0];
-  assert.equal(typeOf(iconsSource), typeOf(sample)?.replace('| "trash" | "editor"\n', '| "trash" | "editor" | "template"\n'), "PortiaIconName keeps every key (plus «template»)");
-  assert.equal(iconMapBlock, sliceOf(sample, "export const classificationIcon", "// Content values are editor input"), "classificationIcon");
+  assert.equal(withoutRouteLines(typeOf(iconsSource)), withoutRouteLines(typeOf(sample)?.replace('| "trash" | "editor"\n', '| "trash" | "editor" | "template"\n')), "PortiaIconName keeps every key (plus «template»), route keys aside");
+  assert.equal(withoutRouteLines(iconMapBlock), withoutRouteLines(sliceOf(sample, "export const classificationIcon", "// Content values are editor input")), "classificationIcon, route lines aside");
   assert.equal(sliceOf(iconsSource, "export function classificationIconFor", "\n}\n"), sliceOf(sample, "export function classificationIconFor", "\n}\n"), "classificationIconFor");
   assert.equal(sliceOf(iconsSource, "export function PortiaIcon(", "\n}\n"), sliceOf(sample, "export function PortiaIcon(", "\n}\n"), "PortiaIcon");
+});
+
+// OWN-03 (26.1-03, option-b): six routes and «Неизвестно», each its own new drawing.
+const routeIconKeys = ["route-aerosol", "route-contact", "route-fecal-oral", "route-vector", "route-blood", "route-sexual", "route-unknown"];
+const routeNames: Record<string, string> = {
+  "Аэрозольный": "route-aerosol", "Контактно-бытовой": "route-contact", "Фекально-оральный": "route-fecal-oral",
+  "Трансмиссивный": "route-vector", "Гемоконтактный": "route-blood", "Половой путь": "route-sexual", "Неизвестно": "route-unknown",
+};
+
+test("OWN-03 the route icon keys are the new seven; the old route keys and the old helper are gone", () => {
+  const typed = [...typeBlock.matchAll(/"(route-[a-z-]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(typed, routeIconKeys);
+  for (const old of ["route-droplet", "route-dust", "route-oral"]) assert.ok(!iconsSource.includes(old), `${old} is gone`);
+  assert.ok(!iconsSource.includes("const drop ="), "the drop helper served only the old route drawings");
+});
+
+test("OWN-03 the class map gives each of the seven route names its icon and keeps no old route name", () => {
+  const entries = [...iconMapBlock.matchAll(/"([^"]+)": "(route-[a-z-]+)"/g)].map((match) => [match[1], match[2]]);
+  assert.deepEqual(Object.fromEntries(entries), routeNames);
+  for (const old of ["Воздушно-капельный", "Воздушно-пылевой", '"Половой"']) assert.ok(!iconMapBlock.includes(old), `${old} is not in the map`);
+});
+
+test("OWN-03 every route drawing: line 1.5 with round caps, currentColor only, no dashes, and none equals a drawing of the sample", () => {
+  const sampleIconPaths = sliceOf(readSampleIcons(), "const iconPaths:", "// The badge for each canonical term");
+  const sampleDrawings = [...sampleIconPaths.matchAll(/\n  ("[a-z-]+"|[a-z]+):/g)].map((match) => entryIn(sampleIconPaths, match[1].replaceAll('"', "")).trim());
+  for (const key of routeIconKeys) {
+    const item = drawing(key);
+    assert.ok(item.trim().startsWith('<><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">'), `${key} line group`);
+    assert.doesNotMatch(item, /#[0-9a-fA-F]{3,8}\b|rgb\(|hsl\(/, `${key} has no colour beyond currentColor`);
+    assert.doesNotMatch(item, /strokeDasharray|opacity\s*=|\{[a-zA-Z]/, `${key} has no dashes, fading or shared helper`);
+    assert.ok(!sampleDrawings.includes(item.trim()), `${key} is a new drawing, not one of the sample`);
+  }
 });
