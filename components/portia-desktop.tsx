@@ -19,7 +19,7 @@ import { flattenPlaceholders, guideSlotChain, infoSlotChain, isViewerShapedConte
 import { levelCopy } from "@/lib/level-copy";
 import { RedactedPlaceholder } from "@/components/portia-redacted";
 import { splitEmbeddedMedia } from "@/lib/rich-text-media";
-import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
+import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, type BroadcastTab } from "@/lib/broadcasts";
 import { AppWindow, appMeta, minimumWindowSize, nodWindow, type AppId } from "@/components/portia-desktop-window";
 import { PREVIEW_HIDE_MS, PREVIEW_SHOW_MS, TaskbarPreview, useTaskbarPreview } from "@/components/portia-desktop-taskbar";
 import { DesktopIcon, StartPanelButton, desktopShortcutOrder, placedShortcut, useShortcutPlacement, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
@@ -31,13 +31,13 @@ import { AppDeniedPanel, AppFatalPanel, AppSkeleton, AppStaleBanner } from "@/co
 import { accessCheckFailedText, appViewState, contentSyncFailed, contentSyncSucceeded, emptyCopy, failureFromResponse, type AppFailure, type ContentSync } from "@/lib/app-state";
 import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
 import { EmbeddedDocument, GuideApp } from "@/components/portia-desktop-documents";
-import { InfoArticle } from "@/components/portia-desktop-info";
+import { BroadcastCard, BroadcastsHeader, InfoArticle, broadcastTabs } from "@/components/portia-desktop-info";
 import { FormattedText, LoadingState, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
 import { PortiaImage } from "@/components/portia-desktop-media";
 import { newRecommendationSeed, pickSearchRecommendations, seededRandom } from "@/lib/search-recommendations";
 import { infoCurrentTitle, infoNextTarget, infoOverviewVisible, infoSectionsButtonLabel, infoSectionsHitCount, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";
 import { startMenuCloseReason, type StartMenuEvent } from "@/lib/start-menu";
-import { broadcastType, buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, searchKeyAction, searchKeyContext, searchFirstPage, searchMaxShown, searchShownCount, type SearchItem } from "@/lib/search-index";
+import { buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, searchKeyAction, searchKeyContext, searchFirstPage, searchMaxShown, searchShownCount, type SearchItem } from "@/lib/search-index";
 
 // Phase 24, D-20/D-22: a record window whose record became closed keeps its place and shows the block; the slot of the placeholder
 // is what is remembered, never the record. A selection with an id is a normal one; the lost state counts only while the id is empty,
@@ -2182,20 +2182,14 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
 
           <AppWindow app="broadcasts" state={windows.broadcasts} active={activeApp === "broadcasts"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window broadcasts-window" meta="КАНАЛ СТАНЦИИ">
             <div className="broadcasts-app">
-              <header><h1>Объявления</h1><p>Еженедельные квесты, задачи и новости.</p></header>
+              <BroadcastsHeader />
               {broadcastsView === "stale" && contentStaleBanner}
               {broadcastsView === "loading" ? <AppSkeleton shape="broadcasts" /> : broadcastsView === "fatal" ? contentFatal("flaskEmpty") : <>
               <div className="editor-tabs broadcast-tabs">
-                {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([tab, label]) => <button key={tab} type="button" className={broadcastTab === tab ? "active" : ""} aria-pressed={broadcastTab === tab} onClick={() => setBroadcastTab(tab)}>{label} {broadcastFeed(content.broadcasts, tab, today).length}</button>)}
+                {broadcastTabs.map(([tab, label]) => <button key={tab} type="button" className={broadcastTab === tab ? "active" : ""} aria-pressed={broadcastTab === tab} onClick={() => setBroadcastTab(tab)}>{label} {broadcastFeed(content.broadcasts, tab, today).length}</button>)}
               </div>
               <div className="broadcast-grid">
-                {broadcastFeed(content.broadcasts, broadcastTab, today).map((item) => {
-                  const state = item.type === "quest" ? questState(item, today) : null;
-                  // D-19: a quest or task never shows ВАЖНО, whatever the stored data says.
-                  const important = item.type === "news" && item.important;
-                  const badge = state === "active" ? "АКТИВЕН" : state === "upcoming" ? `СКОРО · с ${formatQuestDay(item.startsAt).slice(0, 5)}` : "ЗАВЕРШЁН";
-                  return <article key={item.id} className={`broadcast-card ${item.type}${important ? " important" : ""}${state ? ` state-${state}` : ""}${hitClass("broadcast", item.id)}`} {...hitAttrs("broadcast", item.id)}><span>{broadcastType(item.type)}{important ? " · ВАЖНО" : ""}</span>{state && <em className="quest-badge">{badge}</em>}<h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2>{item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {formatQuestDay(item.startsAt)}</span>}{item.endsAt && <span>Окончание: {formatQuestDay(item.endsAt)}</span>}</div>}{item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}<FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>;
-                })}
+                {broadcastFeed(content.broadcasts, broadcastTab, today).map((item) => <BroadcastCard key={item.id} item={item} today={today} formattedText={content.formattedText} hit={isSearchHit("broadcast", item.id)} />)}
                 {!broadcastFeed(content.broadcasts, broadcastTab, today).length && <div className="broadcast-empty empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{emptyCopy[broadcastTab].heading}</strong><span>{emptyCopy[broadcastTab].body}</span></div>}
               </div></>}
             </div>

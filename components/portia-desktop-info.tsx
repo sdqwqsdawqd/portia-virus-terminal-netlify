@@ -1,6 +1,8 @@
 "use client";
 
-import { portiaTextKey, type InfoBlock, type InfoSection, type InfoSubsection, type PortiaContent } from "@/lib/portia-content";
+import { portiaTextKey, type Broadcast, type InfoBlock, type InfoSection, type InfoSubsection, type PortiaContent } from "@/lib/portia-content";
+import { formatQuestDay, questState } from "@/lib/broadcasts";
+import { broadcastType } from "@/lib/search-index";
 import type { InfoNextTarget } from "@/lib/info-phone-nav";
 import { FormattedText } from "@/components/portia-desktop-dossier";
 import { YoutubeFigure } from "@/components/portia-desktop-documents";
@@ -73,4 +75,51 @@ function InfoBlockView({ block, subsection, formattedText }: { block: InfoBlock;
   const picture = block.url ? <PortiaImage src={block.url} alt={`Иллюстрация: ${subsection.title}`} recordId={block.id} priority="lazy" icon="info" framing={block.framing} /> : null;
   if (live) return <figure className="info-block-photo">{live.image({ kind: "info-photo-url", subsectionId: subsection.id, blockId: block.id }, { value: block.url, framing: block.framing, children: picture })}</figure>;
   return picture ? <figure className="info-block-photo">{picture}</figure> : null;
+}
+
+/** The header of «Сводки», the same for the window and the live mode. */
+export function BroadcastsHeader() {
+  return <header><h1>Объявления</h1><p>Еженедельные квесты, задачи и новости.</p></header>;
+}
+
+/** The two tabs of the feed: the id the window keeps and the visitor's word for it. */
+export const broadcastTabs = [["news", "Новости"], ["quests", "Квесты"]] as const;
+
+/**
+ * One card of the feed of «Сводки»: the type and the state of a quest, the title, the dates and conditions of a quest, the text.
+ * The window draws it as it always did; the editor's live mode draws it inside the provider and puts the places of the entry in place (LIVE-02):
+ * the title, the dates, the conditions and the text are edited in the card, «Показывать посетителям» and «Важно» are switches in it, and a card not yet shown to visitors says so.
+ */
+export function BroadcastCard({ item, today, formattedText, hit = false }: {
+  item: Broadcast;
+  /** The visitor's local day (YYYY-MM-DD): the state of a quest comes from it. */
+  today: string;
+  formattedText: PortiaContent["formattedText"];
+  /** The card a search result named: marked, as the window marks a hit. */
+  hit?: boolean;
+}) {
+  const live = useLiveEdit("broadcasts");
+  const state = item.type === "quest" ? questState(item, today) : null;
+  // D-19: a quest or task never shows ВАЖНО, whatever the stored data says.
+  const important = item.type === "news" && item.important;
+  const badge = state === "active" ? "АКТИВЕН" : state === "upcoming" ? `СКОРО · с ${formatQuestDay(item.startsAt).slice(0, 5)}` : "ЗАВЕРШЁН";
+  return <article className={`broadcast-card ${item.type}${important ? " important" : ""}${state ? ` state-${state}` : ""}${hit ? " search-hit" : ""}${live && !item.published ? " live-draft" : ""}`} {...(hit ? { "data-search-hit": "true", "aria-current": "true" as const } : {})}>
+    <span>{broadcastType(item.type)}{important ? " · ВАЖНО" : ""}</span>
+    {state && <em className="quest-badge">{badge}</em>}
+    <h2>{live ? live.text({ kind: "broadcast-title", broadcastId: item.id }, item.title) : item.title || "БЕЗ НАЗВАНИЯ"}</h2>
+    {live
+      ? item.type === "quest" && <div className="broadcast-dates">{live.date({ kind: "broadcast-starts", broadcastId: item.id }, item.startsAt)}{live.date({ kind: "broadcast-ends", broadcastId: item.id }, item.endsAt)}</div>
+      : item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {formatQuestDay(item.startsAt)}</span>}{item.endsAt && <span>Окончание: {formatQuestDay(item.endsAt)}</span>}</div>}
+    {live
+      ? item.type === "quest" && <div className="broadcast-conditions"><b>УСЛОВИЯ</b>{live.text({ kind: "broadcast-conditions", broadcastId: item.id }, item.conditions, { multiline: true })}</div>
+      : item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}
+    {live
+      ? live.rich({ kind: "broadcast-body", broadcastId: item.id }, { text: item.body, document: formattedText[portiaTextKey.broadcast(item.id)], className: "broadcast-card-copy" })
+      : <FormattedText className="broadcast-card-copy" text={item.body} document={formattedText[portiaTextKey.broadcast(item.id)]} />}
+    {live && <div className="live-card-tools">
+      {live.flag({ kind: "broadcast-published", broadcastId: item.id }, item.published)}
+      {item.type === "news" && live.flag({ kind: "broadcast-important", broadcastId: item.id }, item.important)}
+      {live.remove({ kind: "broadcast", broadcastId: item.id }, item.title)}
+    </div>}
+  </article>;
 }

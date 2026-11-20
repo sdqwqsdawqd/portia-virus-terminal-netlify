@@ -239,7 +239,7 @@ test("every result type opens its owner and marks its record; a vanished record 
   assert.ok(source.includes("Запись недоступна") && source.includes("aria-disabled={unavailable || undefined}"));
   assert.ok(!/toast|assistant|Vivian|Вивьян/i.test(open), "no assistant or toast message for a vanished record");
   // Every owner list carries the mark.
-  for (const mark of ['hitAttrs("employee", employee.id)', 'hitAttrs("info", section.id)', 'hitAttrs("info", sub.id)', 'hitAttrs("broadcast", item.id)', 'hitAttrs("file", file.id)', 'hitAttrs("file", `virus:${virus.id}`)', 'hitId={searchHit?.type === "guide"']) {
+  for (const mark of ['hitAttrs("employee", employee.id)', 'hitAttrs("info", section.id)', 'hitAttrs("info", sub.id)', 'hit={isSearchHit("broadcast", item.id)}' /* 26.1-11: the card is BroadcastCard, which draws the mark itself */, 'hitAttrs("file", file.id)', 'hitAttrs("file", `virus:${virus.id}`)', 'hitId={searchHit?.type === "guide"']) {
     assert.ok(source.includes(mark), mark);
   }
 });

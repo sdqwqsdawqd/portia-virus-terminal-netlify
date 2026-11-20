@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { MAX_BLOCKS, MAX_SUBSECTIONS } from "./content-limits.ts";
-import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey } from "./live-edit.ts";
+import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError } from "./live-edit.ts";
+import { broadcastFeed } from "./broadcasts.ts";
 import { portiaTextKey, type PortiaContent } from "./portia-content.ts";
 
 // LIVE-01..05 (26.1-10): the pure model of the live editing mode. The draft is the editor's draft; every function edits it in place, as the editor's updaters do.
@@ -20,7 +21,7 @@ function draftWithGuide(): PortiaContent {
 }
 
 test("LIVE-01: the live mode knows its tabs; search and employees are not among them", () => {
-  assert.deepEqual([...LIVE_TABS], ["guide", "info"]);
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts"]);
   assert.equal(liveAppForTab("info"), "info", "26.1-11: «Информация» has its live mode");
   assert.equal(liveAppForTab("guide"), "guide");
   assert.equal(liveAppForTab("users"), null);
@@ -105,7 +106,7 @@ test("LIVE-05: the live text at rest is the visitor's FormattedText with its GIF
   assert.doesNotMatch(seam, /embedMedia=\{false\}/, "a link to a GIF is never turned back into text");
   assert.match(seam, /<FormattedText\b/);
   assert.match(seam, /<EmbeddedMediaStrip\b/);
-  assert.match(seam, /<FormattedTextarea\b[\s\S]*area="info"/);
+  assert.match(seam, /<FormattedTextarea\b[\s\S]*area=\{target\.kind === "broadcast-body" \? "broadcast" : "info"\}/);
   assert.match(seam, /const key = liveTextKey\(target\);/);
   assert.match(seam, /onActivate=\{bridge\.activateFormatter\}/);
   const card = read("components/portia-virus-card.tsx");
@@ -524,4 +525,136 @@ test("LIVE-02 (26.1-11): the live table of contents holds the order, the remove 
   for (const part of ['live.order({ kind: "info-sections" }', 'live.order({ kind: "info-subsections"', 'live.remove({ kind: "info-section"', 'live.remove({ kind: "info-subsection"', 'live.addBar({ kind: "info-index"']) assert.ok(surface.includes(part), part);
   assert.match(surface, /<nav className="info-index"/);
   assert.match(seam, /liveNewId\(container, kind\)/);
+});
+
+function draftWithBroadcasts(): PortiaContent {
+  const base = { published: true, important: false, startsAt: "", endsAt: "", conditions: "" };
+  return {
+    broadcasts: [
+      { ...base, id: "n1", type: "news", title: "Новость", body: "Тело новости", important: true },
+      { ...base, id: "n2", type: "news", title: "Вторая", body: "", published: false },
+      { ...base, id: "q1", type: "quest", title: "Квест", body: "Тело квеста", startsAt: "2026-11-10", endsAt: "2026-11-20", conditions: "Условие" },
+      { ...base, id: "t1", type: "task", title: "Задача", body: "", published: false },
+    ],
+    formattedText: { "broadcast:n1:body": { runs: [{ text: "Тело новости" }] } },
+  } as unknown as PortiaContent;
+}
+
+test("LIVE-01 (26.1-11): «Сводка» has its live mode", () => {
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts"]);
+  assert.equal(liveAppForTab("broadcasts"), "broadcasts");
+});
+
+test("LIVE-02 (26.1-11): the title, the body and the conditions of an entry change in place; the conditions keep their lines", () => {
+  const draft = draftWithBroadcasts();
+  assert.equal(applyLiveText(draft, { kind: "broadcast-title", broadcastId: "n2" }, "Заголовок"), true);
+  assert.equal(draft.broadcasts[1].title, "Заголовок");
+  assert.equal(draft.broadcasts[0].title, "Новость");
+  const long = "в".repeat(TEXT_LIMIT + 20);
+  assert.equal(applyLiveText(draft, { kind: "broadcast-body", broadcastId: "n1" }, long), true);
+  assert.equal(draft.broadcasts[0].body.length, TEXT_LIMIT + 20, "a formatted text is not cut like a line");
+  assert.equal(applyLiveText(draft, { kind: "broadcast-conditions", broadcastId: "q1" }, "Первая\nВторая"), true);
+  assert.equal(draft.broadcasts[2].conditions, "Первая\nВторая");
+  assert.equal(liveTextKey({ kind: "broadcast-body", broadcastId: "n1" }), portiaTextKey.broadcast("n1"));
+  assert.equal(applyLiveText(draft, { kind: "broadcast-title", broadcastId: "nope" }, "x"), false);
+});
+
+test("LIVE-02 (26.1-11): the flags: «Показывать посетителям» for every entry, «Важно» for news only", () => {
+  const draft = draftWithBroadcasts();
+  assert.equal(applyLiveFlag(draft, { kind: "broadcast-published", broadcastId: "n2" }, true), true);
+  assert.equal(draft.broadcasts[1].published, true);
+  assert.equal(applyLiveFlag(draft, { kind: "broadcast-important", broadcastId: "n2" }, true), true);
+  assert.equal(draft.broadcasts[1].important, true);
+  assert.equal(applyLiveFlag(draft, { kind: "broadcast-important", broadcastId: "q1" }, true), false, "D-19: a quest is never important");
+  assert.equal(draft.broadcasts[2].important, false);
+  assert.equal(applyLiveFlag(draft, { kind: "broadcast-published", broadcastId: "nope" }, true), false);
+});
+
+test("LIVE-02/T-26.1-25 (26.1-11): a quest date is checked before it reaches the draft: a bad day or an end before the start is not written", () => {
+  const draft = draftWithBroadcasts();
+  const ends = { kind: "broadcast-ends", broadcastId: "q1" } as const;
+  const starts = { kind: "broadcast-starts", broadcastId: "q1" } as const;
+  assert.equal(liveDateError(draft, ends, "2026-11-05"), true, "the end is before the start 2026-11-10");
+  assert.equal(applyLiveDate(draft, ends, "2026-11-05"), false);
+  assert.equal(draft.broadcasts[2].endsAt, "2026-11-20", "nothing written");
+  assert.equal(liveDateError(draft, ends, "2026-11-25"), false);
+  assert.equal(applyLiveDate(draft, ends, "2026-11-25"), true);
+  assert.equal(draft.broadcasts[2].endsAt, "2026-11-25");
+  assert.equal(applyLiveDate(draft, starts, "2026-12-01"), false, "the start after the end");
+  assert.equal(applyLiveDate(draft, starts, "2026-11-12"), true);
+  assert.equal(applyLiveDate(draft, ends, ""), true, "a date can be cleared");
+  assert.equal(draft.broadcasts[2].endsAt, "");
+  assert.equal(applyLiveDate(draft, starts, "завтра"), false, "not a day");
+  assert.equal(applyLiveDate(draft, starts, "2026-13-45"), false, "not a real day");
+  assert.equal(applyLiveDate(draft, { kind: "broadcast-starts", broadcastId: "n1" }, "2026-11-12"), false, "news have no dates");
+  assert.equal(applyLiveDate(draft, { kind: "broadcast-starts", broadcastId: "nope" }, "2026-11-12"), false);
+});
+
+test("LIVE-02 (26.1-11): the bar adds a news or a quest at the top, blank and not shown to visitors, like the editor's button", () => {
+  const draft = draftWithBroadcasts();
+  const news = applyLiveAdd(draft, { kind: "broadcasts" }, "news");
+  assert.ok(news);
+  assert.deepEqual(draft.broadcasts[0], { id: news, type: "news", title: "", body: "", published: false, important: false, startsAt: "", endsAt: "", conditions: "" });
+  const quest = applyLiveAdd(draft, { kind: "broadcasts" }, "quest");
+  assert.equal(draft.broadcasts[0].id, quest);
+  assert.equal(draft.broadcasts[0].type, "quest");
+  assert.deepEqual(liveAddKinds({ kind: "broadcasts" }), ["news", "quest"]);
+  assert.equal(applyLiveAdd(draft, { kind: "broadcasts" }, "section"), null);
+  assert.equal(liveAddBlocked(draft, { kind: "broadcasts" }, "news"), false);
+  const id = liveNewId({ kind: "broadcasts" }, "quest");
+  assert.equal(applyLiveAdd(draft, { kind: "broadcasts" }, "quest", id), id);
+});
+
+test("LIVE-02 (26.1-11): removing an entry takes its formatting with it", () => {
+  const draft = draftWithBroadcasts();
+  assert.deepEqual(liveRemovedKeys(draft, { kind: "broadcast", broadcastId: "n1" }), [portiaTextKey.broadcast("n1")]);
+  assert.equal(applyLiveRemove(draft, { kind: "broadcast", broadcastId: "n1" }), true);
+  assert.deepEqual(draft.broadcasts.map((item) => item.id), ["n2", "q1", "t1"]);
+  assert.equal(draft.formattedText[portiaTextKey.broadcast("n1")], undefined);
+  assert.equal(applyLiveRemove(draft, { kind: "broadcast", broadcastId: "n1" }), false);
+});
+
+test("LIVE-02 (26.1-11): the live feed is the visitor's order by dates, with the entries not yet shown to visitors; it never reorders by hand", () => {
+  const draft = draftWithBroadcasts();
+  const news = liveBroadcastFeed(draft.broadcasts, "news", "2026-11-15");
+  assert.deepEqual(news.map((item) => item.id), ["n1", "n2"], "important first, the draft entry stays in the list");
+  assert.deepEqual(news.map((item) => item.published), [true, false], "the real flag is kept");
+  const quests = liveBroadcastFeed(draft.broadcasts, "quests", "2026-11-25");
+  assert.deepEqual(quests.map((item) => item.id), ["t1", "q1"], "a task counts as active, the finished quest goes last");
+  assert.equal(draft.broadcasts[1].published, false, "the draft itself is not touched");
+  // the visitor's own feed still hides what is not published
+  assert.deepEqual(broadcastFeed(draft.broadcasts, "news", "2026-11-15").map((item) => item.id), ["n1"]);
+});
+
+test("LIVE-02/04 (26.1-11): BroadcastCard is the visitor's card, drawn by the desktop with no context, with the live places only behind live", () => {
+  const info = read("components/portia-desktop-info.tsx");
+  assert.match(info, /export function BroadcastCard\(/);
+  assert.match(info, /useLiveEdit\("broadcasts"\)/);
+  assert.match(read("components/portia-desktop.tsx"), /<BroadcastCard\b/);
+  for (const part of ['live.text({ kind: "broadcast-title"', 'live.text({ kind: "broadcast-conditions"', 'live.rich({ kind: "broadcast-body"', 'live.date({ kind: "broadcast-starts"', 'live.date({ kind: "broadcast-ends"', 'live.flag({ kind: "broadcast-published"', 'live.flag({ kind: "broadcast-important"', 'live.remove({ kind: "broadcast"']) assert.ok(info.includes(part), part);
+  assert.doesNotMatch(info, /live\.order\(\{ kind: "broadcast/, "the feed is ordered by dates: nothing to reorder");
+  assert.doesNotMatch(info, /embedMedia=\{false\}/); // planner-discipline-allow: embedMedia={false}
+  // every live class of the seam stands in a branch of live, so a visitor's card carries none
+  const lines = info.split("\n");
+  for (const [index, line] of lines.entries()) {
+    if (!/["`]live-[a-z]|\blive-draft\b/.test(line)) continue;
+    const near = lines.slice(Math.max(0, index - 5), index + 1).join(" ");
+    assert.ok(/\blive\b\s*(\?|&&)|if \(!?live\)|\{live\b/.test(near), `a live class outside a live branch: ${line.trim().slice(0, 100)}`);
+  }
+});
+
+test("LIVE-01/02 (26.1-11): the live «Сводка» draws the visitor's header, tabs and the live feed with the bar «Новость / Квест»", () => {
+  const seam = read("components/portia-editor-live.tsx");
+  assert.match(seam, /data-live-app="broadcasts"/);
+  assert.match(seam, /liveBroadcastFeed\(/);
+  assert.match(seam, /<BroadcastCard\b/);
+  assert.match(seam, /bridge\.setBroadcastTab\(/);
+  assert.ok(seam.includes('live.addBar({ kind: "broadcasts" })'));
+  assert.match(seam, /export function LiveDate\(/);
+  assert.match(seam, /export function LiveFlag\(/);
+  assert.match(seam, /liveDateError\(/);
+  // the date never goes to the draft when it is wrong, and the short error stands beside it (T-26.1-25)
+  const date = seam.slice(seam.indexOf("export function LiveDate("), seam.indexOf("export function LiveFlag("));
+  assert.match(date, /liveDateError\(/);
+  assert.match(date, /role="alert"|aria-invalid/);
 });

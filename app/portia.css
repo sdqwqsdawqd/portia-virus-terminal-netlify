@@ -2902,6 +2902,20 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 .live-surface .info-index .live-add-bar button.live-button:hover:not(:disabled) { border-color: var(--teal); background: var(--teal-soft); }
 .live-table .live-remove-wrap, .live-table .live-editable + .live-remove-wrap { position: static; margin-left: 6px; }
 .live-table .info-ledger dd { display: flex; align-items: center; gap: 6px; }
+/* LIVE-02 (26.1-11): «Сводка» в живом режиме — лента участника в потоке страницы; карточка несёт свои инструменты (даты, условия, переключатели) и помечается, пока её не видят посетители. */
+.live-surface .broadcasts-app { height: auto; overflow: visible; }
+.broadcast-card.live-draft { border-style: dashed; opacity: .85; }
+.live-date { display: grid; gap: 2px; color: inherit; font: 12px var(--mono); }
+.live-date > span { font: 700 11px var(--sans); letter-spacing: .08em; text-transform: uppercase; }
+.live-date input { width: 150px; min-height: 28px; }
+.live-date small { color: var(--danger); font: 11px var(--sans); }
+.live-surface .broadcast-conditions .live-textarea { display: block; width: 100%; min-height: 52px; padding: 6px 8px; border: 1px dashed var(--line); background: transparent; color: inherit; font: inherit; line-height: 1.5; resize: vertical; }
+.live-surface .broadcast-conditions .live-textarea:hover, .live-surface .broadcast-conditions .live-textarea:focus { border-color: var(--teal); }
+.live-card-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+.live-card-tools .live-remove-wrap { position: static; margin-left: auto; }
+.live-flag { display: inline-flex; align-items: center; gap: 6px; font: 12px var(--sans); cursor: pointer; }
+.live-draft-badge { padding: 1px 6px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px var(--sans); font-style: normal; letter-spacing: .08em; text-transform: uppercase; }
+.live-surface .broadcast-grid + .live-add-bar { margin-top: 18px; }
 /* users-tab:start — Phase 22 «Пользователи» (USR-01..USR-09): sharp corners, values from 22-UI-SPEC, nothing else in the file changes */
 .tab-count { min-width: 24px; margin-left: 8px; padding: 0 8px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px/1.35 var(--mono); text-align: center; }
 .users-tab { display: grid; gap: 24px; min-width: 0; }

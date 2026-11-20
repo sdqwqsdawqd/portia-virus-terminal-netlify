@@ -1,7 +1,8 @@
 import type { ImageFraming } from "./image-framing.ts";
-import { MAX_BLOCKS, MAX_SUBSECTIONS, MAX_TABLE_ROWS } from "./content-limits.ts";
-import { makeId, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection } from "./editor-items.ts";
-import { findGuide, findInfo, portiaTextKey, type GuideBlock, type GuideCard, type InfoBlock, type InfoSubsection, type PortiaContent } from "./portia-content.ts";
+import { broadcastFeed, questDateError, type BroadcastTab } from "./broadcasts.ts";
+import { MAX_BLOCKS, MAX_CONDITIONS, MAX_SUBSECTIONS, MAX_TABLE_ROWS } from "./content-limits.ts";
+import { addBroadcast, makeId, removeBroadcast, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection } from "./editor-items.ts";
+import { findGuide, findInfo, portiaTextKey, type Broadcast, type GuideBlock, type GuideCard, type InfoBlock, type InfoSubsection, type PortiaContent } from "./portia-content.ts";
 import { parseYoutubeId } from "./portia-content-normalize.ts";
 import { splitEmbeddedMedia } from "./rich-text-media.ts";
 
@@ -13,10 +14,10 @@ export type LiveApp = "guide" | "info" | "broadcasts" | "viruses" | "recycle" | 
 export const LIVE_EXCLUDED = ["search", "employees"] as const;
 
 /** The editor tabs that have a live mode so far, and the app each one shows. */
-export const LIVE_TABS = ["guide", "info"] as const;
+export const LIVE_TABS = ["guide", "info", "broadcasts"] as const;
 export type LiveTab = (typeof LIVE_TABS)[number];
 
-const liveAppOfTab: Record<LiveTab, LiveApp> = { guide: "guide", info: "info" };
+const liveAppOfTab: Record<LiveTab, LiveApp> = { guide: "guide", info: "info", broadcasts: "broadcasts" };
 
 /** The app the live mode of an editor tab shows; null where the tab has none. */
 export function liveAppForTab(tab: string): LiveApp | null {
@@ -44,14 +45,67 @@ export type LiveTarget =
   /** The text of a text block of a subsection: formatted text, stored under portiaTextKey.infoBlock(blockId). */
   | { kind: "info-block-text"; subsectionId: string; blockId: string }
   | { kind: "info-table-key" | "info-table-value"; subsectionId: string; blockId: string; rowId: string }
-  | { kind: "info-video-url"; subsectionId: string; blockId: string };
+  | { kind: "info-video-url"; subsectionId: string; blockId: string }
+  /** «Сводка» (26.1-11): an entry of the feed; the body is formatted text under portiaTextKey.broadcast(id), the conditions are plain lines kept as typed (up to MAX_CONDITIONS). */
+  | { kind: "broadcast-title" | "broadcast-body" | "broadcast-conditions"; broadcastId: string };
 
 /** The key of the stored formatting (draft.formattedText) of a formatted text place; "" for a plain one. */
 export function liveTextKey(target: LiveTarget): string {
   if (target.kind === "guide-block-text") return portiaTextKey.guideBlock(target.blockId);
   if (target.kind === "info-section-body") return portiaTextKey.info(target.sectionId);
   if (target.kind === "info-block-text") return portiaTextKey.infoBlock(target.blockId);
+  if (target.kind === "broadcast-body") return portiaTextKey.broadcast(target.broadcastId);
   return "";
+}
+
+/** A switch of an entry of «Сводки»: shown to visitors (any entry), important (news only). */
+export type LiveFlagTarget = { kind: "broadcast-published" | "broadcast-important"; broadcastId: string };
+
+/** The start or the end of a quest. */
+export type LiveDateTarget = { kind: "broadcast-starts" | "broadcast-ends"; broadcastId: string };
+
+/** Sets a switch; false when the entry is gone, or a quest or task is asked to be important (D-19: only news are). */
+export function applyLiveFlag(draft: PortiaContent, target: LiveFlagTarget, checked: boolean): boolean {
+  const item = draft.broadcasts.find((entry) => entry.id === target.broadcastId);
+  if (!item) return false;
+  if (target.kind === "broadcast-published") { item.published = checked; return true; }
+  if (item.type !== "news") return false;
+  item.important = checked;
+  return true;
+}
+
+const isDay = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const day = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(day.getTime()) && day.toISOString().slice(0, 10) === value;
+};
+
+/** The entry as it would stand with `value` in the date place, or null when the place is gone, the entry is not a quest, or the value is neither a day nor empty. */
+function withDate(draft: PortiaContent, target: LiveDateTarget, value: string): { item: Broadcast; startsAt: string; endsAt: string } | null {
+  const item = draft.broadcasts.find((entry) => entry.id === target.broadcastId);
+  if (!item || item.type !== "quest" || (value !== "" && !isDay(value))) return null;
+  return { item, startsAt: target.kind === "broadcast-starts" ? value : item.startsAt, endsAt: target.kind === "broadcast-ends" ? value : item.endsAt };
+}
+
+/** True when `value` would put the end of the quest before its start (the editor's «Окончание раньше начала», D-18). */
+export function liveDateError(draft: PortiaContent, target: LiveDateTarget, value: string): boolean {
+  const next = withDate(draft, target, value);
+  return !!next && questDateError({ type: next.item.type, startsAt: next.startsAt, endsAt: next.endsAt });
+}
+
+/** Writes a day (or clears it); false, and nothing written, when it is not a day, the entry is not a quest, or the end would come before the start (T-26.1-25). */
+export function applyLiveDate(draft: PortiaContent, target: LiveDateTarget, value: string): boolean {
+  const next = withDate(draft, target, value);
+  if (!next || questDateError({ type: next.item.type, startsAt: next.startsAt, endsAt: next.endsAt })) return false;
+  next.item.startsAt = next.startsAt;
+  next.item.endsAt = next.endsAt;
+  return true;
+}
+
+/** The feed of a tab as the visitor sees it (news: important first; quests by their dates), but with the entries not yet shown to visitors too, each keeping its real `published`. */
+export function liveBroadcastFeed(broadcasts: Broadcast[], tab: BroadcastTab, today: string): Broadcast[] {
+  const shown = new Map(broadcasts.map((item) => [item.id, item.published]));
+  return broadcastFeed(broadcasts.map((item) => ({ ...item, published: true })), tab, today).map((item) => ({ ...item, published: shown.get(item.id) ?? false }));
 }
 
 /** A picture place of the «Справочник»: the photo of a section, the cover of a card, the picture of a photo block. */
@@ -109,6 +163,16 @@ export function applyLiveText(draft: PortiaContent, target: LiveTarget, value: s
       const block = findInfoBlock(draft, target.subsectionId, target.blockId);
       if (block?.type !== "video") return false;
       block.videoId = parseYoutubeId(value);
+      return true;
+    }
+    case "broadcast-title":
+    case "broadcast-body":
+    case "broadcast-conditions": {
+      const item = draft.broadcasts.find((entry) => entry.id === target.broadcastId);
+      if (!item) return false;
+      if (target.kind === "broadcast-title") item.title = line;
+      else if (target.kind === "broadcast-body") item.body = value;
+      else item.conditions = value.slice(0, MAX_CONDITIONS);
       return true;
     }
     case "guide-card-title": {
@@ -187,7 +251,7 @@ export function applyLiveCards(draft: PortiaContent, target: LiveCardsTarget, ca
 }
 
 /** What the bar «Добавить: …» can add (`row` is a row of a table block). The cover is not here: it is a picture place, not a new element. */
-export type LiveAddKind = "section" | "subsection" | "card" | "heading" | "text" | "table" | "photo" | "video" | "callout" | "cards" | "row";
+export type LiveAddKind = "section" | "subsection" | "card" | "heading" | "text" | "table" | "photo" | "video" | "callout" | "cards" | "row" | "news" | "quest";
 
 /** A place that takes new elements: the list of sections, one section (cards), one card (blocks), one table block (rows); in «Информации» the table of contents (sections and subsections), one subsection (blocks), one table block (rows). */
 export type LiveContainer =
@@ -198,7 +262,9 @@ export type LiveContainer =
   /** The table of contents: a section anywhere, a subsection in `sectionId` (the section on show; "" when there is none). */
   | { kind: "info-index"; sectionId: string }
   | { kind: "info-subsection"; subsectionId: string }
-  | { kind: "info-table"; subsectionId: string; blockId: string };
+  | { kind: "info-table"; subsectionId: string; blockId: string }
+  /** The feed of «Сводки»: a news or a quest, put at the top like the editor's own button does. */
+  | { kind: "broadcasts" };
 
 /** An ordered list the live mode can reorder. */
 export type LiveList =
@@ -218,7 +284,8 @@ export type LiveRemovable =
   | { kind: "info-section"; sectionId: string }
   | { kind: "info-subsection"; sectionId: string; subsectionId: string }
   | { kind: "info-block"; subsectionId: string; blockId: string }
-  | { kind: "info-table-row"; subsectionId: string; blockId: string; rowId: string };
+  | { kind: "info-table-row"; subsectionId: string; blockId: string; rowId: string }
+  | { kind: "broadcast"; broadcastId: string };
 
 type GuideBlockKind = "heading" | "text" | "table" | "photo" | "video" | "callout" | "cards";
 type InfoBlockKind = "text" | "table" | "photo" | "video";
@@ -247,6 +314,7 @@ export function liveAddKinds(container: LiveContainer): LiveAddKind[] {
   if (container.kind === "guide-table" || container.kind === "info-table") return ["row"];
   if (container.kind === "info-index") return ["section", "subsection"];
   if (container.kind === "info-subsection") return ["text", "table", "photo", "video"];
+  if (container.kind === "broadcasts") return ["news", "quest"];
   return ["heading", "text", "table", "photo", "video", "callout", "cards"];
 }
 
@@ -256,6 +324,7 @@ export function liveNewId(container: LiveContainer, kind: LiveAddKind): string {
   if (kind === "subsection") return makeId("info");
   if (kind === "card") return makeId("card");
   if (kind === "row") return makeId("row");
+  if (kind === "news" || kind === "quest") return makeId("broadcast");
   return makeId("block");
 }
 
@@ -282,6 +351,10 @@ export function applyLiveAdd(draft: PortiaContent, container: LiveContainer, kin
     const block = findBlock(draft, container.cardId, container.blockId);
     if (block?.type !== "table" || block.rows.length >= MAX_TABLE_ROWS) return null;
     block.rows.push({ id, key: "", value: "" });
+    return id;
+  }
+  if (container.kind === "broadcasts") {
+    addBroadcast(draft, id, kind === "news" ? "news" : "quest");
     return id;
   }
   if (container.kind === "info-index") {
@@ -343,6 +416,7 @@ export function liveRemovedKeys(draft: PortiaContent, item: LiveRemovable): stri
   if (item.kind === "info-section") return [portiaTextKey.info(item.sectionId), ...infoKeys(infoSectionOf(draft, item.sectionId)?.subsections ?? [])];
   if (item.kind === "info-subsection") return infoKeys(infoSectionOf(draft, item.sectionId)?.subsections.filter((sub) => sub.id === item.subsectionId) ?? []);
   if (item.kind === "info-block") return [portiaTextKey.infoBlock(item.blockId)];
+  if (item.kind === "broadcast") return [portiaTextKey.broadcast(item.broadcastId)];
   return [];
 }
 
@@ -378,6 +452,11 @@ export function applyLiveRemove(draft: PortiaContent, item: LiveRemovable): bool
     removeInfoBlock(draft, item.subsectionId, item.blockId);
     return true;
   }
+  if (item.kind === "broadcast") {
+    if (!draft.broadcasts.some((entry) => entry.id === item.broadcastId)) return false;
+    removeBroadcast(draft, item.broadcastId);
+    return true;
+  }
   const block = item.kind === "info-table-row" ? findInfoBlock(draft, item.subsectionId, item.blockId) : findBlock(draft, item.cardId, item.blockId);
   if (block?.type !== "table" || !block.rows.some((row) => row.id === item.rowId)) return false;
   block.rows = block.rows.filter((row) => row.id !== item.rowId);
@@ -391,7 +470,7 @@ export function liveMediaUrls(text: string): string[] {
 
 /** True when the container takes no more of `kind` (the bar then disables that button instead of recording an edit that changes nothing). */
 export function liveAddBlocked(draft: PortiaContent, container: LiveContainer, kind: LiveAddKind): boolean {
-  if (container.kind === "guide-root") return false;
+  if (container.kind === "guide-root" || container.kind === "broadcasts") return false;
   if (container.kind === "guide-section") return (draft.guideSections.find((item) => item.id === container.sectionId)?.cards.length ?? 0) >= MAX_SUBSECTIONS;
   if (container.kind === "guide-card") return (findGuide(draft.guideSections, container.cardId)?.card?.blocks.length ?? 0) >= MAX_BLOCKS;
   if (container.kind === "info-index") {

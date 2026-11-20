@@ -1,17 +1,17 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { GuideApp } from "@/components/portia-desktop-documents";
-import { InfoArticle } from "@/components/portia-desktop-info";
+import { BroadcastCard, BroadcastsHeader, InfoArticle, broadcastTabs } from "@/components/portia-desktop-info";
 import { ConfirmDialog, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
 import { FormattedTextarea, findFormatField, type FormatTarget } from "@/components/portia-editor-rich-text";
 import { LiveEditContext, type LiveEditApi } from "@/components/portia-live-edit";
 import { EmbeddedMediaStrip, FormattedText } from "@/components/portia-virus-card";
-import type { BroadcastTab } from "@/lib/broadcasts";
+import { localDateKey, type BroadcastTab } from "@/lib/broadcasts";
 import type { ImageFraming } from "@/lib/image-framing";
 import {
-  applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddBlocked, liveAddKinds, liveAppForTab, liveNewId, liveRemovedKeys, liveTextKey,
-  type LiveAddKind, type LiveApp, type LiveCardsTarget, type LiveContainer, type LiveImageTarget, type LiveList, type LiveRemovable, type LiveTarget,
+  applyLiveAdd, applyLiveCards, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveNewId, liveRemovedKeys, liveTextKey,
+  type LiveAddKind, type LiveApp, type LiveCardsTarget, type LiveContainer, type LiveDateTarget, type LiveFlagTarget, type LiveImageTarget, type LiveList, type LiveRemovable, type LiveTarget,
 } from "@/lib/live-edit";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
 import { findGuide, findInfo, type PortiaContent, type RichTextDocument } from "@/lib/portia-content";
@@ -27,7 +27,7 @@ export const liveCopy = {
   untitled: "Без названия",
   addLabel: "Добавить:",
   addGroup: "Добавить элемент",
-  kinds: { section: "Раздел", card: "Карточку", heading: "Заголовок", text: "Текст", table: "Таблицу", photo: "Фото", video: "Видео", callout: "Врезку", cards: "Карточки", row: "Строку", subsection: "Подраздел" } satisfies Record<LiveAddKind, string>,
+  kinds: { section: "Раздел", card: "Карточку", heading: "Заголовок", text: "Текст", table: "Таблицу", photo: "Фото", video: "Видео", callout: "Врезку", cards: "Карточки", row: "Строку", subsection: "Подраздел", news: "Новость", quest: "Квест" } satisfies Record<LiveAddKind, string>,
   cover: "Обложку",
   coverLabel: "Обложка",
   full: "Больше нельзя",
@@ -48,6 +48,9 @@ export const liveCopy = {
     "info-table-key": "Название строки",
     "info-table-value": "Значение строки",
     "info-video-url": "Ссылка на видео",
+    "broadcast-title": "Заголовок",
+    "broadcast-body": "Текст",
+    "broadcast-conditions": "Условия",
   } satisfies Record<LiveTarget["kind"], string>,
   placeholders: {
     "guide-section-title": "Название раздела",
@@ -66,7 +69,17 @@ export const liveCopy = {
     "info-table-key": "Название",
     "info-table-value": "Значение",
     "info-video-url": "Ссылка на видео",
+    "broadcast-title": "Заголовок",
+    "broadcast-body": "Нажмите, чтобы написать",
+    "broadcast-conditions": "Условия квеста",
   } satisfies Record<LiveTarget["kind"], string>,
+  dateStart: "Начало",
+  dateEnd: "Окончание",
+  dateError: "Окончание раньше начала",
+  flagPublished: "Показывать посетителям",
+  flagImportant: "Важно",
+  draft: "Черновик",
+  broadcastsEmpty: "Записей пока нет",
   infoIndex: "Разделы информации",
   infoSubsections: (count: number) => `Подразделов: ${count}`,
   infoEmpty: "Разделов пока нет",
@@ -77,7 +90,7 @@ export const liveCopy = {
   removeText: (label: string) => `Удалить вместе с содержимым: ${label}.`,
   removeConfirm: "УДАЛИТЬ",
   removeCancel: "ОТМЕНА",
-  removeNames: { "guide-section": "раздел", "guide-card": "карточку", "guide-block": "блок", "guide-table-row": "строку", "info-section": "раздел", "info-subsection": "подраздел", "info-block": "блок", "info-table-row": "строку" } satisfies Record<LiveRemovable["kind"], string>,
+  removeNames: { "guide-section": "раздел", "guide-card": "карточку", "guide-block": "блок", "guide-table-row": "строку", "info-section": "раздел", "info-subsection": "подраздел", "info-block": "блок", "info-table-row": "строку", broadcast: "запись" } satisfies Record<LiveRemovable["kind"], string>,
   imageAdd: "Добавить фото",
   sectionPhoto: "Фото раздела",
   imageReplace: "Заменить",
@@ -138,6 +151,7 @@ export function LiveSurface({ tab, bridge }: { tab: string; bridge: LiveEditorBr
   const app = liveAppForTab(tab);
   if (app === "guide") return <GuideSurface bridge={bridge} />;
   if (app === "info") return <InfoSurface bridge={bridge} />;
+  if (app === "broadcasts") return <BroadcastsSurface bridge={bridge} />;
   return null;
 }
 
@@ -202,6 +216,30 @@ function InfoSurface({ bridge }: { bridge: LiveEditorBridge }) {
   </div>;
 }
 
+/** «Сводка» as the visitor sees it: the header, the tabs «Новости» / «Квесты» and the feed of cards (BroadcastCard) in the visitor's order by dates, here with the entries not yet shown to visitors too. */
+function BroadcastsSurface({ bridge }: { bridge: LiveEditorBridge }) {
+  const [today] = useState(() => localDateKey(new Date()));
+  const tab = bridge.broadcastTab;
+  // An entry the bar adds comes with its tab, so it is on show at once.
+  const live = createLiveApi("broadcasts", bridge, { onAdded: (kind) => bridge.setBroadcastTab(kind === "news" ? "news" : "quests") });
+  const items = liveBroadcastFeed(bridge.draft.broadcasts, tab, today);
+  return <div className="live-surface" data-live-app="broadcasts">
+    <LiveEditContext.Provider value={live}>
+      <div className="broadcasts-app">
+        <BroadcastsHeader />
+        <div className="editor-tabs broadcast-tabs">
+          {broadcastTabs.map(([id, label]) => <button key={id} type="button" className={tab === id ? "active" : ""} aria-pressed={tab === id} onClick={() => bridge.setBroadcastTab(id)}>{label} {liveBroadcastFeed(bridge.draft.broadcasts, id, today).length}</button>)}
+        </div>
+        <div className="broadcast-grid">
+          {items.map((item) => <BroadcastCard key={item.id} item={item} today={today} formattedText={bridge.draft.formattedText} />)}
+          {!items.length && <div className="broadcast-empty empty-state"><span>{liveCopy.broadcastsEmpty}</span></div>}
+        </div>
+        {live.addBar({ kind: "broadcasts" })}
+      </div>
+    </LiveEditContext.Provider>
+  </div>;
+}
+
 /** The tools of the live mode of `app`, over the editor's bridge. */
 /** `onAdded` hears of every element the bar adds (its kind, its id, the container), so a surface can put the new section or subsection on show. */
 export type LiveHooks = { onAdded?: (kind: LiveAddKind, id: string, container: LiveContainer) => void };
@@ -209,7 +247,7 @@ export type LiveHooks = { onAdded?: (kind: LiveAddKind, id: string, container: L
 export function createLiveApi(app: LiveApp, bridge: LiveEditorBridge, hooks: LiveHooks = {}): LiveEditApi {
   return {
     app,
-    text: (target, value, options) => <LiveText bridge={bridge} target={target} value={value} className={options?.className} />,
+    text: (target, value, options) => options?.multiline ? <LiveTextarea bridge={bridge} target={target} value={value} /> : <LiveText bridge={bridge} target={target} value={value} className={options?.className} />,
     rich: (target, props) => <LiveRich bridge={bridge} target={target} text={props.text} document={props.document} className={props.className} />,
     image: (target, props) => <LiveImage bridge={bridge} target={target} value={props.value} framing={props.framing}>{props.children}</LiveImage>,
     video: (target, videoId) => <LiveVideo bridge={bridge} target={target} videoId={videoId} />,
@@ -219,6 +257,8 @@ export function createLiveApi(app: LiveApp, bridge: LiveEditorBridge, hooks: Liv
       rowProps: { "data-sort-index": index },
       handle: <OrderDragHandle index={index} label={title || liveCopy.lists[list.kind]} onMove={(from, to) => bridge.changeDraft((next) => { applyLiveMove(next, list, from, to); })} />,
     }),
+    date: (target, value) => <LiveDate bridge={bridge} target={target} value={value} />,
+    flag: (target, checked) => <LiveFlag bridge={bridge} target={target} checked={checked} />,
     remove: (item, title) => <LiveRemove bridge={bridge} item={item} title={title} />,
   };
 }
@@ -284,6 +324,52 @@ export function LiveText({ bridge, target, value, className }: { bridge: LiveEdi
   />;
 }
 
+/** A plain text of several lines in place (the conditions of a quest): a plain textarea, so what reaches the draft is a string as typed. */
+export function LiveTextarea({ bridge, target, value }: { bridge: LiveEditorBridge; target: LiveTarget; value: string }) {
+  return <textarea
+    className="live-editable live-textarea"
+    value={value}
+    rows={Math.max(2, value.split("\n").length)}
+    aria-label={liveCopy.targets[target.kind]}
+    placeholder={liveCopy.placeholders[target.kind]}
+    onChange={(event) => { const raw = event.target.value; bridge.changeDraft((next) => { applyLiveText(next, target, raw); }); }}
+  />;
+}
+
+/** A day of a quest. A day that would put the end before the start is kept here, not in the draft, and the short error stands beside it (T-26.1-25); leaving the field shows the draft's own day again. */
+export function LiveDate({ bridge, target, value }: { bridge: LiveEditorBridge; target: LiveDateTarget; value: string }) {
+  const [typed, setTyped] = useState<string | null>(null);
+  const errorId = useId();
+  const wrong = typed !== null && liveDateError(bridge.draft, target, typed);
+  return <label className="live-date live-tools">
+    <span>{target.kind === "broadcast-starts" ? liveCopy.dateStart : liveCopy.dateEnd}</span>
+    <input
+      type="date"
+      value={typed ?? value}
+      aria-invalid={wrong || undefined}
+      aria-describedby={wrong ? errorId : undefined}
+      onChange={(event) => {
+        const day = event.target.value;
+        if (liveDateError(bridge.draft, target, day)) { setTyped(day); return; }
+        setTyped(null);
+        bridge.changeDraft((next) => { applyLiveDate(next, target, day); });
+      }}
+      onBlur={() => setTyped(null)}
+    />
+    {wrong && <small id={errorId} role="alert">{liveCopy.dateError}</small>}
+  </label>;
+}
+
+/** A switch of an entry. «Показывать посетителям» says «Черновик» while it is off. */
+export function LiveFlag({ bridge, target, checked }: { bridge: LiveEditorBridge; target: LiveFlagTarget; checked: boolean }) {
+  const published = target.kind === "broadcast-published";
+  return <label className="live-flag live-tools">
+    <input type="checkbox" checked={checked} onChange={(event) => { const on = event.target.checked; bridge.changeDraft((next) => { applyLiveFlag(next, target, on); }); }} />
+    <span>{published ? liveCopy.flagPublished : liveCopy.flagImportant}</span>
+    {published && !checked && <em className="live-draft-badge">{liveCopy.draft}</em>}
+  </label>;
+}
+
 /**
  * LIVE-05: a formatted text at rest is the visitor's own FormattedText (its GIFs play); pressed, it is the editor's field with the format panel,
  * and under the field the strip of the same GIFs, so a GIF keeps playing while its link is typed. Leaving the field goes back to rest.
@@ -313,7 +399,7 @@ export function LiveRich({ bridge, target, text, document, className }: { bridge
     }}
   >
     <FormattedTextarea
-      area="info"
+      area={target.kind === "broadcast-body" ? "broadcast" : "info"}
       label={liveCopy.targets[target.kind]}
       tall
       value={text}

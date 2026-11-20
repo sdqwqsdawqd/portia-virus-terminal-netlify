@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import type { LiveApp, LiveCardsTarget, LiveContainer, LiveImageTarget, LiveList, LiveRemovable, LiveTarget } from "@/lib/live-edit";
+import type { LiveApp, LiveCardsTarget, LiveContainer, LiveDateTarget, LiveFlagTarget, LiveImageTarget, LiveList, LiveRemovable, LiveTarget } from "@/lib/live-edit";
 import type { ImageFraming } from "@/lib/image-framing";
 import type { RichTextDocument } from "@/lib/portia-content";
 
@@ -17,7 +17,7 @@ export type LiveOrder = { rowProps: { "data-sort-index": number }; handle: React
 export type LiveEditApi = {
   app: LiveApp;
   /** A plain text in place; `className` is the visitor's own class for the place, so the look stays the visitor's. */
-  text: (target: LiveTarget, value: string, options?: { className?: string }) => ReactNode;
+  text: (target: LiveTarget, value: string, options?: { className?: string; multiline?: boolean }) => ReactNode;
   /** A formatted text: the visitor's drawing at rest, the editor's field with the strip of its GIFs while edited. */
   rich: (target: LiveTarget, props: { text: string; document?: RichTextDocument; className?: string }) => ReactNode;
   /** A picture place: `children` is the visitor's drawing of the picture (null when there is none), the seam adds the way to change it. */
@@ -30,6 +30,10 @@ export type LiveEditApi = {
   addBar: (container: LiveContainer) => ReactNode;
   /** The order of a list: spread `rowProps` on the row and put `handle` inside it. `title` is the row's own name (may be empty). */
   order: (list: LiveList, index: number, title: string) => LiveOrder;
+  /** A day of a quest (its start or end); a day that would put the end before the start is not written and says so beside the field. */
+  date: (target: LiveDateTarget, value: string) => ReactNode;
+  /** A switch of an entry of «Сводки»: shown to visitors, important. */
+  flag: (target: LiveFlagTarget, checked: boolean) => ReactNode;
   /** The small remove button with its question. */
   remove: (item: LiveRemovable, title: string) => ReactNode;
 };
