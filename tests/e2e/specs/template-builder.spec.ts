@@ -302,21 +302,28 @@ test("[STAB-TMPL-01] mutations: add two, style the second, delete the first - on
   const add = builder.getByRole("button", { name: "+ ДОБАВИТЬ МУТАЦИЮ" });
   await add.click();
   await add.click();
-  await expect(builder.getByText("МУТАЦИЯ 01")).toBeVisible();
+  // OWN-10: the mutations are tabs; the one just added is selected and is the only one drawn.
+  const tabs = builder.getByRole("navigation", { name: "Мутации" }).getByRole("button");
+  await expect(tabs).toHaveCount(2);
   await expect(builder.getByText("МУТАЦИЯ 02")).toBeVisible();
+  await expect(builder.getByText("МУТАЦИЯ 01")).toHaveCount(0);
   await showPreview(builder);
   await expect(preview.locator(".mutation-copy h4")).toHaveText(["НОВАЯ МУТАЦИЯ", "НОВАЯ МУТАЦИЯ"]);
   await showFields(builder);
 
-  await nameField(builder).nth(0).fill("Первая");
-  await nameField(builder).nth(1).fill("Вторая");
-  await styleFirstWord(page, builder, textField(builder, "Описание").nth(1), "Слово", "Важно");
-  await builder.locator("[data-testid=template-image-input]").nth(1).setInputFiles({ name: "red.png", mimeType: "image/png", buffer: redPng });
+  await tabs.nth(0).click();
+  await expect(builder.getByText("МУТАЦИЯ 01")).toBeVisible();
+  await nameField(builder).fill("Первая");
+  await tabs.nth(1).click();
+  await nameField(builder).fill("Вторая");
+  await styleFirstWord(page, builder, textField(builder, "Описание"), "Слово", "Важно");
+  await builder.locator("[data-testid=template-image-input]").setInputFiles({ name: "red.png", mimeType: "image/png", buffer: redPng });
   await showPreview(builder);
   await expect(preview.getByRole("img", { name: "Вторая" })).toBeVisible();
   await expect(preview.locator(".mutation-card")).toHaveCount(2);
   await showFields(builder);
 
+  await tabs.nth(0).click();
   await builder.getByRole("button", { name: "Удалить" }).first().click();
   await expect(builder.getByText("МУТАЦИЯ 02")).toHaveCount(0);
   await expect(builder.getByLabel("Название", { exact: true })).toHaveValue("Вторая");

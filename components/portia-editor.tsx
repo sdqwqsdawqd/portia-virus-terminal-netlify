@@ -1341,7 +1341,9 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
 
               {dossierTab === "mutations" && <EditorGroup title="Мутации" stack>
                 {/* A delete shifts the later mutations' index keys, so it closes the format panel. shortcut: mutations have no id, so delete is blocked while an upload runs; an undo mid-upload can still shift its index — give Mutation an id if that matters. */}
-                {selectedVirus.mutations.map((mutation, index) => (
+                <CardTabs label={cardTabsCopy.mutations} items={selectedVirus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))} activeId={cardTabs.active(`${selectedVirus.id}:mutations`, Object.keys(selectedVirus.mutations))}
+                  onSelect={(id) => { setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:mutations`, id); }} />
+                {selectedVirus.mutations.map((mutation, index) => String(index) === cardTabs.active(`${selectedVirus.id}:mutations`, Object.keys(selectedVirus.mutations)) && (
                   <div className="nested-editor-card" key={index}>
                     <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={uploadState === "uploading"} onClick={() => { setFormatTarget(null); setFormatterOpen(false); changeDraft((next) => updateById(next.viruses, selectedVirus.id, (virus) => removeMutation(next, virus, index))); }}>Удалить</button></div>
                     <Field label="Название"><input value={mutation.name} onChange={(event) => updateVirus((virus) => { virus.mutations[index].name = event.target.value; })} /></Field>
@@ -1355,7 +1357,9 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
               {dossierTab === "logs" && <EditorGroup title="Записи учёных" stack>
                 <p className="editor-guidance">Можно оставить досье без записей или добавить до пяти. Если текст не выделен, оформление применяется ко всей записи.</p>
                 {selectedVirus.scientistLogs.length === 0 && <p className="editor-guidance">{levelCopy.logsEmptyEditor}</p>}
-                {selectedVirus.scientistLogs.map((log, index) => (
+                <CardTabs label={cardTabsCopy.logs} items={selectedVirus.scientistLogs.map((log) => ({ id: log.id, title: log.title }))} activeId={cardTabs.active(`${selectedVirus.id}:logs`, selectedVirus.scientistLogs.map((log) => log.id))}
+                  onSelect={(id) => { setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:logs`, id); }} />
+                {selectedVirus.scientistLogs.map((log, index) => log.id === cardTabs.active(`${selectedVirus.id}:logs`, selectedVirus.scientistLogs.map((item) => item.id)) && (
                   <div className="nested-editor-card" key={log.id}>
                     <div className="nested-editor-head"><strong>ЗАПИСЬ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => updateVirus((virus) => { virus.scientistLogs.splice(index, 1); })}>Удалить</button></div>
                     <Field label="Название"><input value={log.title} onChange={(event) => updateVirus((virus) => { virus.scientistLogs[index].title = event.target.value; })} /></Field>

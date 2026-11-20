@@ -13,6 +13,7 @@ import { MAX_SCIENTIST_LOGS } from "@/lib/content-limits";
 import { passesTarget, type Box } from "@/lib/sort-order";
 import { HOLD_MS, holdStep, holdTargetAllowed, idleHold, type HoldState, type HoldTarget } from "@/lib/hold-gesture";
 import { classificationIconFor, PortiaIcon } from "@/components/portia-icons";
+import { CardTabs, cardTabsCopy, useCardTabSelection } from "@/components/portia-editor-card-tabs";
 import { TRANSMISSION_CHOICES, formatTransmissionRoutes, parseTransmissionRoutes, toggleTransmissionRoute } from "@/lib/transmission-routes";
 
 type ImagePlacement = "dossier" | "mutation" | "recycle" | "guide" | "employee";
@@ -306,6 +307,7 @@ export function ArchivedVirusEditor({ virus, uploadState, uploadMessage, onUploa
   dossierChanged: DossierTab[];
 }) {
   const [dossierTab, setDossierTab] = useState<DossierTab>("main");
+  const cardTabs = useCardTabSelection();
   return <div className="editor-form virus-editor-form etab-detail">
     <p className="editor-guidance">Полная запись вируса в Корзине.</p>
     <DossierTabs active={dossierTab} changed={dossierChanged} onSelect={setDossierTab} />
@@ -330,7 +332,8 @@ export function ArchivedVirusEditor({ virus, uploadState, uploadMessage, onUploa
       ] as [keyof Virus["classification"], string][]).map(([key, label]) => <ClassificationField key={key} label={label} classificationKey={key} value={virus.classification[key]} onChange={(value) => onChange((item) => { item.classification[key] = value; })} />)}
     </EditorGroup>}
     {dossierTab === "mutations" && <EditorGroup title="Мутации" stack>
-      {virus.mutations.map((mutation, index) => <div className="nested-editor-card" key={`${virus.id}-mutation-${index}`}>
+      <CardTabs label={cardTabsCopy.mutations} items={virus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))} activeId={cardTabs.active(`${virus.id}:mutations`, Object.keys(virus.mutations))} onSelect={(id) => cardTabs.select(`${virus.id}:mutations`, id)} />
+      {virus.mutations.map((mutation, index) => String(index) === cardTabs.active(`${virus.id}:mutations`, Object.keys(virus.mutations)) && <div className="nested-editor-card" key={`${virus.id}-mutation-${index}`}>
         <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={uploadState === "uploading"} onClick={() => onRemoveMutation(index)}>Удалить</button></div>
         <Field label="Название"><input value={mutation.name} onChange={(event) => onChange((item) => { item.mutations[index].name = event.target.value; })} /></Field>
         <Field label="Описание" wide><textarea value={mutation.description} onChange={(event) => onChange((item) => { item.mutations[index].description = event.target.value; })} /></Field>
@@ -340,7 +343,8 @@ export function ArchivedVirusEditor({ virus, uploadState, uploadMessage, onUploa
     </EditorGroup>}
     {dossierTab === "logs" && <EditorGroup title="Записи учёных" stack>
       {virus.scientistLogs.length === 0 && <p className="editor-guidance">{levelCopy.logsEmptyEditor}</p>}
-      {virus.scientistLogs.map((log, index) => <div className="nested-editor-card" key={log.id}>
+      <CardTabs label={cardTabsCopy.logs} items={virus.scientistLogs.map((log) => ({ id: log.id, title: log.title }))} activeId={cardTabs.active(`${virus.id}:logs`, virus.scientistLogs.map((log) => log.id))} onSelect={(id) => cardTabs.select(`${virus.id}:logs`, id)} />
+      {virus.scientistLogs.map((log, index) => log.id === cardTabs.active(`${virus.id}:logs`, virus.scientistLogs.map((item) => item.id)) && <div className="nested-editor-card" key={log.id}>
         <div className="nested-editor-head"><strong>ЗАПИСЬ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => onChange((item) => { item.scientistLogs.splice(index, 1); })}>Удалить</button></div>
         <Field label="Название"><input value={log.title} onChange={(event) => onChange((item) => { item.scientistLogs[index].title = event.target.value; })} /></Field>
         <Field label="Псевдоним учёного"><input value={log.scientist} onChange={(event) => onChange((item) => { item.scientistLogs[index].scientist = event.target.value; })} /></Field>

@@ -110,6 +110,9 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //  21. PORTIA-26.1-TABS2 (26.1-09 Task 2; OWN-10, D-21) — то же для подразделов раздела «Информации»: вкладки-полоски, под ними только выбранный подраздел, «+ ПОДРАЗДЕЛ» выбирает новый,
 //      переход из оглавления выбирает вкладку (applyInfoSubsectionTabsHunk): строка CardTabs, фильтр map и выбор в jumpInfo; русских строк не добавлено (подпись «Подразделы» в шве).
 //      Источник одобрения: 26.1-OWNER-REQUEST OWN-10 (2026-11-20, «то же в других приложениях с похожей системой») и план 26.1-09.
+//  22. PORTIA-26.1-TABS3 (26.1-09 Task 3; OWN-10, D-21) — вкладка «База вирусов»: мутации и записи учёных вкладками-полосками, под ними только выбранная; у мутаций вкладки только переключают
+//      (тексты привязаны к номеру, порядка нет), у записей — по id (applyVirusItemTabsHunk): строки CardTabs и фильтры map; русских строк не добавлено (подписи в шве).
+//      Источник одобрения: 26.1-OWNER-REQUEST OWN-10 (2026-11-20, «то же в других приложениях с похожей системой») и план 26.1-09.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -1263,6 +1266,46 @@ function applyInfoSubsectionTabsHunk(text: string): string {
   );
 }
 
+/**
+ * PORTIA-26.1-TABS3 (26.1-09 Task 3; OWN-10, D-21): вкладка «База вирусов» — мутации и записи учёных вкладками-полосками (CardTabs), под ними только выбранная.
+ * Вставки: строка CardTabs перед списком и фильтр map по выбранной вкладке у мутаций (id вкладки — номер мутации, порядка нет) и у записей (id записи). Русских строк не добавлено
+ * (подписи «Мутации» и «Записи учёных» лежат в шве); открытая панель оформления закрывается при смене вкладки, как при удалении мутации.
+ */
+function applyVirusItemTabsHunk(text: string): string {
+  const next = replaceOnce(
+    text,
+    [
+      "                {selectedVirus.mutations.map((mutation, index) => (",
+      "                  <div className=\"nested-editor-card\" key={index}>",
+      "",
+    ].join("\n"),
+    [
+      "                <CardTabs label={cardTabsCopy.mutations} items={selectedVirus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))} activeId={cardTabs.active(`${selectedVirus.id}:mutations`, Object.keys(selectedVirus.mutations))}",
+      "                  onSelect={(id) => { setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:mutations`, id); }} />",
+      "                {selectedVirus.mutations.map((mutation, index) => String(index) === cardTabs.active(`${selectedVirus.id}:mutations`, Object.keys(selectedVirus.mutations)) && (",
+      "                  <div className=\"nested-editor-card\" key={index}>",
+      "",
+    ].join("\n"),
+    "virus item tabs: the strip and the selected mutation",
+  );
+  return replaceOnce(
+    next,
+    [
+      "                {selectedVirus.scientistLogs.map((log, index) => (",
+      "                  <div className=\"nested-editor-card\" key={log.id}>",
+      "",
+    ].join("\n"),
+    [
+      "                <CardTabs label={cardTabsCopy.logs} items={selectedVirus.scientistLogs.map((log) => ({ id: log.id, title: log.title }))} activeId={cardTabs.active(`${selectedVirus.id}:logs`, selectedVirus.scientistLogs.map((log) => log.id))}",
+      "                  onSelect={(id) => { setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:logs`, id); }} />",
+      "                {selectedVirus.scientistLogs.map((log, index) => log.id === cardTabs.active(`${selectedVirus.id}:logs`, selectedVirus.scientistLogs.map((item) => item.id)) && (",
+      "                  <div className=\"nested-editor-card\" key={log.id}>",
+      "",
+    ].join("\n"),
+    "virus item tabs: the strip and the selected scientist record",
+  );
+}
+
 /** Реестр одобренных правок (D-64): `apply` — порядок применения к образцу; `normalizeActual` — что вырезается из текущего файла перед сравнением. */
 const approvedEditorEdits: readonly { id: string; apply: (text: string) => string; normalizeActual?: (text: string) => string }[] = [
   { id: "D-57", apply: applyLaunchButtonHunk },
@@ -1290,6 +1333,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26.1-HOLD", apply: applyColumnSwapSeamHunk },
   { id: "PORTIA-26.1-TABS", apply: applyGuideCardTabsHunk },
   { id: "PORTIA-26.1-TABS2", apply: applyInfoSubsectionTabsHunk },
+  { id: "PORTIA-26.1-TABS3", apply: applyVirusItemTabsHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -1453,6 +1497,10 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.notEqual(firstDifference(expected, withoutInfoSubsectionTabs), null, "a file without the PORTIA-26.1-TABS2 hunk is a difference");
   assert.throws(() => applyInfoSubsectionTabsHunk(expected), /exactly one approved anchor/, "the info subsection tabs hunk cannot be applied twice");
   assert.ok(expected.includes("<CardTabs label={cardTabsCopy.subsections}"), "the approved editor shows the subsection tabs of an «Информация» section");
+  const withoutVirusItemTabs = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-TABS3").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutVirusItemTabs), null, "a file without the PORTIA-26.1-TABS3 hunk is a difference");
+  assert.throws(() => applyVirusItemTabsHunk(expected), /exactly one approved anchor/, "the virus item tabs hunk cannot be applied twice");
+  assert.ok(expected.includes("<CardTabs label={cardTabsCopy.mutations}") && expected.includes("<CardTabs label={cardTabsCopy.logs}"), "the approved editor shows the tabs of the mutations and the scientist records");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

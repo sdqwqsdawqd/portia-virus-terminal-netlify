@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { ClassificationField, DossierTabs, EditorGroup, Field } from "@/components/portia-editor-dossier";
+import { CardTabs, cardTabsCopy, useCardTabSelection } from "@/components/portia-editor-card-tabs";
 import {
   ActiveFormatContext,
   FloatingTextFormatPanel,
@@ -245,6 +246,7 @@ async function measureCardPage(page: string): Promise<number> {
 export function PortiaTemplateBuilder({ onClose, standalone = false }: { onClose: () => void; standalone?: boolean }) {
   const [dossier, setDossier] = useState<TemplateDossier>(() => emptyTemplateDossier());
   const [dossierTab, setDossierTab] = useState<DossierTab>("main");
+  const cardTabs = useCardTabSelection();
   const [view, setView] = useState<BuilderView>("fields");
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
   const [formatterOpen, setFormatterOpen] = useState(false);
@@ -483,7 +485,8 @@ export function PortiaTemplateBuilder({ onClose, standalone = false }: { onClose
             </EditorGroup>}
 
             {dossierTab === "mutations" && <EditorGroup title="Мутации" stack>
-              {virus.mutations.map((mutation, index) => (
+              <CardTabs label={cardTabsCopy.mutations} items={virus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))} activeId={cardTabs.active("template:mutations", Object.keys(virus.mutations))} onSelect={(id) => { closeFormatter(); cardTabs.select("template:mutations", id); }} />
+              {virus.mutations.map((mutation, index) => String(index) === cardTabs.active("template:mutations", Object.keys(virus.mutations)) && (
                 <div className="nested-editor-card" key={index}>
                   <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={busy} onClick={() => removeMutation(index)}>Удалить</button></div>
                   <Field label="Название"><input value={mutation.name} maxLength={120} autoComplete="off" onChange={(event) => updateVirus((next) => { const item = next.mutations[index]; if (item) item.name = event.target.value; })} /></Field>

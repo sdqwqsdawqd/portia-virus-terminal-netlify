@@ -138,6 +138,8 @@ async function createSection(page: Page, title: string) {
 // Only the selected section is rendered; its card is the one top-level card of a column.
 const sectionCard = (page: Page) => page.locator(".editor-section-column > .nested-editor-card");
 const subsectionCards = (card: Locator) => card.locator(":scope > .nested-editor-body > .info-subsection-list > .nested-editor-card");
+// OWN-10: the subsections are tabs; one strip tab per subsection, and only the selected subsection is drawn.
+const subsectionTabs = (card: Locator) => card.locator(":scope > .nested-editor-body > .editor-card-tabs .editor-card-tab");
 // The add-subsection button is a direct child row of the section card body, below the subsection list.
 const subsectionButton = (card: Locator) => card.locator(":scope > .nested-editor-body > .scientist-log-actions").getByRole("button", { name: "+ ПОДРАЗДЕЛ", exact: true });
 
@@ -201,7 +203,8 @@ test.describe("[STAB-EDIT-02] D-62 «Информация» add-section bar", ()
     const addSubsection = subsectionButton(card);
     for (let count = 1; count <= 6; count += 1) {
       await addSubsection.click();
-      await expect(subsectionCards(card)).toHaveCount(count);
+      await expect(subsectionTabs(card)).toHaveCount(count);
+      await expect(subsectionCards(card)).toHaveCount(1);
     }
 
     const bar = page.locator(".editor-section-addbar");
@@ -279,7 +282,8 @@ test.describe("[STAB-EDIT-02] D-62 «Информация» add-section bar", ()
     expect(button.y, "the button is below the subsection list").toBeGreaterThanOrEqual(list.y + list.height - 1);
     expect(button.y + button.height, "the button is inside the card").toBeLessThanOrEqual(cardBox.y + cardBox.height + 1);
     await addSubsection.click();
-    await expect(subsectionCards(card)).toHaveCount(2);
+    await expect(subsectionTabs(card)).toHaveCount(2);
+    await expect(subsectionCards(card)).toHaveCount(1);
     expect(writes, "the UI contract never writes").toEqual([]);
   });
 

@@ -961,3 +961,48 @@ test("owner 2026-11-20 OWN-10: the subsections of an «Информация» se
   assert.ok(editor.includes("if (found?.subsection) cardTabs.select(found.section.id, id);"), "a jump from the contents selects the tab");
   assert.ok(!editor.includes('"Подразделы"'), "D-58: the strip's name lives in the seam");
 });
+
+// Mutations have no id (their texts are bound to the number), so their tabs only switch; scientist records are tabs by id. A selected tab is the only card drawn.
+test("owner 2026-11-20 OWN-10: the mutations and the scientist records of a virus are tabs; the mutation tabs have no order button, the panel closes on a switch", () => {
+  const virus = editorSlice('{dossierTab === "mutations" && <EditorGroup title="Мутации" stack>', '{tab === "info" && (');
+  const mutations = virus.slice(virus.indexOf("<CardTabs label={cardTabsCopy.mutations}"), virus.indexOf("\n                {selectedVirus.mutations.map("));
+  assert.ok(mutations.length > 0 && mutations.includes("items={selectedVirus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))}"), "a mutation tab is its number, its title is the name");
+  assert.ok(!mutations.includes("onMove"), "no order for mutations: the texts are bound to the number");
+  assert.ok(mutations.includes("setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:mutations`, id);"), "T-26.1-20: the panel closes before another mutation shows");
+  assert.ok(virus.includes("{selectedVirus.mutations.map((mutation, index) => String(index) === cardTabs.active(`${selectedVirus.id}:mutations`, Object.keys(selectedVirus.mutations)) && ("), "only the selected mutation is drawn");
+  const logs = virus.slice(virus.indexOf("<CardTabs label={cardTabsCopy.logs}"), virus.indexOf("\n                {selectedVirus.scientistLogs.map("));
+  assert.ok(logs.includes("items={selectedVirus.scientistLogs.map((log) => ({ id: log.id, title: log.title }))}") && !logs.includes("onMove"), "a record tab is its id; the records have no order either");
+  assert.ok(logs.includes("setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:logs`, id);"));
+  assert.ok(virus.includes("{selectedVirus.scientistLogs.map((log, index) => log.id === cardTabs.active(`${selectedVirus.id}:logs`, selectedVirus.scientistLogs.map((item) => item.id)) && ("), "only the selected record is drawn");
+});
+
+test("owner 2026-11-20 OWN-10: the full record of a virus in the recycle bin has the same tabs; the groups are told apart by the virus", () => {
+  const archived = stripComments(dossierSeam);
+  assert.match(archived, /import \{ CardTabs, cardTabsCopy, useCardTabSelection \} from "@\/components\/portia-editor-card-tabs";/);
+  assert.ok(archived.includes("  const cardTabs = useCardTabSelection();\n  return <div className=\"editor-form virus-editor-form etab-detail\">"), "its own selection");
+  assert.ok(archived.includes("<CardTabs label={cardTabsCopy.mutations} items={virus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))} activeId={cardTabs.active(`${virus.id}:mutations`, Object.keys(virus.mutations))}"));
+  assert.ok(archived.includes("<CardTabs label={cardTabsCopy.logs} items={virus.scientistLogs.map((log) => ({ id: log.id, title: log.title }))} activeId={cardTabs.active(`${virus.id}:logs`, virus.scientistLogs.map((log) => log.id))}"));
+  assert.ok(archived.includes("String(index) === cardTabs.active(`${virus.id}:mutations`, Object.keys(virus.mutations)) && <div") && archived.includes("log.id === cardTabs.active(`${virus.id}:logs`, virus.scientistLogs.map((item) => item.id)) && <div"), "only the selected one is drawn");
+  assert.equal(archived.split("<CardTabs ").length - 1, 2, "no strip for what is not a long list of cards");
+  assert.ok(!archived.includes("<CardTabs label={cardTabsCopy.mutations} items={virus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))} activeId={cardTabs.active(`${virus.id}:mutations`, Object.keys(virus.mutations))} onMove"), "no order for mutations");
+});
+
+test("owner 2026-11-20 OWN-10: the mutations of «Шаблон» are tabs of their own selection; the panel closes on a switch", () => {
+  const builder = stripComments(readFileSync(new URL("../components/portia-template-builder.tsx", import.meta.url), "utf8"));
+  assert.match(builder, /import \{ CardTabs, cardTabsCopy, useCardTabSelection \} from "@\/components\/portia-editor-card-tabs";/);
+  assert.ok(builder.includes('  const [dossierTab, setDossierTab] = useState<DossierTab>("main");\n  const cardTabs = useCardTabSelection();'), "the selection lives in the builder");
+  const strip = builder.slice(builder.indexOf("<CardTabs label={cardTabsCopy.mutations}"), builder.indexOf("{virus.mutations.map((mutation, index) => String(index)"));
+  assert.ok(strip.length > 0 && !strip.includes("onMove"), "the tabs only switch");
+  assert.ok(strip.includes('onSelect={(id) => { closeFormatter(); cardTabs.select("template:mutations", id); }}'), "T-26.1-20: the panel closes on a switch");
+  assert.ok(builder.includes('String(index) === cardTabs.active("template:mutations", Object.keys(virus.mutations)) && ('), "only the selected mutation is drawn");
+});
+
+test("owner 2026-11-20 OWN-10: where the strip is not drawn: blocks inside a card, the feed, the lists that are already list and detail, the recommendations", () => {
+  const all = stripComments(editor);
+  // Blocks of a card and a subsection stay a page feed, in the card; the order of a feed is its content.
+  assert.equal(all.split("<CardTabs ").length - 1, 4, "the guide cards, the info subsections, the mutations and the records of the viruses: four strips, no other place in the editor");
+  const feed = editorSlice('{tab === "broadcasts" && (', '{tab === "recycle" && (');
+  assert.ok(!feed.includes("<CardTabs"), "«Сводка» is a feed by date with its own filter and contents");
+  const recycle = editorSlice('{tab === "recycle" && (', '{tab === "search" && (');
+  assert.ok(!recycle.includes("<CardTabs"), "the recycle bin is a list and a detail already");
+});
