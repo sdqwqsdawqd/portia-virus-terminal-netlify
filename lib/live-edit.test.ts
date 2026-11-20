@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS } from "./content-limits.ts";
 import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText, liveRecycleKeys, applyLivePhrase, liveFormatKey, livePhraseLines, livePhraseSlice, applyLiveSettings, liveSettingsOk } from "./live-edit.ts";
@@ -1240,4 +1240,45 @@ test("LIVE-02 (26.1-13): the live Vivian blocks come after the live block and be
   assert.ok(at > css.indexOf(".live-surface { width: 100%"), "after the live block");
   assert.ok(at < css.indexOf("/* users-tab:start"), "before users-tab");
   assert.ok(css.indexOf("/* users-tab:start") < css.indexOf("/* ui-unify:start"), "users-tab stands before ui-unify");
+});
+
+// ---- 26.1-14: the final sweep of LIVE-04 and LIVE-05 over the sources of the whole phase ----
+
+test("LIVE-04 (26.1-14): the context has one provider in all of components/, and no desktop file imports an editor seam statically", () => {
+  const files = readdirSync(new URL("../components/", import.meta.url)).filter((name) => name.endsWith(".tsx"));
+  assert.deepEqual(files.filter((name) => /LiveEditContext\.Provider/.test(read(`components/${name}`))), ["portia-editor-live.tsx"]);
+  const desktop = files.filter((name) => name.startsWith("portia-desktop"));
+  assert.ok(desktop.length >= 8, "the scan must see the desktop files");
+  for (const name of desktop) {
+    const text = read(`components/${name}`);
+    // a dynamic import(...) is the only way the desktop reaches the editor; a static `from` is a visitor bundle that carries the editor
+    assert.doesNotMatch(text, /from\s+["']@\/components\/portia-editor(?:-[a-z-]+)?["']/, `${name} imports an editor seam statically`);
+    assert.doesNotMatch(text, /from\s+["']\.\/portia-editor(?:-[a-z-]+)?["']/, `${name} imports an editor seam statically`);
+  }
+  assert.match(read("components/portia-desktop.tsx"), /import\("@\/components\/portia-editor"\)/);
+});
+
+test("LIVE-04 (26.1-14): the toggle of the live mode exists for exactly the six tabs and for no other tab of the editor", () => {
+  const live = ["guide", "info", "broadcasts", "viruses", "recycle", "assistant"];
+  assert.equal(LIVE_TABS.length, 6);
+  for (const tab of live) assert.notEqual(liveAppForTab(tab), null, tab);
+  for (const tab of ["search", "employees", "users", "promo", "access"]) assert.equal(liveAppForTab(tab), null, tab);
+});
+
+test("LIVE-05 (26.1-14): no live surface and no live branch of the visitor's components turns the embedding of media off", () => {
+  for (const file of ["components/portia-editor-live.tsx", "components/portia-desktop-documents.tsx", "components/portia-desktop-info.tsx", "components/portia-desktop-trash.tsx", "components/portia-desktop-dossier.tsx", "components/portia-desktop-media.tsx", "components/portia-desktop.tsx"]) {
+    assert.doesNotMatch(read(file), /embedMedia\s*=\s*\{\s*false\s*\}/, `${file} turns embedMedia off`);
+  }
+  // the one place that turns it off is the template of the editor: there a link stays text on purpose
+  const off = readdirSync(new URL("../components/", import.meta.url)).filter((name) => name.endsWith(".tsx") && /embedMedia\s*=\s*\{\s*false\s*\}/.test(read(`components/${name}`)));
+  assert.deepEqual(off, ["portia-template-builder.tsx"]);
+  const card = read("components/portia-virus-card.tsx");
+  assert.match(card, /embedMedia = true/, "the default of FormattedText and of the card body is to embed");
+});
+
+test("LIVE-05 (26.1-14): the live text at rest is FormattedText, pressed it has the strip of the same media", () => {
+  const seam = read("components/portia-editor-live.tsx");
+  assert.match(seam, /<FormattedText\b/);
+  assert.match(seam, /<EmbeddedMediaStrip\b/);
+  assert.doesNotMatch(seam, /embedMedia/);
 });
