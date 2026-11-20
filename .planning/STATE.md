@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: "26.1"
 current_phase_name: Правки владельца
 status: executing
-stopped_at: Completed 26.1-03-PLAN.md
-last_updated: "2026-11-20T16:15:41.863Z"
+stopped_at: Completed 26.1-04-PLAN.md
+last_updated: "2026-11-20T16:23:55.412Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 26.1 execution started
-state_head: bfa9b1f50dd21d8cba9f2ae92eeaa2158fa50275
+state_head: 604f990e8859bc040e30e93325f3573d31ca7d4f
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 84
-  completed_plans: 73
+  completed_plans: 74
 ---
 
 Total Phases: 6
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: 26.1 (Правки владельца) — EXECUTING
-Plan: 4 of 14
+Plan: 5 of 14
 Status: Ready to execute
 Last activity: 2026-11-20 — Phase 26.1 execution started
 
@@ -114,6 +114,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase 26.1 P01 | 25min | 3 tasks | 8 files |
 | Phase 26.1 P02 | 90min | 2 tasks | 12 files |
 | Phase 26.1 P03 | 40min | 2 tasks | 7 files |
+| Phase 26.1 P04 | n/a | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -366,6 +367,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 26.1]: 26.1-01: Справочник — плитки до 5 в ряд (min 132px), кегль названия по длине через guideTileTitleFit, обложка 16:10, карточка и вложенные карточки на всю ширину; видео в карточке оставлено 820px (вопрос владельцу)
 - [Phase 26.1]: 26.1-02: employee drafts live per id in a store made by PortiaEditor; the question 'Save changes?' is asked once at window close, save-all runs one PATCH after another
 - [Phase 26.1]: 26.1-03 option-b: пути передачи — шесть путей владельца плюс «Неизвестно» седьмым исключающим выбором; список в прежней строке через «, »; старые значения переводятся при чтении и записи
+- [Phase 26.1]: 26.1-04: route list on the card is strong.route-list with buttons (keeps the transmission colour rule of the accent guard); classification field min 340px by sum in classification-fit test
 
 ### Pending Todos
 
@@ -424,8 +426,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-20T16:15:40.751Z
-Stopped at: Completed 26.1-03-PLAN.md
+Last session: 2026-11-20T16:23:54.308Z
+Stopped at: Completed 26.1-04-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
