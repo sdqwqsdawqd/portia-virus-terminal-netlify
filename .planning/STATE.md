@@ -6,16 +6,18 @@ current_phase: 26
 current_phase_name: Единый стиль сайта
 status: executing
 stopped_at: Completed PORTIA-26-20-PLAN.md
-last_updated: "2026-11-17T21:18:10.892Z"
-last_activity: 2026-11-17
+last_updated: "2026-11-20T11:12:22.926Z"
+last_activity: 2026-11-18
 last_activity_desc: Phase PORTIA-26 execution resumed (wave continue)
-state_head: 25a3dc44406d6252d70e09bfc81fc687a6c6340b
+state_head: 647e84ef125b7bb71b7d5652971fde8e512b3d96
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 3
   total_plans: 70
   completed_plans: 70
 ---
+
+Total Phases: 6
 
 # Project State
 
@@ -398,6 +400,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 - Phase 19 edited: merged former phases 19+20 into 19 and 21+22 into 20 (owner decision 2026-11-02); requirements traceability remapped
 - v1.4 roadmap created 2026-11-09: Phases 21–27 added (7 phases, 52 requirements ACC/USR/LVL/PROM/SEC/UI/UAT); Phase 21 is the first phase of the milestone
+- Phase 26.1 inserted after Phase 26: Правки владельца 2026-11-20: справочник, пути передачи, редактор текста, окна, сотрудники, квалификация, перетаскивание, вкладки карточек (URGENT)
+- Phase 26.2 (живое редактирование) removed 2026-11-20 and merged into 26.1 by owner decision («всё в одной фазе»)
 
 ## Deferred Items
 
