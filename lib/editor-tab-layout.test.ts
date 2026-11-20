@@ -552,6 +552,42 @@ test("OWN-07: another employee opens without a question and the draft of the one
   assert.ok(employees.includes("onDirtyChange(dirtyCount > 0)"), "the dirty flag is the count of employees with edits");
 });
 
+test("OWN-07: leaving the tab asks nothing; the one question is asked by the seam when the window closes", () => {
+  const code = stripComments(editor);
+  assert.equal(code.split("setLeaveTo(").length - 1, 0, "no pending tab switch: the editor never asks when a tab is left");
+  assert.ok(!code.includes("leaveTo"), "the pending-tab state is gone");
+  assert.ok(code.includes("const switchTab = (id: EditorTab) => showTab(id);"), "a tab opens at once");
+  assert.ok(code.includes("const leaving = employeeDirty && closeAsked;"), "the question is for the window close only");
+  assert.ok(code.includes('if (closeAsked && employeeDirty && tab !== "employees" && stripTabs.some(([id]) => id === "employees")) showTab("employees");'), "a close with unsaved employee drafts goes to the tab that asks");
+  const employees = employeesComponent();
+  assert.ok(employees.includes('title="Сохранить изменения?"'));
+  for (const label of ["СОХРАНИТЬ ВСЕ", "НЕ СОХРАНЯТЬ", "ОТМЕНА"]) assert.ok(employees.includes(`label: "${label}"`), label);
+  assert.ok(employees.includes("{leaving && dirtyCount > 0 && ("), "the question shows only for a close with something unsaved");
+});
+
+test("OWN-07: «СОХРАНИТЬ ВСЕ» saves one employee after another through the one PATCH path and stops at the first refusal", () => {
+  const employees = employeesComponent();
+  const all = employees.slice(employees.indexOf("const saveAll = async"), employees.indexOf("const addEmployee = async"));
+  assert.ok(all.length > 0, "saveAll is found");
+  assert.ok(all.includes("for (const id of saveQueue(store.dirtyIds(), selectedIdRef.current))"), "the open employee first, then the list order");
+  assert.ok(all.includes("if (!(await save(id, true)))"), "each save is awaited before the next starts, through the same save() as the single button");
+  assert.ok(!all.includes("Promise.all") && !all.includes("forEach") && !all.includes(".map("), "not in parallel");
+  assert.ok(all.includes("return false;") && all.includes("setSelectedId(id);"), "the first refusal stops the run and shows that employee");
+  assert.ok(employees.includes("setErrorMessage(named ? `${employee.nickname}: ${text}` : text);"), "the error carries the name of the employee");
+  assert.equal(employees.split('fetch("/api/employees", {\n        method: "PATCH"').length - 1, 1, "one PATCH call serves the single and the all-save");
+  const dialog = employees.slice(employees.indexOf('title="Сохранить изменения?"'));
+  assert.ok(dialog.includes("void saveAll().then((saved) => {") && dialog.includes("if (saved) onLeave(true);") && dialog.includes("else cancelLeave();"), "all saved closes; a refusal keeps the window and the drafts");
+  assert.ok(employees.includes("const continueLeave = () => {\n    store.reset();\n    onLeave(true);"), "«НЕ СОХРАНЯТЬ» drops the drafts and closes");
+});
+
+test("OWN-07: an employee with unsaved edits has a dot in the list and a name for a screen reader", () => {
+  const employees = employeesComponent();
+  assert.ok(employees.includes('<i className="tab-dot" aria-hidden="true" />'), "the same mark as the tab strip");
+  assert.ok(employees.includes("aria-label={unsaved ? employeeRowName(employee, true) : undefined}"), "the name of the row says there are unsaved edits");
+  assert.ok(employees.includes("{dirtyCount > 1 && <button"), "«СОХРАНИТЬ ВСЕ · N» shows from two drafts");
+  assert.ok(employees.includes("`СОХРАНИТЬ ВСЕ · ${dirtyCount}`"));
+});
+
 // ---- 26-08 (D-12, D-13): «Повышение» — the branches in the bar's nav slot, the queue and the banks as list/detail ----
 // components/portia-promotion-editor-main.tsx is not a part of the portia-editor family (no D-21 hunk guard); it calls the seam directly.
 

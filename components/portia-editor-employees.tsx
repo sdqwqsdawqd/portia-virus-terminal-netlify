@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ConfirmDialog, EditorGroup, Field, ImageEditorField } from "@/components/portia-editor-dossier";
 import { EditorActionBar } from "@/components/portia-editor-tab-shell";
-import { createEmployeeDraftStore, detailsOf, dirtyEmployeeIds, draftFor, saveQueue, type EmployeeDraft, type EmployeeDraftStore } from "@/lib/employee-drafts";
+import { createEmployeeDraftStore, detailsOf, dirtyEmployeeIds, draftFor, employeeRowName, saveQueue, type EmployeeDraft, type EmployeeDraftStore } from "@/lib/employee-drafts";
 import { employeeRequestFailure, saveStatusText } from "@/lib/editor-save-status";
 import { tabRegistry } from "@/lib/editor-tabs";
 import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileOf, type EmployeeProfile, type ManualDetails, type PortiaEmployee } from "@/lib/portia-employees";
@@ -395,12 +395,16 @@ export function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, upload
       label={tabRegistry.find((entry) => entry.id === "employees")?.label ?? ""}
       statusText={selected && draft ? (saveStatus === "saving" ? saveStatusText("saving") : saveStatus === "saved" ? saveStatusText("saved") : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ") : ""}
       tone={saveStatus}
-      actions={selected && draft ? <>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></> : undefined}
+      actions={selected && draft ? <>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}{dirtyCount > 1 && <button className="secondary-control" type="button" disabled={state === "saving"} onClick={() => void saveAll()}>{`СОХРАНИТЬ ВСЕ · ${dirtyCount}`}</button>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></> : undefined}
     />
     <div className="virus-editor-layout employee-editor-layout etab-body" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>
     <button type="button" className="secondary-control editor-back-to-list" onClick={() => { setRecordOpen(false); revealOnPhone(layoutRef); }}>← К списку</button>
     <aside className="editor-record-list etab-list">
-      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected?.id ? "active" : ""} aria-current={employee.id === selected?.id ? "true" : undefined} onClick={() => chooseEmployee(employee)}><strong>{employee.nickname}</strong>{employee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
+      {employees.map((employee) => {
+        // The dot is the same mark as on the tab strip; its name for a screen reader holds the visible text of the row first (WCAG 2.5.3).
+        const unsaved = dirtyIds.includes(employee.id);
+        return <button key={employee.id} type="button" className={employee.id === selected?.id ? "active" : ""} aria-current={employee.id === selected?.id ? "true" : undefined} aria-label={unsaved ? employeeRowName(employee, true) : undefined} onClick={() => chooseEmployee(employee)}><strong>{employee.nickname}{unsaved && <i className="tab-dot" aria-hidden="true" />}</strong>{employee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>;
+      })}
       <button className="add-record" type="button" aria-expanded={addOpen} onClick={() => setAddOpen((open) => !open)}>+ ВНЕ ТАБЛИЦЫ</button>
       {addOpen && <form className="employee-add-form" onSubmit={(event) => { event.preventDefault(); void addEmployee(); }}>
         <Field label="Ник Roblox"><input value={addDraft.nickname} required maxLength={20} autoCapitalize="none" spellCheck={false} onChange={(event) => setAddDraft((current) => ({ ...current, nickname: event.target.value }))} /></Field>

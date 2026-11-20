@@ -97,6 +97,9 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //      (черновики по id, один вопрос только при закрытии окна); в редакторе остались импорт шва, хранилище useEmployeeDraftStore() рядом с employeeDirty,
 //      проп drafts у вызова вкладки и сброс хранилища, когда владелец закрыл раздел (applyEmployeesSeamHunk); русских строк не добавлено, строки функции переехали вместе с ней
 //      (D-58 берёт ожидаемый набор из образца после этой правки). Источник одобрения: 26.1-OWNER-REQUEST OWN-07 (2026-11-20, «правка нескольких биографий подряд без обязательного сохранения») и план 26.1-02.
+//  18. PORTIA-26.1-EMP2 (26.1-02 Task 2; OWN-07, D-21) — вопрос о несохранённых сотрудниках задаётся только при закрытии окна: уход с вкладки «Сотрудники» ничего не спрашивает,
+//      состояние ожидающей вкладки leaveTo и её ветка убраны; при закрытии с несохранёнными черновиками с другой вкладки редактор сам переходит на «Сотрудники», где шов задаёт вопрос
+//      (applyEmployeesCloseHunk); русских строк не добавлено (вопрос и его кнопки лежат в шве). Источник одобрения: 26.1-OWNER-REQUEST OWN-07 («Сохранить?» только при закрытии) и план 26.1-02.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -1110,6 +1113,60 @@ function applyEmployeesSeamHunk(text: string): string {
   return replaceOnce(next, "  }, [closedKey, employeesClosed]);\n", "  }, [closedKey, employeesClosed, employeeDrafts]);\n", "employees seam: the effect depends on the store");
 }
 
+/**
+ * PORTIA-26.1-EMP2 (26.1-02 Task 2; OWN-07, D-21): the employee question is asked only when the window closes. Leaving «Сотрудники» for another tab asks nothing
+ * (the drafts live in the store), so the pending-tab state leaveTo and its branch go; a close with unsaved employee drafts from another tab switches to «Сотрудники»,
+ * where the seam shows the question. Five replacements, byte for byte; no Russian text is added (the question is in components/portia-editor-employees.tsx).
+ */
+function applyEmployeesCloseHunk(text: string): string {
+  let next = replaceOnce(text, "  const [leaveTo, setLeaveTo] = useState<EditorTab | null>(null);\n", "", "employees close: no pending tab");
+  next = replaceOnce(next, "  const leaving = employeeDirty && (leaveTo !== null || closeAsked);\n", "  const leaving = employeeDirty && closeAsked;\n", "employees close: the question is for the close only");
+  next = replaceOnce(next, "      setPreviewSurface(null);\n      setLeaveTo(null);\n", "      setPreviewSurface(null);\n", "employees close: a closed section has no pending tab");
+  next = replaceOnce(
+    next,
+    [
+      "  // An unsaved employee draft is asked about before leaving the tab (D-02).",
+      "  const switchTab = (id: EditorTab) => {",
+      '    if (tab === "employees" && id !== "employees" && employeeDirty) setLeaveTo(id);',
+      "    else showTab(id);",
+      "  };",
+      "  // The answer of the employee question: continue the pending tab switch or window close, or drop it.",
+      "  const onEmployeeLeave = (ok: boolean) => {",
+      "    if (ok) setEmployeeDirty(false);",
+      "    if (leaveTo !== null) {",
+      "      setLeaveTo(null);",
+      "      if (ok) showTab(leaveTo);",
+      "    } else if (closeAsked) {",
+      "",
+    ].join("\n"),
+    [
+      "  // Employee drafts live in the store and survive leaving the tab: no question here (owner 2026-11-20, OWN-07).",
+      "  const switchTab = (id: EditorTab) => showTab(id);",
+      "  // The answer of the employee question, asked once when the window closes.",
+      "  const onEmployeeLeave = (ok: boolean) => {",
+      "    if (ok) setEmployeeDirty(false);",
+      "    if (closeAsked) {",
+      "",
+    ].join("\n"),
+    "employees close: switchTab and the answer",
+  );
+  return replaceOnce(
+    next,
+    "      if (ok && !dirty) onCloseApproved();\n    }\n  };\n",
+    [
+      "      if (ok && !dirty) onCloseApproved();",
+      "    }",
+      "  };",
+      "  // A close with unsaved employee drafts asks its question on the tab of the employees; from another tab the editor goes there first.",
+      "  useEffect(() => {",
+      '    if (closeAsked && employeeDirty && tab !== "employees" && stripTabs.some(([id]) => id === "employees")) showTab("employees");',
+      "  });",
+      "",
+    ].join("\n"),
+    "employees close: go to the tab that asks",
+  );
+}
+
 /** Реестр одобренных правок (D-64): `apply` — порядок применения к образцу; `normalizeActual` — что вырезается из текущего файла перед сравнением. */
 const approvedEditorEdits: readonly { id: string; apply: (text: string) => string; normalizeActual?: (text: string) => string }[] = [
   { id: "D-57", apply: applyLaunchButtonHunk },
@@ -1133,6 +1190,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "UPLOAD-COMPRESS", apply: applyUploadCompressHunk },
   { id: "GUIDE-PHOTO-FRAMING", apply: applyGuidePhotoFramingHunk },
   { id: "PORTIA-26.1-EMP", apply: applyEmployeesSeamHunk },
+  { id: "PORTIA-26.1-EMP2", apply: applyEmployeesCloseHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -1281,6 +1339,9 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutEmployeesSeam = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-EMP").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutEmployeesSeam), null, "a file without the PORTIA-26.1-EMP hunk is a difference");
   assert.throws(() => applyEmployeesSeamHunk(expected), /exactly one approved anchor/, "the employees seam hunk cannot be applied twice");
+  const withoutEmployeesClose = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-EMP2").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutEmployeesClose), null, "a file without the PORTIA-26.1-EMP2 hunk is a difference");
+  assert.throws(() => applyEmployeesCloseHunk(expected), /exactly one approved anchor/, "the employees close hunk cannot be applied twice");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

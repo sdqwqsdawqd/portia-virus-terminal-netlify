@@ -538,8 +538,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   const closeAsked = closeRequest !== handledCloseRequest;
   const [employeeDirty, setEmployeeDirty] = useState(false);
   const employeeDrafts = useEmployeeDraftStore();
-  const [leaveTo, setLeaveTo] = useState<EditorTab | null>(null);
-  const leaving = employeeDirty && (leaveTo !== null || closeAsked);
+  const leaving = employeeDirty && closeAsked;
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
   const [formatterOpen, setFormatterOpen] = useState(false);
   const [dossierTab, setDossierTab] = useState<DossierTab>("main");
@@ -641,7 +640,6 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
       setFormatterOpen(false);
       setRecordOpen(false);
       setPreviewSurface(null);
-      setLeaveTo(null);
       if (!lost.length) return;
       const names = lost.map((id) => `«${id === "employees" ? "Сотрудники" : sectionLabels[id as EditorSection]}»`);
       setClosureNotice(lost.length === 1
@@ -931,23 +929,21 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
     setFormatTarget(null);
     setFormatterOpen(false);
   };
-  // An unsaved employee draft is asked about before leaving the tab (D-02).
-  const switchTab = (id: EditorTab) => {
-    if (tab === "employees" && id !== "employees" && employeeDirty) setLeaveTo(id);
-    else showTab(id);
-  };
-  // The answer of the employee question: continue the pending tab switch or window close, or drop it.
+  // Employee drafts live in the store and survive leaving the tab: no question here (owner 2026-11-20, OWN-07).
+  const switchTab = (id: EditorTab) => showTab(id);
+  // The answer of the employee question, asked once when the window closes.
   const onEmployeeLeave = (ok: boolean) => {
     if (ok) setEmployeeDirty(false);
-    if (leaveTo !== null) {
-      setLeaveTo(null);
-      if (ok) showTab(leaveTo);
-    } else if (closeAsked) {
+    if (closeAsked) {
       // With dirty content the «Закрыть редактор?» dialog follows by itself.
       if (!ok || !dirty) setHandledCloseRequest(closeRequest);
       if (ok && !dirty) onCloseApproved();
     }
   };
+  // A close with unsaved employee drafts asks its question on the tab of the employees; from another tab the editor goes there first.
+  useEffect(() => {
+    if (closeAsked && employeeDirty && tab !== "employees" && stripTabs.some(([id]) => id === "employees")) showTab("employees");
+  });
 
   const uploadImage = async (file: File, onUploaded: (url: string) => void) => {
     if (uploadState === "uploading") return;
