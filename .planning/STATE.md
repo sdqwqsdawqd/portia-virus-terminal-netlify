@@ -4,17 +4,17 @@ milestone: v1.4
 milestone_name: Доступ и единый стиль
 current_phase: "26.1"
 current_phase_name: Правки владельца
-status: executing
-stopped_at: Completed-26.1-13-PLAN.md
-last_updated: "2026-11-20T22:08:57.363Z"
+status: verifying
+stopped_at: Completed 26.1-14-PLAN.md
+last_updated: "2026-11-20T22:15:35.249Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 26.1 execution started
-state_head: 379becdd5fa63b39be6d563e834982a7e9e3f5a1
+state_head: 0054e7bd0fb93c20c523d76a08437803f8bcc581
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 85
-  completed_plans: 84
+  completed_plans: 85
 ---
 
 Total Phases: 6
@@ -32,7 +32,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 
 Phase: 26.1 (Правки владельца) — EXECUTING
 Plan: 14 of 14
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-11-20 — Phase 26.1 execution started
 
 Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 — принятый риск; Phase 22 не закрыта)
@@ -125,6 +125,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase 26.1 P11 | 2h | 3 tasks | 8 files |
 | Phase 26.1 P12 | 2h | 3 tasks | 15 files |
 | Phase 26.1 P13 | 80min | 2 tasks | 5 files |
+| Phase 26.1 P14 | 40min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -390,6 +391,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 26.1]: 26.1-11: вид «Информации» и карточки «Сводки» живут в шве portia-desktop-info.tsx; защищённый редактор не менялся
 - [Phase 26.1]: 26.1-12: the live card of a virus is one component for the archive, the recycle bin and the template; a virus of the bin asks the tools of both apps (useLiveVirus), the template has no provider
 - [Phase 26.1]: 26.1-13: live mode is exactly six apps (guide, info, broadcasts, viruses, recycle, assistant); LIVE_EXCLUDED names the reason of the other five; last phrase of obida/idle/activity cannot be removed
+- [Phase 26.1]: 26.1-14: only quota classes are dead CSS of the phase; order-drag-handle/column-swap-handle stay (hidden keyboard button); 26.1-04 e2e updated but BLOCKED, not run
 
 ### Pending Todos
 
@@ -448,8 +450,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-20T22:08:49.591Z
-Stopped at: Completed-26.1-13-PLAN.md
+Last session: 2026-11-20T22:15:34.144Z
+Stopped at: Completed 26.1-14-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
