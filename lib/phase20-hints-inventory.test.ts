@@ -50,6 +50,8 @@ const appliedFiles = [
   "app/owner-login/page.tsx",
   // The editor file is listed too: its rows are all kept (D-58), and they are checked like every other row.
   "components/portia-editor.tsx",
+  // 26.1-02: the rows of «Сотрудники» moved with the component into its seam; their texts are unchanged.
+  "components/portia-editor-employees.tsx",
 ];
 
 export type HintRow = {

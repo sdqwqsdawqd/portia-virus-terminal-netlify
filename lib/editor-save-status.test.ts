@@ -11,6 +11,8 @@ import { changedSections, revertSections } from "./editor-changes.ts";
 import { contentRefusal } from "./editor-tabs.ts";
 
 const editor = readFileSync(new URL("../components/portia-editor.tsx", import.meta.url), "utf8");
+// 26.1-02: the component of «Сотрудники» moved out of the editor file into its seam (D-21).
+const employeesSeam = readFileSync(new URL("../components/portia-editor-employees.tsx", import.meta.url), "utf8");
 const desktop = readFileSync(new URL("../components/portia-desktop.tsx", import.meta.url), "utf8");
 const fixture = (): PortiaContent => structuredClone(portiaContentFixture);
 const cloneOf = <T,>(value: T): T => structuredClone(value);
@@ -40,14 +42,16 @@ test("partialSave sends everything the server did not refuse, in editorSections 
 });
 
 test("the editor and the employee editor take their status text from saveStatusText, not from upper-case literals (UI E3)", () => {
-  assert.ok((editor.match(/saveStatusText\(/g) ?? []).length >= 2);
+  assert.ok((editor.match(/saveStatusText\(/g) ?? []).length >= 1, "the editor file");
+  assert.ok((employeesSeam.match(/saveStatusText\(/g) ?? []).length >= 2, "the seam of «Сотрудники»");
   assert.doesNotMatch(editor, /"СОХРАНЕНИЕ…"|"СОХРАНЕНО"/);
+  assert.doesNotMatch(employeesSeam, /"СОХРАНЕНИЕ…"|"СОХРАНЕНО"/);
 });
 
 test("«Сохранено» goes out after 4s, not 1.8s, and the save button keeps focus while saving (UI E3, D-12)", () => {
   assert.match(desktop, /setSaveState\("idle"\), 4000\)/);
   assert.doesNotMatch(desktop, /setSaveState\("idle"\), 1800\)/);
-  assert.match(editor, /setState\("idle"\), 4000\)/);
+  assert.match(employeesSeam, /setState\("idle"\), 4000\)/);
   assert.match(editor, /aria-disabled=\{saveState === "saving" \|\| undefined\}/);
   assert.doesNotMatch(editor, /disabled=\{!dirty \|\| saveState === "saving"/);
 });
@@ -366,12 +370,12 @@ test("employeeRequestFailure texts are Cyrillic, with no raw exception wording (
   }
 });
 
+// The region is the seam from the component to the end of the file.
 const employeeRegion = () => {
-  const source = lf(editor);
+  const source = lf(employeesSeam);
   const start = source.indexOf("function EmployeeProfilesEditor");
-  const end = source.indexOf("function EditorAccessManager");
-  assert.ok(start > -1 && end > start);
-  return source.slice(start, end);
+  assert.ok(start > -1);
+  return source.slice(start);
 };
 const accessRegion = () => {
   const source = lf(editor);
@@ -392,9 +396,10 @@ test("EmployeeProfilesEditor shows no raw exception text and reads the answer th
 
 test("EmployeeProfilesEditor does not send a second PATCH or POST while one is running (WR-05)", () => {
   const region = employeeRegion();
-  assert.match(region, /saveInflight\.current/);
+  // One request per employee id: a second save of the same employee joins the running one.
+  assert.match(region, /saveInflight\.current\.get\(id\)/);
   assert.match(region, /addInflight\.current/);
-  assert.match(region, /finally\s*\{[^}]*saveInflight\.current = null/);
+  assert.match(region, /finally\s*\{[^}]*saveInflight\.current\.delete\(id\)/);
 });
 
 test("«ОТОЗВАТЬ» asks first through ConfirmDialog and is disabled while a request runs (IN-03)", () => {

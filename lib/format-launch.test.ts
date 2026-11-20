@@ -93,6 +93,10 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //  16. PORTIA-26-G10 (26-18; UI-04, D-21) — вкладка вирусов: кнопка «ПЕРЕМЕСТИТЬ В КОРЗИНУ» переехала из низа формы в верхнюю строку записи div.virus-editor-head
 //      рядом с вкладками досье (applyRecycleButtonHunk); разметка кнопки и обработчик те же, русская надпись переносится, а не добавляется (набор строк D-58 тот же).
 //      Источник одобрения: 26-UAT gap 10 (2026-11-16, владелец: кнопка «в странном месте») и план 26-18.
+//  17. PORTIA-26.1-EMP (26.1-02; OWN-07, D-21) — «Сотрудники»: функция EmployeeProfilesEditor с detailsOf переехала в шов components/portia-editor-employees.tsx
+//      (черновики по id, один вопрос только при закрытии окна); в редакторе остались импорт шва, хранилище useEmployeeDraftStore() рядом с employeeDirty,
+//      проп drafts у вызова вкладки и сброс хранилища, когда владелец закрыл раздел (applyEmployeesSeamHunk); русских строк не добавлено, строки функции переехали вместе с ней
+//      (D-58 берёт ожидаемый набор из образца после этой правки). Источник одобрения: 26.1-OWNER-REQUEST OWN-07 (2026-11-20, «правка нескольких биографий подряд без обязательного сохранения») и план 26.1-02.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -1059,6 +1063,53 @@ function applyGuidePhotoFramingHunk(text: string): string {
   return next;
 }
 
+/**
+ * PORTIA-26.1-EMP (26.1-02 Task 1; OWN-07, D-21): «Сотрудники» живут в шве components/portia-editor-employees.tsx.
+ * Функция и её detailsOf вырезаются целиком по двум якорям — строке начала (const detailsOf) и строке `type TabLists =` (каждая ровно одна),
+ * поэтому правка не зависит от содержимого функции и от соседних правок. Остальное — шесть замен байт в байт. Русских строк не добавлено.
+ */
+function applyEmployeesSeamHunk(text: string): string {
+  const lines = text.split("\n");
+  const starts = lines.flatMap((line, index) => (line.startsWith("const detailsOf = (employee: PortiaEmployee)") ? [index] : []));
+  assert.equal(starts.length, 1, "employees seam: exactly one approved anchor for the start of the moved code");
+  const ends = lines.flatMap((line, index) => (line.startsWith("type TabLists =") ? [index] : []));
+  assert.equal(ends.length, 1, "employees seam: exactly one approved anchor for the end of the moved code");
+  assert.ok(starts[0] < ends[0], "the moved code stands above type TabLists");
+  lines.splice(starts[0], ends[0] - starts[0]);
+  let next = lines.join("\n");
+  next = replaceOnce(
+    next,
+    "import { draftEdits, employeeRequestFailure, partialSave,",
+    "import { draftEdits, partialSave,",
+    "employees seam: the failure text moved with the function",
+  );
+  next = replaceOnce(
+    next,
+    'import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, settleDraft, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";\n',
+    'import { type PortiaEmployee } from "@/lib/portia-employees";\nimport { EmployeeProfilesEditor, useEmployeeDraftStore } from "@/components/portia-editor-employees";\n',
+    "employees seam: imports",
+  );
+  next = replaceOnce(
+    next,
+    "  const [employeeDirty, setEmployeeDirty] = useState(false);\n",
+    "  const [employeeDirty, setEmployeeDirty] = useState(false);\n  const employeeDrafts = useEmployeeDraftStore();\n",
+    "employees seam: the draft store",
+  );
+  next = replaceOnce(
+    next,
+    "onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}",
+    "onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} drafts={employeeDrafts} />}",
+    "employees seam: the drafts prop",
+  );
+  next = replaceOnce(
+    next,
+    '      if (wasEmployeeDirty && added.includes("employees")) lost.push("employees");\n',
+    '      if (wasEmployeeDirty && added.includes("employees")) lost.push("employees");\n      if (added.includes("employees")) { employeeDrafts.reset(); setEmployeeDirty(false); }\n',
+    "employees seam: a closed section drops its drafts",
+  );
+  return replaceOnce(next, "  }, [closedKey, employeesClosed]);\n", "  }, [closedKey, employeesClosed, employeeDrafts]);\n", "employees seam: the effect depends on the store");
+}
+
 /** Реестр одобренных правок (D-64): `apply` — порядок применения к образцу; `normalizeActual` — что вырезается из текущего файла перед сравнением. */
 const approvedEditorEdits: readonly { id: string; apply: (text: string) => string; normalizeActual?: (text: string) => string }[] = [
   { id: "D-57", apply: applyLaunchButtonHunk },
@@ -1081,6 +1132,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26-G10", apply: applyRecycleButtonHunk },
   { id: "UPLOAD-COMPRESS", apply: applyUploadCompressHunk },
   { id: "GUIDE-PHOTO-FRAMING", apply: applyGuidePhotoFramingHunk },
+  { id: "PORTIA-26.1-EMP", apply: applyEmployeesSeamHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -1203,8 +1255,10 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutInfoBroadcastNav = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-07b" && edit.id !== "PORTIA-26-G04").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutInfoBroadcastNav), null, "a file without the PORTIA-26-07b hunk is a difference");
   assert.throws(() => applyInfoBroadcastNavHunk(expected), /exactly one approved anchor/, "the info and broadcast nav hunk cannot be applied twice");
-  const withoutEmployeesBar = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-07c").reduce((text, edit) => edit.apply(text), sample);
-  assert.notEqual(firstDifference(expected, withoutEmployeesBar), null, "a file without the PORTIA-26-07c hunk is a difference");
+  // 26.1-02: PORTIA-26.1-EMP cuts the whole function out, so the effect of the bar hunk shows only before that cut.
+  const beforeEmployeesSeam = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-EMP");
+  const withoutEmployeesBar = beforeEmployeesSeam.filter((edit) => edit.id !== "PORTIA-26-07c").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(beforeEmployeesSeam.reduce((text, edit) => edit.apply(text), sample), withoutEmployeesBar), null, "a file without the PORTIA-26-07c hunk is a difference");
   assert.throws(() => applyEmployeesBarHunk(expected), /exactly one approved anchor/, "the employees bar hunk cannot be applied twice");
   const withoutCardToggleName = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-13").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutCardToggleName), null, "a file without the PORTIA-26-13 hunk is a difference");
@@ -1224,6 +1278,9 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutRecycleButton = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-G10").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutRecycleButton), null, "a file without the PORTIA-26-G10 hunk is a difference");
   assert.throws(() => applyRecycleButtonHunk(expected), /exactly one approved anchor/, "the recycle button hunk cannot be applied twice");
+  const withoutEmployeesSeam = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-EMP").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutEmployeesSeam), null, "a file without the PORTIA-26.1-EMP hunk is a difference");
+  assert.throws(() => applyEmployeesSeamHunk(expected), /exactly one approved anchor/, "the employees seam hunk cannot be applied twice");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

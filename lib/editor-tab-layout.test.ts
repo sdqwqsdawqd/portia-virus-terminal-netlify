@@ -9,6 +9,8 @@ const family = componentFamily("portia-editor");
 const shellPart = family.find((part) => part.file === "portia-editor-tab-shell.tsx");
 const shell = shellPart?.text ?? "";
 const editor = family[0].text;
+// 26.1-02 (OWN-07): «Сотрудники» moved out of the editor file into its own seam (D-21).
+const employeesSeam = family.find((part) => part.file === "portia-editor-employees.tsx")?.text ?? "";
 const styles = lf(readFileSync(new URL("../app/portia.css", import.meta.url), "utf8"));
 const PHONE = "max-width: 900px";
 
@@ -89,9 +91,9 @@ test("D-13b: the bar has a nav slot only when given, a polite status slot and an
 test("D-13b: the editor renders one action bar under the tab strip for the draft tabs, with the old buttons", () => {
   assert.match(editor, /import \{ EditorActionBar[^}]*\} from "@\/components\/portia-editor-tab-shell";/);
   const code = stripComments(editor);
-  // Two calls since 26-07: the draft tabs share one bar; «Сотрудники» renders its own with its own save (D-12).
-  assert.equal(code.split("<EditorActionBar").length - 1, 2, "one bar for the draft tabs and one for «Сотрудники»");
-  assert.equal(code.slice(0, code.indexOf("function EmployeeProfilesEditor(")).split("<EditorActionBar").length - 1, 1, "one call for the draft tabs");
+  // Two bars since 26-07: the draft tabs share one; «Сотрудники» renders its own with its own save (D-12). Since 26.1-02 the second one lives in the seam.
+  assert.equal(code.split("<EditorActionBar").length - 1, 1, "one bar for the draft tabs in the editor file");
+  assert.equal(stripComments(employeesSeam).split("<EditorActionBar").length - 1, 1, "one bar for «Сотрудники» in its seam");
   const bar = editorSlice('<nav className="editor-tabs" aria-label="Разделы редактора"', "{refusedShown.map(");
   assert.match(bar, /<\/nav>\n\s*\{editorSections\.some\(\(section\) => section === tab\) && \(\n\s*<EditorActionBar/, "the bar follows the tab strip, only in a draft tab");
   for (const prop of ["label={sectionLabels[tab as EditorSection]}", "statusText={statusText}", "tone={status}", "unsavedCount={dirty ? shownChanged.length : 0}", "notice={saveNotice}"]) {
@@ -118,7 +120,7 @@ test("WR-01: a tab outside the draft tabs shows the unsaved draft through the co
   const provider = editorSlice("<EditorDraftBarContext.Provider value={draftBar}>", "</EditorDraftBarContext.Provider>");
   for (const tab of ["employees", "users", "promo"]) assert.ok(provider.includes(`{tab === "${tab}"`), `${tab} sits under the provider`);
   assert.ok(provider.includes('{tab === "access" && canManageEditors && <EditorDraftBar />}'), "the access tab has no bar of its own, so it renders the draft bar");
-  assert.equal(code.split("<EditorActionBar").length - 1, 2, "no third action bar: the other tabs reuse their own");
+  assert.equal(code.split("<EditorActionBar").length - 1, 1, "no second action bar in the editor file: the other tabs reuse their own («Сотрудники» has its own in its seam)");
   assert.match(shell, /export const EditorDraftBarContext = createContext<EditorDraftBarState \| null>\(null\)/);
   assert.match(stripComments(shell), /export function EditorDraftBar\(\{ banner \}/);
   const bar = stripComments(shell);
@@ -489,8 +491,16 @@ test("D-13a: the broadcast group nav sits flush in the bar", () => {
 
 // ---- 26-07 Task 3 (D-12): «Сотрудники» — its own action bar, the employee list on the left, the profile on the right ----
 
+/** The component of «Сотрудники» in its seam, comments stripped, from its first line to the end of the file. */
+function employeesComponent() {
+  const code = stripComments(employeesSeam);
+  const start = code.indexOf("export function EmployeeProfilesEditor(");
+  assert.ok(start >= 0, "export function EmployeeProfilesEditor( is in components/portia-editor-employees.tsx");
+  return code.slice(start);
+}
+
 test("D-12: «Сотрудники» renders its own action bar with the profile save and its own status; no editor draft buttons", () => {
-  const employees = editorSlice("function EmployeeProfilesEditor(", "type TabLists =");
+  const employees = employeesComponent();
   const ret = employees.slice(employees.indexOf("  return <>\n    <EditorActionBar"));
   assert.ok(ret.length > 0, "the bar opens the component's markup, above the layout");
   const bar = ret.slice(0, ret.indexOf('<div className="virus-editor-layout employee-editor-layout etab-body"'));
@@ -501,18 +511,45 @@ test("D-12: «Сотрудники» renders its own action bar with the profile
   assert.ok(bar.includes('href="/owner-login">ВОЙТИ СНОВА</a>'), "the sign-in link after an expired session stays beside it");
   for (const gone of ["↶", "ОТМЕНИТЬ", 'setDialog("discard")', "editor-undo-step"]) assert.ok(!bar.includes(gone), `${gone}: no editor draft action on this bar`);
   assert.ok(!employees.includes("employee-editor-save"), "the old save line under the profile is gone");
-  assert.ok(employees.includes("leaving: boolean;") && employees.includes("onLeave(true);") && employees.includes('title="Несохранённые правки сотрудника"'), "the leave guard is unchanged");
+  assert.ok(employees.includes("leaving: boolean;") && employees.includes("onLeave(true);") && employees.includes('title="Сохранить изменения?"'), "the close question is asked by the seam");
   assert.match(employees, /<\/div>\n {2}<\/>;\n\}/, "the fragment closes after the layout");
 });
 
 test("D-12: «Сотрудники» is a list/detail body; the picked employee is the current row", () => {
-  const employees = editorSlice("function EmployeeProfilesEditor(", "type TabLists =");
+  const employees = employeesComponent();
   assert.ok(employees.includes('<div className="virus-editor-layout employee-editor-layout etab-body" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>'));
   assert.ok(employees.includes('<aside className="editor-record-list etab-list">'));
   assert.ok(employees.includes('aria-current={employee.id === selected?.id ? "true" : undefined}'), "the picked employee is aria-current");
   assert.ok(employees.includes('<div className="editor-form employee-profile-editor etab-detail">'));
   assert.ok(employees.includes("editor-back-to-list"), "the phone back button stays");
   assert.doesNotMatch(styles, /\.employee-editor-save/, "no rule of the retired save line");
+});
+
+// ---- 26.1-02 (OWN-07): «Сотрудники» keep one draft per employee and ask once, when the window closes ----
+
+test("OWN-07: the component lives in its seam only; the editor imports it and the draft store and hands the store to the tab", () => {
+  assert.equal(editor.split("function EmployeeProfilesEditor(").length - 1, 0, "the function is gone from the editor file");
+  assert.match(employeesSeam, /^"use client";/);
+  assert.match(employeesSeam, /export function EmployeeProfilesEditor\(/);
+  assert.match(employeesSeam, /export function useEmployeeDraftStore\(/);
+  assert.doesNotMatch(employeesSeam, /from "@\/components\/portia-editor"/, "the seam never imports the editor");
+  assert.doesNotMatch(employeesSeam, /from "@\/components\/portia-desktop/, "the seam imports nothing of the desktop family");
+  assert.ok(editor.includes('import { EmployeeProfilesEditor, useEmployeeDraftStore } from "@/components/portia-editor-employees";'));
+  assert.ok(editor.includes("const employeeDrafts = useEmployeeDraftStore();"), "the store is made by PortiaEditor, so it outlives the tab");
+  assert.match(editor, /<EmployeeProfilesEditor [^\n]*drafts=\{employeeDrafts\} \/>/);
+});
+
+test("OWN-07: another employee opens without a question and the draft of the one left stays in the store", () => {
+  const employees = employeesComponent();
+  const choose = employees.slice(employees.indexOf("const chooseEmployee ="), employees.indexOf("const continueLeave ="));
+  assert.ok(choose.length > 0, "chooseEmployee is found");
+  assert.ok(!employees.includes("pendingEmployeeId") && !employees.includes("setPendingEmployeeId"), "no question when another employee is picked (D-02 is retired)");
+  assert.ok(choose.includes("openEmployee(employee);"), "an employee opens at once");
+  assert.ok(!choose.includes("setDraft") && !choose.includes("store.drop") && !choose.includes("store.reset"), "opening another employee never touches a draft");
+  assert.ok(employees.includes("store.update(selected,"), "typing writes to the draft of the open employee, by id");
+  assert.ok(employees.includes("store.settle(sent, merged,"), "a save answer settles the draft of the employee it was sent for");
+  assert.ok(!employees.includes("onDirtyChange(false)"), "leaving the tab does not clear the dirty flag: the drafts live on");
+  assert.ok(employees.includes("onDirtyChange(dirtyCount > 0)"), "the dirty flag is the count of employees with edits");
 });
 
 // ---- 26-08 (D-12, D-13): «Повышение» — the branches in the bar's nav slot, the queue and the banks as list/detail ----
