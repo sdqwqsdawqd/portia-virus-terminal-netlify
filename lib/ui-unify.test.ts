@@ -1036,6 +1036,7 @@ test("owner 2026-11-20 OWN-02: content columns fill the window (guide card, nest
     assert.ok(!/^\d+px$/u.test(cap ?? ""), selector);
   }
   assert.equal(lastDeclaration(portiaCss, ".guide-page .info-document-copy", "max-width"), "none", "the text of an open card takes the card width");
+  assert.equal(lastDeclaration(portiaCss, ".guide-page .info-block-video", "max-width"), "none", "owner 2026-11-20: a video inside a card takes the card width");
   // Kept on purpose, so that a later sweep does not lift them by mistake: «Информация» (owner: already fine there), a title, a lone media, a skeleton.
   assert.equal(lastDeclaration(portiaCss, ".info-document-copy", "max-width"), "82ch");
   assert.equal(lastDeclaration(portiaCss, ".info-document h1", "max-width"), "780px");

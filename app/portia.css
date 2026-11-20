@@ -2103,6 +2103,7 @@ html[data-motion="off"] .assistant-button:active img { transform: none; }
 .guide-back-bar button > span:first-child { color: var(--teal); font-size: 16px; line-height: 1; }
 .guide-page { padding-bottom: 48px; } /* owner 2026-11-20 (OWN-02): the open card fills the window, no 820px column */
 .guide-page .info-document-copy { max-width: none; } /* the text blocks take the whole card width too (the 82ch cap of the «Information» text stays there) */
+.guide-page .info-block-video { max-width: none; } /* owner 2026-11-20: a video inside a card fills the card width too (the 820px stays in «Information») */
 .guide-page:focus:not(:focus-visible) { outline: none; }
 .guide-page h1 { margin: 8px 0 24px; color: #f0f5f3; font: 700 28px/1.2 var(--display); letter-spacing: -.02em; overflow-wrap: anywhere; }
 .guide-blocks { display: grid; gap: 24px; }
