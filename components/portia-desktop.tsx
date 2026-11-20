@@ -4,7 +4,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExtern
 import dynamic from "next/dynamic";
 import { findGuide, findInfo, portiaTextKey, type Broadcast, type DocumentLinks, type PortiaContent, type RecycleFile, type RichTextDocument, type Virus } from "@/lib/portia-content";
 import { acceptsRoster, employeeRatings, mergeEmployeesAnswer, type PortiaEmployee } from "@/lib/portia-employees";
-import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIllustrationName } from "@/components/portia-icons";
+import { PortiaIcon, PortiaIllustration, type PortiaIllustrationName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
 import { accentIds, bootSeenStorageKey, desktopSettingsStorageKey, motionModes, spiderModes } from "@/lib/accent-boot";
 import { accentTokenNames, deriveAccentTokens } from "@/lib/accent-custom";
@@ -32,7 +32,7 @@ import { accessCheckFailedText, appViewState, contentSyncFailed, contentSyncSucc
 import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
 import { EmbeddedDocument, GuideApp } from "@/components/portia-desktop-documents";
 import { BroadcastCard, BroadcastsHeader, InfoArticle, broadcastTabs } from "@/components/portia-desktop-info";
-import { FormattedText, LoadingState, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
+import { FormattedText, LoadingState, RowBadges, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
 import { PortiaImage } from "@/components/portia-desktop-media";
 import { newRecommendationSeed, pickSearchRecommendations, seededRandom } from "@/lib/search-recommendations";
 import { infoCurrentTitle, infoNextTarget, infoOverviewVisible, infoSectionsButtonLabel, infoSectionsHitCount, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";
@@ -2351,14 +2351,6 @@ function BootScreen({ visible, level }: { visible: boolean; level: number | null
     <span>PORTIA OS</span><strong>Запуск лабораторного терминала</strong>
     <div className="boot-lines">{bootLines(level).map((line, index) => <p key={line} style={{ animationDelay: `${200 + index * 280}ms` }}>{line}</p>)}</div>
   </div></div>;
-}
-
-// In the archive list the badges stand alone, so each one names its term for screen readers and on hover.
-function RowBadges({ virus }: { virus: Virus }) {
-  const terms = [virus.classification.danger, virus.classification.spread, virus.classification.escapeRisk];
-  const badges = terms.flatMap((term) => { const icon = classificationIconFor(term); return icon ? [{ term, icon }] : []; });
-  if (!badges.length) return null;
-  return <span className="row-badges">{badges.map(({ term, icon }) => <span className="row-badge" key={term} title={term}><PortiaIcon name={icon} role="img" aria-hidden={false} aria-label={term} /></span>)}</span>;
 }
 
 // Non-modal corner notification: the owner asked for a side toast instead of a window (G-03.2-2b).

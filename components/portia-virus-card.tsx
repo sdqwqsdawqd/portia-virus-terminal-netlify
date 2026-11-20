@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { classificationOptions, portiaTextKey, type PortiaContent, type RichTextDocument, type Virus } from "@/lib/portia-content";
 import { classificationIconFor, PortiaIcon } from "@/components/portia-icons";
+import { useLiveEdit, type LiveEditApi, type LiveVirusField } from "@/components/portia-live-edit";
 import { splitEmbeddedMedia } from "@/lib/rich-text-media";
 import { parseTransmissionRoutes, transmissionDescription } from "@/lib/transmission-routes";
 
@@ -133,7 +134,20 @@ function TransmissionCell({ value }: { value: string }) {
   </>;
 }
 
+/**
+ * LIVE-04 (26.1-12): the live tools of a virus card - the live mode of the archive, or of the recycle bin for a virus that lies in it.
+ * Null for a visitor and for the template (no provider), and the card then draws exactly its old markup.
+ */
+export function useLiveVirus(): LiveEditApi | null {
+  const archive = useLiveEdit("viruses");
+  const bin = useLiveEdit("recycle");
+  return archive ?? bin;
+}
+
 export function VirusCardBody({ virus, formattedText, media, embedMedia = true, emptyText, after, footer }: VirusCardBodyProps) {
+  const live = useLiveVirus();
+  // LIVE-05: at rest the live text is the visitor's FormattedText (a GIF plays), pressed it is the editor's field with the strip of its GIFs.
+  const liveRich = (live: LiveEditApi, field: LiveVirusField, text: string, className?: string) => live.rich({ kind: "virus-text", virusId: virus.id, field }, { text, document: formattedText[portiaTextKey.virus(virus.id, field)], className });
   const classification = [
     ["danger", "Общий уровень опасности", virus.classification.danger, "danger"], ["spread", "Распространение", virus.classification.spread, "spread"], ["escapeRisk", "Угроза и риск побега", virus.classification.escapeRisk, "escape"],
     ["transmission", "Способ распространения", virus.classification.transmission, "transmission"], ["mind", "Разум", virus.classification.mind, "mind"], ["appearance", "Вид / внешность", virus.classification.appearance, "appearance"], ["behavior", "Поведение", virus.classification.behavior, "behavior"],
@@ -141,12 +155,12 @@ export function VirusCardBody({ virus, formattedText, media, embedMedia = true, 
   const plain = (value: string): ReactNode => (emptyText !== undefined && value.trim() === "" ? <em className="formatted-empty">{emptyText}</em> : value);
   const text = { embedMedia, emptyText };
   return <div className="record-body content-fade">
-    <header className="record-header"><div><span className="record-code">{plain(virus.code)}</span><h2>{plain(virus.name)}</h2></div><div className="record-status"><span />{plain(virus.status)}</div></header>
+    <header className="record-header"><div><span className="record-code">{live ? live.text({ kind: "virus-code", virusId: virus.id }, virus.code) : plain(virus.code)}</span><h2>{live ? live.text({ kind: "virus-name", virusId: virus.id }, virus.name) : plain(virus.name)}</h2></div><div className="record-status"><span />{live ? live.text({ kind: "virus-status", virusId: virus.id }, virus.status) : plain(virus.status)}</div></header>
     <div className="record-document">
       <section className="record-hero">{media({ kind: "infected", alt: `Субъект после заражения вирусом ${virus.name}`, label: "Фото после заражения", recordId: `${virus.id}:infected`, priority: "hero" })}<div className="classification-panel"><div className="section-kicker"><span>01</span>КЛАССИФИКАЦИЯ</div><div className="classification-grid">{classification.map(([key, label, value, tone]) => { const level = classificationLevel(key, value); const badge = classificationIconFor(value); if (key === "transmission") return <div className={`class-cell ${tone}`} key={label}><span>{label}</span><TransmissionCell value={value} /></div>; return <div className={`class-cell ${tone}${level ? ` level-${level}` : ""}`} key={label}><span>{label}</span><strong>{badge && <PortiaIcon name={badge} className="class-badge" />}{plain(value)}</strong>{level && <small>УРОВЕНЬ {level}</small>}</div>; })}</div></div></section>
-      <DossierSection index="02" title="ВНЕШНИЕ ХАРАКТЕРИСТИКИ"><FormattedText className="lead-copy" text={virus.external} document={formattedText[portiaTextKey.virus(virus.id, "external")]} {...text} /></DossierSection>
-      <DossierSection index="03" title="ХАРАКТЕРИСТИКИ С PPU"><div className="metric-grid"><div><span>ЗДОРОВЬЕ</span><FormattedText text={virus.ppu.health} document={formattedText[portiaTextKey.virus(virus.id, "ppu-health")]} {...text} /></div><div><span>СКОРОСТЬ</span><FormattedText text={virus.ppu.speed} document={formattedText[portiaTextKey.virus(virus.id, "ppu-speed")]} {...text} /></div><div><span>СПОСОБНОСТИ</span><FormattedText text={virus.ppu.abilities} document={formattedText[portiaTextKey.virus(virus.id, "ppu-abilities")]} {...text} /></div></div></DossierSection>
-      <DossierSection index="04" title="ФИЗИОЛОГИЯ"><FormattedText className="lead-copy" text={virus.physiology} document={formattedText[portiaTextKey.virus(virus.id, "physiology")]} {...text} /></DossierSection>
+      <DossierSection index="02" title="ВНЕШНИЕ ХАРАКТЕРИСТИКИ">{live ? liveRich(live, "external", virus.external, "lead-copy") : <FormattedText className="lead-copy" text={virus.external} document={formattedText[portiaTextKey.virus(virus.id, "external")]} {...text} />}</DossierSection>
+      <DossierSection index="03" title="ХАРАКТЕРИСТИКИ С PPU"><div className="metric-grid"><div><span>ЗДОРОВЬЕ</span>{live ? liveRich(live, "ppu-health", virus.ppu.health) : <FormattedText text={virus.ppu.health} document={formattedText[portiaTextKey.virus(virus.id, "ppu-health")]} {...text} />}</div><div><span>СКОРОСТЬ</span>{live ? liveRich(live, "ppu-speed", virus.ppu.speed) : <FormattedText text={virus.ppu.speed} document={formattedText[portiaTextKey.virus(virus.id, "ppu-speed")]} {...text} />}</div><div><span>СПОСОБНОСТИ</span>{live ? liveRich(live, "ppu-abilities", virus.ppu.abilities) : <FormattedText text={virus.ppu.abilities} document={formattedText[portiaTextKey.virus(virus.id, "ppu-abilities")]} {...text} />}</div></div></DossierSection>
+      <DossierSection index="04" title="ФИЗИОЛОГИЯ">{live ? liveRich(live, "physiology", virus.physiology, "lead-copy") : <FormattedText className="lead-copy" text={virus.physiology} document={formattedText[portiaTextKey.virus(virus.id, "physiology")]} {...text} />}</DossierSection>
       <DossierSection index="05" title="МУТАЦИИ ВИРУСА"><div className="mutation-grid">{virus.mutations.length === 0 && emptyText !== undefined && <p className="formatted-empty">{emptyText}</p>}{virus.mutations.map((mutation, index) => <section className="mutation-card" key={`${mutation.name}-${index}`}><div className="mutation-index">M-{String(index + 1).padStart(2, "0")}</div>{media({ kind: "mutation", index, alt: mutation.name, label: "Скриншот мутации", recordId: `${virus.id}:mutation:${index}`, priority: "lazy" })}<div className="mutation-copy"><h4>{plain(mutation.name)}</h4><FormattedText text={mutation.description} document={formattedText[portiaTextKey.mutation(virus.id, index)]} {...text} /></div></section>)}</div></DossierSection>
       {after}
       <footer className="record-footer"><span>{footer[0]}</span><span>{footer[1]}</span></footer>

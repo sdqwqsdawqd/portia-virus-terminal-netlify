@@ -2916,6 +2916,17 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 .live-flag { display: inline-flex; align-items: center; gap: 6px; font: 12px var(--sans); cursor: pointer; }
 .live-draft-badge { padding: 1px 6px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px var(--sans); font-style: normal; letter-spacing: .08em; text-transform: uppercase; }
 .live-surface .broadcast-grid + .live-add-bar { margin-top: 18px; }
+/* 26.1-12: «База вирусов» — те же колонки списка и карточки, что у участника; список и карточка прокручиваются внутри, как в окне. */
+.live-surface .archive-grid { height: min(80vh, 920px); min-height: 480px; max-height: none; }
+.live-surface .virus-list .live-index-row { position: relative; min-width: 0; }
+.live-surface .virus-list .order-drag-handle { grid-template-columns: none; }
+.live-surface .record-view { max-height: none; }
+.live-surface .record-header .live-editable { display: inline-block; min-width: 3ch; }
+.live-surface .record-status .live-editable { min-width: 6ch; }
+@media (max-width: 900px) {
+  .live-surface .archive-grid { height: auto; }
+  .live-surface .virus-list .live-index-row { flex: 0 0 auto; min-width: 210px; }
+}
 /* users-tab:start — Phase 22 «Пользователи» (USR-01..USR-09): sharp corners, values from 22-UI-SPEC, nothing else in the file changes */
 .tab-count { min-width: 24px; margin-left: 8px; padding: 0 8px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px/1.35 var(--mono); text-align: center; }
 .users-tab { display: grid; gap: 24px; min-width: 0; }

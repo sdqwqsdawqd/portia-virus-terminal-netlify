@@ -2,11 +2,13 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { GuideApp } from "@/components/portia-desktop-documents";
+import { RowBadges, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
 import { BroadcastCard, BroadcastsHeader, InfoArticle, broadcastTabs } from "@/components/portia-desktop-info";
 import { ConfirmDialog, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
 import { FormattedTextarea, findFormatField, type FormatTarget } from "@/components/portia-editor-rich-text";
 import { LiveEditContext, type LiveEditApi } from "@/components/portia-live-edit";
 import { EmbeddedMediaStrip, FormattedText } from "@/components/portia-virus-card";
+import { ACCESS_LEVELS } from "@/lib/access-levels";
 import { localDateKey, type BroadcastTab } from "@/lib/broadcasts";
 import type { ImageFraming } from "@/lib/image-framing";
 import {
@@ -51,6 +53,10 @@ export const liveCopy = {
     "broadcast-title": "Заголовок",
     "broadcast-body": "Текст",
     "broadcast-conditions": "Условия",
+    "virus-name": "Название вируса",
+    "virus-code": "Код вируса",
+    "virus-status": "Статус вируса",
+    "virus-text": "Текст",
   } satisfies Record<LiveTarget["kind"], string>,
   placeholders: {
     "guide-section-title": "Название раздела",
@@ -72,6 +78,10 @@ export const liveCopy = {
     "broadcast-title": "Заголовок",
     "broadcast-body": "Нажмите, чтобы написать",
     "broadcast-conditions": "Условия квеста",
+    "virus-name": "Название вируса",
+    "virus-code": "Код",
+    "virus-status": "Статус",
+    "virus-text": "Нажмите, чтобы написать",
   } satisfies Record<LiveTarget["kind"], string>,
   dateStart: "Начало",
   dateEnd: "Окончание",
@@ -83,8 +93,14 @@ export const liveCopy = {
   infoIndex: "Разделы информации",
   infoSubsections: (count: number) => `Подразделов: ${count}`,
   infoEmpty: "Разделов пока нет",
+  virusesTitle: "База вирусов",
+  virusesList: "Список вирусов",
+  virusesLabels: ["СУБЪЕКТ", "СТАТУС"],
+  virusesRecords: "Записи вирусов",
+  virusesEmpty: "Вирусов пока нет",
+  virusPick: "Выберите вирус в списке",
   richEmpty: "Нажмите, чтобы написать",
-  lists: { "guide-sections": "раздел", "guide-cards": "карточка", "guide-blocks": "блок", "info-sections": "раздел", "info-subsections": "подраздел", "info-blocks": "блок" } satisfies Record<LiveList["kind"], string>,
+  lists: { "guide-sections": "раздел", "guide-cards": "карточка", "guide-blocks": "блок", "info-sections": "раздел", "info-subsections": "подраздел", "info-blocks": "блок", viruses: "вирус" } satisfies Record<LiveList["kind"], string>,
   removeLabel: "Удалить",
   removeTitle: "Удалить?",
   removeText: (label: string) => `Удалить вместе с содержимым: ${label}.`,
@@ -152,6 +168,7 @@ export function LiveSurface({ tab, bridge }: { tab: string; bridge: LiveEditorBr
   if (app === "guide") return <GuideSurface bridge={bridge} />;
   if (app === "info") return <InfoSurface bridge={bridge} />;
   if (app === "broadcasts") return <BroadcastsSurface bridge={bridge} />;
+  if (app === "viruses") return <VirusesSurface bridge={bridge} />;
   return null;
 }
 
@@ -235,6 +252,53 @@ function BroadcastsSurface({ bridge }: { bridge: LiveEditorBridge }) {
           {!items.length && <div className="broadcast-empty empty-state"><span>{liveCopy.broadcastsEmpty}</span></div>}
         </div>
         {live.addBar({ kind: "broadcasts" })}
+      </div>
+    </LiveEditContext.Provider>
+  </div>;
+}
+
+const editorLevel = Math.max(...ACCESS_LEVELS);
+
+/**
+ * «База вирусов» as the visitor sees it: the list of the archive on the left (the visitor's rows, held to reorder), the card of the chosen virus on the right
+ * (VirusRecord, the visitor's own card, inside the provider). A scientist's record opens as the visitor's document, in the same place.
+ */
+function VirusesSurface({ bridge }: { bridge: LiveEditorBridge }) {
+  const viruses = bridge.draft.viruses;
+  const [picked, setPicked] = useState(bridge.virusId);
+  const [openLog, setOpenLog] = useState<string | null>(null);
+  // What is shown: the picked virus, else the one the editor has open, else the first; a vanished id (a removed virus) falls through.
+  const virus = viruses.find((item) => item.id === picked) ?? viruses.find((item) => item.id === bridge.virusId) ?? viruses[0] ?? null;
+  const select = (id: string) => { setPicked(id); setOpenLog(null); bridge.setVirusId(id); };
+  const live = createLiveApi("viruses", bridge);
+  return <div className="live-surface" data-live-app="viruses">
+    <LiveEditContext.Provider value={live}>
+      <div className="archive-grid">
+        <aside className="archive-browser" aria-label={liveCopy.virusesList}>
+          <div className="browser-heading"><div><h1>{liveCopy.virusesTitle}</h1></div><span className="record-count">{String(viruses.length).padStart(2, "0")}</span></div>
+          <div className="browser-labels" aria-hidden="true"><span>{liveCopy.virusesLabels[0]}</span><span>{liveCopy.virusesLabels[1]}</span></div>
+          <div className="virus-list" role="listbox" aria-label={liveCopy.virusesRecords}>
+            {viruses.map((item, index) => {
+              const order = live.order({ kind: "viruses" }, index, item.name);
+              return <div key={item.id} className="live-index-row" {...order.rowProps}>
+                {order.handle}
+                <button type="button" role="option" aria-selected={item.id === virus?.id} className={`virus-row${item.id === virus?.id ? " active" : ""}`} onClick={() => select(item.id)}>
+                  <span className="row-index">{indexNumber(index)}</span>
+                  <span className="row-main"><strong>{item.name || liveCopy.untitled}</strong><small>{item.code}</small><RowBadges virus={item} /></span>
+                  <span className="row-status">{item.status}</span>
+                </button>
+              </div>;
+            })}
+            {!viruses.length && <div className="list-empty">{liveCopy.virusesEmpty}</div>}
+          </div>
+        </aside>
+        <article className="record-view">
+          {!virus
+            ? <div className="record-empty empty-state"><strong>{liveCopy.virusPick}</strong></div>
+            : openLog
+              ? <ScientistDocument key={openLog} virus={virus} logId={openLog} viewerLevel={editorLevel} onBack={() => setOpenLog(null)} />
+              : <VirusRecord virus={virus} formattedText={bridge.draft.formattedText} viewerLevel={editorLevel} onOpenLog={setOpenLog} />}
+        </article>
       </div>
     </LiveEditContext.Provider>
   </div>;
@@ -370,6 +434,13 @@ export function LiveFlag({ bridge, target, checked }: { bridge: LiveEditorBridge
   </label>;
 }
 
+/** The display area of the editor's field for a place: it names the look (light paper or dark) the text has for the visitor. */
+function richAreaOf(target: LiveTarget): "lead" | "metric" | "broadcast" | "info" {
+  if (target.kind === "broadcast-body") return "broadcast";
+  if (target.kind === "virus-text") return target.field.startsWith("ppu-") ? "metric" : "lead";
+  return "info";
+}
+
 /**
  * LIVE-05: a formatted text at rest is the visitor's own FormattedText (its GIFs play); pressed, it is the editor's field with the format panel,
  * and under the field the strip of the same GIFs, so a GIF keeps playing while its link is typed. Leaving the field goes back to rest.
@@ -399,7 +470,7 @@ export function LiveRich({ bridge, target, text, document, className }: { bridge
     }}
   >
     <FormattedTextarea
-      area={target.kind === "broadcast-body" ? "broadcast" : "info"}
+      area={richAreaOf(target)}
       label={liveCopy.targets[target.kind]}
       tall
       value={text}

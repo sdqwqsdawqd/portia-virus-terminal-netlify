@@ -2,13 +2,21 @@
 
 import { type ImageFraming } from "@/lib/image-framing";
 import { type PortiaContent, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
-import { PortiaIcon } from "@/components/portia-icons";
+import { classificationIconFor, PortiaIcon } from "@/components/portia-icons";
 import { PortiaImage } from "@/components/portia-desktop-media";
 import { levelCopy } from "@/lib/level-copy";
 import { DossierSection, FormattedText, VirusCardBody } from "@/components/portia-virus-card";
 
 // The card itself lives in portia-virus-card.tsx and is shared with the template builder (D-55); these two names stay importable from here.
 export { DossierSection, FormattedText };
+
+// In the archive list the badges stand alone, so each one names its term for screen readers and on hover (the live mode of the editor draws the same row).
+export function RowBadges({ virus }: { virus: Virus }) {
+  const terms = [virus.classification.danger, virus.classification.spread, virus.classification.escapeRisk];
+  const badges = terms.flatMap((term) => { const icon = classificationIconFor(term); return icon ? [{ term, icon }] : []; });
+  if (!badges.length) return null;
+  return <span className="row-badges">{badges.map(({ term, icon }) => <span className="row-badge" key={term} title={term}><PortiaIcon name={icon} role="img" aria-hidden={false} aria-label={term} /></span>)}</span>;
+}
 
 // viewerLevel is the level the visitor really has (shownViewerLevel: 5 for the editor). A record is closed only by the server mark `withheld`, never by comparing levels here (D-12).
 export function VirusRecord({ virus, formattedText, viewerLevel, onOpenLog }: { virus: Virus; formattedText: PortiaContent["formattedText"]; viewerLevel: number; onOpenLog: (id: string) => void }) {

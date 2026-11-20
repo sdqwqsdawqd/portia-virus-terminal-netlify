@@ -2,7 +2,7 @@ import type { ImageFraming } from "./image-framing.ts";
 import { broadcastFeed, questDateError, type BroadcastTab } from "./broadcasts.ts";
 import { MAX_BLOCKS, MAX_CONDITIONS, MAX_SUBSECTIONS, MAX_TABLE_ROWS } from "./content-limits.ts";
 import { addBroadcast, makeId, removeBroadcast, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection } from "./editor-items.ts";
-import { findGuide, findInfo, portiaTextKey, type Broadcast, type GuideBlock, type GuideCard, type InfoBlock, type InfoSubsection, type PortiaContent } from "./portia-content.ts";
+import { findGuide, findInfo, portiaTextKey, type Broadcast, type GuideBlock, type GuideCard, type InfoBlock, type InfoSubsection, type PortiaContent, type Virus } from "./portia-content.ts";
 import { parseYoutubeId } from "./portia-content-normalize.ts";
 import { splitEmbeddedMedia } from "./rich-text-media.ts";
 
@@ -14,10 +14,10 @@ export type LiveApp = "guide" | "info" | "broadcasts" | "viruses" | "recycle" | 
 export const LIVE_EXCLUDED = ["search", "employees"] as const;
 
 /** The editor tabs that have a live mode so far, and the app each one shows. */
-export const LIVE_TABS = ["guide", "info", "broadcasts"] as const;
+export const LIVE_TABS = ["guide", "info", "broadcasts", "viruses"] as const;
 export type LiveTab = (typeof LIVE_TABS)[number];
 
-const liveAppOfTab: Record<LiveTab, LiveApp> = { guide: "guide", info: "info", broadcasts: "broadcasts" };
+const liveAppOfTab: Record<LiveTab, LiveApp> = { guide: "guide", info: "info", broadcasts: "broadcasts", viruses: "viruses" };
 
 /** The app the live mode of an editor tab shows; null where the tab has none. */
 export function liveAppForTab(tab: string): LiveApp | null {
@@ -47,7 +47,22 @@ export type LiveTarget =
   | { kind: "info-table-key" | "info-table-value"; subsectionId: string; blockId: string; rowId: string }
   | { kind: "info-video-url"; subsectionId: string; blockId: string }
   /** «Сводка» (26.1-11): an entry of the feed; the body is formatted text under portiaTextKey.broadcast(id), the conditions are plain lines kept as typed (up to MAX_CONDITIONS). */
-  | { kind: "broadcast-title" | "broadcast-body" | "broadcast-conditions"; broadcastId: string };
+  | { kind: "broadcast-title" | "broadcast-body" | "broadcast-conditions"; broadcastId: string }
+  /** «База вирусов» (26.1-12): the name, the code and the status of a virus (plain lines, cut to the lengths of the template: 120, 40, 80). */
+  | { kind: "virus-name" | "virus-code" | "virus-status"; virusId: string }
+  /** One of the five texts of a virus: formatted text, stored under portiaTextKey.virus(virusId, field). */
+  | { kind: "virus-text"; virusId: string; field: LiveVirusField };
+
+/** The five formatted texts of a virus card: section 02, section 04 and the three PPU metrics. */
+export type LiveVirusField = "external" | "physiology" | "ppu-health" | "ppu-speed" | "ppu-abilities";
+
+/** The virus of the list or of the recycle bin with this id (the formatting keys are keyed by the id alone, so one lookup serves both). */
+export function findLiveVirus(draft: PortiaContent, virusId: string): Virus | undefined {
+  return draft.viruses.find((item) => item.id === virusId) ?? (draft.recycledViruses ?? []).find((item) => item.id === virusId);
+}
+
+/** The cuts of the plain lines of a virus, the same as the template's. */
+const VIRUS_LINE_LIMIT = { "virus-name": 120, "virus-code": 40, "virus-status": 80 } as const;
 
 /** The key of the stored formatting (draft.formattedText) of a formatted text place; "" for a plain one. */
 export function liveTextKey(target: LiveTarget): string {
@@ -55,6 +70,7 @@ export function liveTextKey(target: LiveTarget): string {
   if (target.kind === "info-section-body") return portiaTextKey.info(target.sectionId);
   if (target.kind === "info-block-text") return portiaTextKey.infoBlock(target.blockId);
   if (target.kind === "broadcast-body") return portiaTextKey.broadcast(target.broadcastId);
+  if (target.kind === "virus-text") return portiaTextKey.virus(target.virusId, target.field);
   return "";
 }
 
@@ -175,6 +191,22 @@ export function applyLiveText(draft: PortiaContent, target: LiveTarget, value: s
       else item.conditions = value.slice(0, MAX_CONDITIONS);
       return true;
     }
+    case "virus-name":
+    case "virus-code":
+    case "virus-status": {
+      const virus = findLiveVirus(draft, target.virusId);
+      if (!virus) return false;
+      const text = value.slice(0, VIRUS_LINE_LIMIT[target.kind]);
+      if (target.kind === "virus-name") virus.name = text; else if (target.kind === "virus-code") virus.code = text; else virus.status = text;
+      return true;
+    }
+    case "virus-text": {
+      const virus = findLiveVirus(draft, target.virusId);
+      if (!virus) return false;
+      if (target.field === "external" || target.field === "physiology") virus[target.field] = value;
+      else virus.ppu[target.field === "ppu-health" ? "health" : target.field === "ppu-speed" ? "speed" : "abilities"] = value;
+      return true;
+    }
     case "guide-card-title": {
       const card = findGuide(draft.guideSections, target.cardId)?.card;
       if (!card) return false;
@@ -273,7 +305,9 @@ export type LiveList =
   | { kind: "guide-blocks"; cardId: string }
   | { kind: "info-sections" }
   | { kind: "info-subsections"; sectionId: string }
-  | { kind: "info-blocks"; subsectionId: string };
+  | { kind: "info-blocks"; subsectionId: string }
+  /** The viruses of the archive, in the order of the list. */
+  | { kind: "viruses" };
 
 /** An element the live mode can remove, after a question. */
 export type LiveRemovable =
@@ -391,6 +425,7 @@ function listOf(draft: PortiaContent, list: LiveList): unknown[] | null {
   if (list.kind === "info-sections") return draft.infoSections;
   if (list.kind === "info-subsections") return infoSectionOf(draft, list.sectionId)?.subsections ?? null;
   if (list.kind === "info-blocks") return findInfo(draft.infoSections, list.subsectionId)?.subsection?.blocks ?? null;
+  if (list.kind === "viruses") return draft.viruses;
   return findGuide(draft.guideSections, list.cardId)?.card?.blocks ?? null;
 }
 

@@ -21,7 +21,7 @@ function draftWithGuide(): PortiaContent {
 }
 
 test("LIVE-01: the live mode knows its tabs; search and employees are not among them", () => {
-  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts"]);
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses"]);
   assert.equal(liveAppForTab("info"), "info", "26.1-11: «Информация» has its live mode");
   assert.equal(liveAppForTab("guide"), "guide");
   assert.equal(liveAppForTab("users"), null);
@@ -106,7 +106,7 @@ test("LIVE-05: the live text at rest is the visitor's FormattedText with its GIF
   assert.doesNotMatch(seam, /embedMedia=\{false\}/, "a link to a GIF is never turned back into text");
   assert.match(seam, /<FormattedText\b/);
   assert.match(seam, /<EmbeddedMediaStrip\b/);
-  assert.match(seam, /<FormattedTextarea\b[\s\S]*area=\{target\.kind === "broadcast-body" \? "broadcast" : "info"\}/);
+  assert.match(seam, /<FormattedTextarea\b[\s\S]*area=\{richAreaOf\(target\)\}/);
   assert.match(seam, /const key = liveTextKey\(target\);/);
   assert.match(seam, /onActivate=\{bridge\.activateFormatter\}/);
   const card = read("components/portia-virus-card.tsx");
@@ -541,7 +541,7 @@ function draftWithBroadcasts(): PortiaContent {
 }
 
 test("LIVE-01 (26.1-11): «Сводка» has its live mode", () => {
-  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts"]);
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses"]);
   assert.equal(liveAppForTab("broadcasts"), "broadcasts");
 });
 
@@ -657,4 +657,85 @@ test("LIVE-01/02 (26.1-11): the live «Сводка» draws the visitor's header
   const date = seam.slice(seam.indexOf("export function LiveDate("), seam.indexOf("export function LiveFlag("));
   assert.match(date, /liveDateError\(/);
   assert.match(date, /role="alert"|aria-invalid/);
+});
+
+// ---- 26.1-12: «База вирусов» и «Корзина» ----
+
+function draftWithViruses(): PortiaContent {
+  const virus = (id: string, name: string) => ({
+    id, code: `VIR-${id}`, name, status: "НАБЛЮДЕНИЕ", infectedImage: "", external: "Внешность", ppu: { health: "1", speed: "2", abilities: "3" }, physiology: "Физиология",
+    mutations: [], classification: { danger: "Гефест", spread: "Номос", transmission: "Аэрозольный", escapeRisk: "Низкий", mind: "Нет", appearance: "Нет", behavior: "Нет" }, scientistLogs: [],
+  });
+  return { viruses: [virus("a", "Альфа"), virus("b", "Бета"), virus("c", "Гамма")], recycledViruses: [virus("r", "Сдана")], formattedText: {} } as unknown as PortiaContent;
+}
+
+test("LIVE-01 (26.1-12): the tab «База вирусов» has its live mode", () => {
+  assert.equal(liveAppForTab("viruses"), "viruses");
+});
+
+test("LIVE-02 (26.1-12): the name, the code and the status of a virus change in place, cut to the lengths of the template (120, 40, 80)", () => {
+  const draft = draftWithViruses();
+  assert.equal(applyLiveText(draft, { kind: "virus-name", virusId: "b" }, "Новое имя"), true);
+  assert.equal(draft.viruses[1].name, "Новое имя");
+  assert.equal(draft.viruses[0].name, "Альфа");
+  applyLiveText(draft, { kind: "virus-name", virusId: "a" }, "а".repeat(200));
+  applyLiveText(draft, { kind: "virus-code", virusId: "a" }, "К".repeat(90));
+  applyLiveText(draft, { kind: "virus-status", virusId: "a" }, "С".repeat(150));
+  assert.deepEqual([draft.viruses[0].name.length, draft.viruses[0].code.length, draft.viruses[0].status.length], [120, 40, 80]);
+  assert.equal(applyLiveText(draft, { kind: "virus-name", virusId: "nope" }, "x"), false);
+});
+
+test("LIVE-02 (26.1-12): the five texts of a virus are kept whole and keyed like the editor's own fields", () => {
+  const draft = draftWithViruses();
+  const fields = [["external", "external"], ["physiology", "physiology"], ["ppu-health", "health"], ["ppu-speed", "speed"], ["ppu-abilities", "abilities"]] as const;
+  for (const [field, where] of fields) {
+    const target = { kind: "virus-text", virusId: "a", field } as const;
+    assert.equal(liveTextKey(target), portiaTextKey.virus("a", field));
+    assert.equal(applyLiveText(draft, target, `текст ${field}`.repeat(60)), true);
+    const written = field === "external" || field === "physiology" ? draft.viruses[0][field] : draft.viruses[0].ppu[where as "health" | "speed" | "abilities"];
+    assert.equal(written, `текст ${field}`.repeat(60), "a formatted text is not cut to the line limit");
+  }
+  assert.equal(draft.viruses[1].external, "Внешность");
+});
+
+test("LIVE-02 (26.1-12): a virus that sits in the recycle bin is edited by the same places", () => {
+  const draft = draftWithViruses();
+  assert.equal(applyLiveText(draft, { kind: "virus-name", virusId: "r" }, "Из корзины"), true);
+  assert.equal(draft.recycledViruses[0].name, "Из корзины");
+  assert.equal(applyLiveText(draft, { kind: "virus-text", virusId: "r", field: "external" }, "Тело"), true);
+  assert.equal(draft.recycledViruses[0].external, "Тело");
+});
+
+test("LIVE-02 (26.1-12): the viruses of the list are moved like moveArrayItem; out of range changes nothing", () => {
+  const draft = draftWithViruses();
+  assert.equal(applyLiveMove(draft, { kind: "viruses" }, 0, 2), true);
+  assert.deepEqual(draft.viruses.map((item) => item.id), ["b", "c", "a"]);
+  assert.equal(applyLiveMove(draft, { kind: "viruses" }, 0, 9), false);
+  assert.equal(applyLiveMove(draft, { kind: "viruses" }, 1, 1), false);
+});
+
+test("LIVE-01/02/04 (26.1-12): the card asks for the live API and every live place stands behind it; without a provider it draws its old markup", () => {
+  const card = read("components/portia-virus-card.tsx");
+  assert.match(card, /useLiveEdit\("viruses"\)/);
+  assert.match(card, /live\.rich\(/);
+  for (const part of ['live.text({ kind: "virus-name"', 'live.text({ kind: "virus-code"', 'live.text({ kind: "virus-status"', 'kind: "virus-text"']) assert.ok(card.includes(part), part);
+  // the card imports the shared context only, never the editor seam
+  assert.doesNotMatch(card, /portia-editor/);
+  // the old markup stays for the template and the visitor
+  assert.ok(card.includes("plain(virus.name)") && card.includes("plain(virus.code)") && card.includes("plain(virus.status)"));
+  assert.match(card, /<FormattedText className="lead-copy" text=\{virus\.external\}/);
+  // a live card never turns the links to GIFs back into text (the template does, T-20-87)
+  const seam = read("components/portia-editor-live.tsx");
+  assert.doesNotMatch(seam, /embedMedia=\{false\}/); // planner-discipline-allow: embedMedia={false}
+  assert.doesNotMatch(read("components/portia-desktop-dossier.tsx"), /embedMedia=\{false\}/); // planner-discipline-allow: embedMedia={false}
+});
+
+test("LIVE-02 (26.1-12): the live «База вирусов» draws the visitor's list rows and the card of the chosen virus inside the provider", () => {
+  const seam = read("components/portia-editor-live.tsx");
+  assert.match(seam, /data-live-app="viruses"/);
+  assert.match(seam, /<VirusRecord\b/);
+  assert.match(seam, /bridge\.setVirusId\(/);
+  assert.ok(seam.includes('live.order({ kind: "viruses" }'));
+  assert.match(seam, /className=\{`virus-row/);
+  assert.match(seam, /liveCopy\.virusesEmpty/);
 });

@@ -2,6 +2,8 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 import type { LiveApp, LiveCardsTarget, LiveContainer, LiveDateTarget, LiveFlagTarget, LiveImageTarget, LiveList, LiveRemovable, LiveTarget } from "@/lib/live-edit";
+
+export type { LiveVirusField } from "@/lib/live-edit";
 import type { ImageFraming } from "@/lib/image-framing";
 import type { RichTextDocument } from "@/lib/portia-content";
 

@@ -129,7 +129,8 @@ test("component families import only their own seams and the known shared compon
     // portia-desktop-documents: LIVE-02, the editor draws the visitor's view of the app in live mode (the «Справочник» page on the draft).
     // portia-virus-card: LIVE-05, the live text shows the visitor's FormattedText with its GIFs, and the strip of GIFs under the field being edited.
     // portia-desktop-info: LIVE-02 (26.1-11), the live mode draws the visitor's article of «Информация» and card of «Сводки» on the draft.
-    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states", "portia-image-framing", "portia-users-tab", "portia-level-picker", "portia-image-rewrite", "portia-icons", "portia-live-edit", "portia-desktop-documents", "portia-desktop-info", "portia-virus-card"],
+    // portia-desktop-dossier: LIVE-02 (26.1-12), the live mode draws the visitor's virus record and scientist document on the draft.
+    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states", "portia-image-framing", "portia-users-tab", "portia-level-picker", "portia-image-rewrite", "portia-icons", "portia-live-edit", "portia-desktop-documents", "portia-desktop-info", "portia-desktop-dossier", "portia-virus-card"],
   } as const;
   for (const [main, family] of [["portia-desktop", desktopFamily], ["portia-editor", editorFamily]] as const) {
     const members = family.map((part) => part.file.replace(/\.tsx$/, ""));
