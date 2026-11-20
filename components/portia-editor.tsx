@@ -775,6 +775,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   const infoCardIds = draft.infoSections.flatMap((section) => [section.id, ...section.subsections.flatMap((subsection) => [subsection.id, ...subsection.blocks.map((block) => block.id)])]);
   const jumpInfo = (id: string) => {
     const found = findInfo(draft.infoSections, id);
+    if (found?.subsection) cardTabs.select(found.section.id, id);
     setOpen(found ? [found.section.id, id] : [id], true);
     jumpToCard(id);
   };
@@ -1390,8 +1391,11 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                 setRaisedNotice(raised > 0 ? { parentId: section.id, text: levelCopy.raisedSubsections(level, raised) } : null);
               }} />
               <FormattedTextarea area="info" label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => updateById(next.infoSections, section.id, (item) => { item.body = text; }))} />
+              <CardTabs label={cardTabsCopy.subsections} items={section.subsections.map((subsection) => ({ id: subsection.id, title: subsection.title }))} activeId={cardTabs.active(section.id, section.subsections.map((subsection) => subsection.id))}
+                onSelect={(id) => { closeFormatterFor(...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id)))); cardTabs.select(section.id, id); setOpen([id], true); }}
+                onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, section.id)?.section; if (target) moveArrayItem(target.subsections, from, to); })} />
               <div className="info-subsection-list">
-                {section.subsections.map((subsection, subIndex) => (
+                {section.subsections.map((subsection, subIndex) => subsection.id === cardTabs.active(section.id, section.subsections.map((item) => item.id)) && (
                   <CollapsibleCard key={subsection.id} id={subsection.id} sortIndex={subIndex} label={`ПОДРАЗДЕЛ ${String(subIndex + 1).padStart(2, "0")}`} title={subsection.title} open={isOpen(subsection.id)} onToggle={() => toggleCard(subsection.id)}
                     handle={<OrderDragHandle index={subIndex} label={subsection.title || "подраздел"} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.section; if (target) moveArrayItem(target.subsections, from, to); })} />}
                     actions={<div className="nested-editor-actions"><button type="button" onClick={() => { subsection.blocks.forEach((block) => closeFormatterFor(portiaTextKey.infoBlock(block.id))); changeDraft((next) => removeInfoSubsection(next, section.id, subsection.id)); }}>Удалить</button></div>}>

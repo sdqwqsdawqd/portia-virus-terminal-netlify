@@ -947,3 +947,17 @@ test("OWN-10: the card tab strip is one row that scrolls sideways, the current t
   assert.ok(styles.trimEnd().endsWith("/* ui-unify:end */"));
   assert.ok(styles.includes(".editor-card-tabs nav > .editor-card-tab[data-sort-index] > button:not(.order-drag-handle)"), "a movable tab shows the open hand on a mouse");
 });
+
+test("owner 2026-11-20 OWN-10: the subsections of an «Информация» section are tabs: the strip before the list, only the selected one under it, a jump from the contents selects it", () => {
+  const info = editorSlice('{tab === "info" && (', '{tab === "guide" && (');
+  const strip = info.indexOf("<CardTabs label={cardTabsCopy.subsections}");
+  const list = info.indexOf('<div className="info-subsection-list">');
+  assert.ok(strip > 0 && list > strip, "the strip stands before the list of subsections");
+  const stripText = info.slice(strip, list);
+  assert.ok(stripText.includes("items={section.subsections.map((subsection) => ({ id: subsection.id, title: subsection.title }))}"), "the titles go as data");
+  assert.ok(stripText.includes("moveArrayItem(target.subsections, from, to)"), "a tab is moved among the subsections of the section");
+  assert.ok(stripText.includes("closeFormatterFor(...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id))))"), "T-26.1-20: the panel closes before another subsection shows");
+  assert.ok(info.includes("subsection.id === cardTabs.active(section.id, section.subsections.map((item) => item.id)) && ("), "only the selected subsection is drawn");
+  assert.ok(editor.includes("if (found?.subsection) cardTabs.select(found.section.id, id);"), "a jump from the contents selects the tab");
+  assert.ok(!editor.includes('"Подразделы"'), "D-58: the strip's name lives in the seam");
+});

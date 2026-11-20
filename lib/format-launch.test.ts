@@ -107,6 +107,9 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //      выбирается сразу, переход из оглавления выбирает вкладку (applyGuideCardTabsHunk): импорт шва components/portia-editor-card-tabs.tsx, хук useCardTabSelection, строка CardTabs
 //      перед списком карточек и фильтр map по выбранной карточке; русских строк не добавлено (подписи вкладок лежат в шве, cardTabsCopy). Источник одобрения: 26.1-OWNER-REQUEST OWN-10
 //      (2026-11-20, «карточки внутри раздела — вкладками, слева направо, как разделы») и план 26.1-09.
+//  21. PORTIA-26.1-TABS2 (26.1-09 Task 2; OWN-10, D-21) — то же для подразделов раздела «Информации»: вкладки-полоски, под ними только выбранный подраздел, «+ ПОДРАЗДЕЛ» выбирает новый,
+//      переход из оглавления выбирает вкладку (applyInfoSubsectionTabsHunk): строка CardTabs, фильтр map и выбор в jumpInfo; русских строк не добавлено (подпись «Подразделы» в шве).
+//      Источник одобрения: 26.1-OWNER-REQUEST OWN-10 (2026-11-20, «то же в других приложениях с похожей системой») и план 26.1-09.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -1230,6 +1233,36 @@ function applyGuideCardTabsHunk(text: string): string {
   );
 }
 
+/**
+ * PORTIA-26.1-TABS2 (26.1-09 Task 2; OWN-10, D-21): подразделы раздела «Информации» — вкладки-полоски (CardTabs из components/portia-editor-card-tabs.tsx), под ними только выбранный подраздел.
+ * Вставки: выбор вкладки в jumpInfo, строка CardTabs перед списком подразделов и фильтр map по выбранному подразделу. Русских строк не добавлено (подпись «Подразделы» лежит в шве).
+ */
+function applyInfoSubsectionTabsHunk(text: string): string {
+  const next = replaceOnce(
+    text,
+    "  const jumpInfo = (id: string) => {\n    const found = findInfo(draft.infoSections, id);\n",
+    "  const jumpInfo = (id: string) => {\n    const found = findInfo(draft.infoSections, id);\n    if (found?.subsection) cardTabs.select(found.section.id, id);\n",
+    "info subsection tabs: a jump to a subsection selects its tab",
+  );
+  return replaceOnce(
+    next,
+    [
+      "              <div className=\"info-subsection-list\">",
+      "                {section.subsections.map((subsection, subIndex) => (",
+      "",
+    ].join("\n"),
+    [
+      "              <CardTabs label={cardTabsCopy.subsections} items={section.subsections.map((subsection) => ({ id: subsection.id, title: subsection.title }))} activeId={cardTabs.active(section.id, section.subsections.map((subsection) => subsection.id))}",
+      "                onSelect={(id) => { closeFormatterFor(...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id)))); cardTabs.select(section.id, id); setOpen([id], true); }}",
+      "                onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, section.id)?.section; if (target) moveArrayItem(target.subsections, from, to); })} />",
+      "              <div className=\"info-subsection-list\">",
+      "                {section.subsections.map((subsection, subIndex) => subsection.id === cardTabs.active(section.id, section.subsections.map((item) => item.id)) && (",
+      "",
+    ].join("\n"),
+    "info subsection tabs: the strip and the selected subsection",
+  );
+}
+
 /** Реестр одобренных правок (D-64): `apply` — порядок применения к образцу; `normalizeActual` — что вырезается из текущего файла перед сравнением. */
 const approvedEditorEdits: readonly { id: string; apply: (text: string) => string; normalizeActual?: (text: string) => string }[] = [
   { id: "D-57", apply: applyLaunchButtonHunk },
@@ -1256,6 +1289,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26.1-EMP2", apply: applyEmployeesCloseHunk },
   { id: "PORTIA-26.1-HOLD", apply: applyColumnSwapSeamHunk },
   { id: "PORTIA-26.1-TABS", apply: applyGuideCardTabsHunk },
+  { id: "PORTIA-26.1-TABS2", apply: applyInfoSubsectionTabsHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -1415,6 +1449,10 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.notEqual(firstDifference(expected, withoutGuideCardTabs), null, "a file without the PORTIA-26.1-TABS hunk is a difference");
   assert.throws(() => applyGuideCardTabsHunk(expected), /exactly one approved anchor/, "the guide card tabs hunk cannot be applied twice");
   assert.ok(expected.includes("<CardTabs label={cardTabsCopy.cards}"), "the approved editor shows the card tabs of a «Справочник» section");
+  const withoutInfoSubsectionTabs = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-TABS2").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutInfoSubsectionTabs), null, "a file without the PORTIA-26.1-TABS2 hunk is a difference");
+  assert.throws(() => applyInfoSubsectionTabsHunk(expected), /exactly one approved anchor/, "the info subsection tabs hunk cannot be applied twice");
+  assert.ok(expected.includes("<CardTabs label={cardTabsCopy.subsections}"), "the approved editor shows the subsection tabs of an «Информация» section");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");
