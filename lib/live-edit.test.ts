@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS } from "./content-limits.ts";
-import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText, liveRecycleKeys, applyLivePhrase, liveFormatKey, livePhraseLines, livePhraseSlice } from "./live-edit.ts";
+import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText, liveRecycleKeys, applyLivePhrase, liveFormatKey, livePhraseLines, livePhraseSlice, applyLiveSettings, liveSettingsOk } from "./live-edit.ts";
 import { broadcastFeed } from "./broadcasts.ts";
 import { portiaTextKey, type PortiaContent } from "./portia-content.ts";
 
@@ -1111,4 +1111,133 @@ test("LIVE-01/02/05 (26.1-13): the live «Вивьян» draws the bubbles of th
   assert.match(seam, /<FormattedText\b[^>]*eagerMedia/, "a GIF of a phrase at rest is loaded at once and plays");
   assert.match(seam, /<EmbeddedMediaStrip text=\{text\} eager \/>/, "while a phrase is edited its GIFs stay on show under the field");
   assert.match(seam, /if \(app === "assistant"\) return <AssistantSurface bridge=\{bridge\} \/>;/);
+});
+
+test("LIVE-02 (26.1-13): a phrase is added to every group, empty, at the end; the document of the group stays fitted to the lines", () => {
+  for (const group of ["advice", "offended", "idle", "activity"] as const) {
+    const draft = draftWithAssistant();
+    const before = livePhraseLines(draft, group).length;
+    assert.deepEqual(liveAddKinds({ kind: "assistant-group", group }), ["phrase"]);
+    assert.equal(liveAddBlocked(draft, { kind: "assistant-group", group }, "phrase"), false);
+    assert.equal(liveContainerFull(draft, { kind: "assistant-group", group }), false);
+    assert.equal(applyLiveAdd(draft, { kind: "assistant-group", group }, "phrase"), String(before));
+    assert.equal(livePhraseLines(draft, group).length, before + 1, group);
+    assert.equal(livePhraseLines(draft, group)[before], "");
+  }
+  const draft = draftWithAssistant();
+  applyLiveAdd(draft, { kind: "assistant-group", group: "advice" }, "phrase");
+  const doc = draft.formattedText[portiaTextKey.assistantAdvice];
+  assert.equal(doc.runs.map((run) => run.text).join(""), "Первый совет\nВторой совет\nТретий совет\n", "the new line is an empty line of the document");
+  assert.deepEqual(doc.runs[0], { text: "Первый совет", style: { fontWeight: 700 } });
+  assert.equal(applyLiveAdd(draft, { kind: "assistant-group", group: "advice" }, "row"), null, "a container takes only its own kind");
+  // a phrase typed into the new line is written like any other
+  assert.equal(applyLiveText(draft, { kind: "assistant-phrase", group: "advice", index: 3 }, "Четвёртый"), true);
+  assert.deepEqual(draft.assistantAdvice, ["Первый совет", "Второй совет", "Третий совет", "Четвёртый"]);
+});
+
+test("LIVE-02 (26.1-13): a phrase is removed with its formatting; the last phrase of obida, idle and activity stays (the save would bring a default back)", () => {
+  const draft = draftWithAssistant();
+  assert.equal(applyLiveRemove(draft, { kind: "assistant-phrase", group: "advice", index: 1 }), true);
+  assert.deepEqual(draft.assistantAdvice, ["Первый совет", "Третий совет"]);
+  const doc = draft.formattedText[portiaTextKey.assistantAdvice];
+  assert.equal(doc.runs.map((run) => run.text).join(""), "Первый совет\nТретий совет");
+  assert.deepEqual(doc.runs[0], { text: "Первый совет", style: { fontWeight: 700 } });
+  assert.deepEqual(doc.runs[doc.runs.length - 1], { text: "Третий совет", style: { color: "#ff0000" } });
+  assert.equal(applyLiveRemove(draft, { kind: "assistant-phrase", group: "advice", index: 5 }), false);
+
+  assert.equal(applyLiveRemove(draft, { kind: "assistant-phrase", group: "offended", index: 0 }), true);
+  assert.deepEqual(draft.assistantOffendedPhrases, ["Обида два"]);
+  assert.equal(draft.assistantOffendedPhrase, "Обида два", "the single phrase follows the list");
+  const before = JSON.stringify(draft);
+  for (const group of ["offended", "idle", "activity"] as const) assert.equal(applyLiveRemove(draft, { kind: "assistant-phrase", group, index: 0 }), false, group);
+  assert.equal(JSON.stringify(draft), before, "nothing written for a phrase that has to stay");
+
+  // advice may be empty: the visitor then has no tips
+  assert.equal(applyLiveRemove(draft, { kind: "assistant-phrase", group: "advice", index: 0 }), true);
+  assert.equal(applyLiveRemove(draft, { kind: "assistant-phrase", group: "advice", index: 0 }), true);
+  assert.deepEqual(draft.assistantAdvice, []);
+});
+
+test("LIVE-02 (26.1-13): a removed phrase frees its format key and the keys of the phrases after it, which move up", () => {
+  const draft = draftWithAssistant();
+  assert.deepEqual(liveRemovedKeys(draft, { kind: "assistant-phrase", group: "advice", index: 1 }), [`${portiaTextKey.assistantAdvice}#1`, `${portiaTextKey.assistantAdvice}#2`]);
+  assert.deepEqual(liveRemovedKeys(draft, { kind: "assistant-phrase", group: "idle", index: 0 }), [`${portiaTextKey.assistantIdle}#0`]);
+});
+
+test("LIVE-05 (26.1-13): a GIF in a phrase is found as the visitor's bubble finds it, and its link stays in the text of the phrase", () => {
+  const draft = draftWithAssistant();
+  const gif = "https://media.giphy.com/media/abc/giphy.gif";
+  assert.equal(applyLiveText(draft, { kind: "assistant-phrase", group: "advice", index: 1 }, `Смотри ${gif}`), true);
+  assert.deepEqual(liveMediaUrls(livePhraseLines(draft, "advice")[1]), [gif]);
+  assert.equal(livePhraseSlice(draft, "advice", 1)?.runs.map((run) => run.text).join(""), `Смотри ${gif}`);
+  assert.deepEqual(liveMediaUrls("https://giphy.com/gifs/x-abc"), ["https://media.giphy.com/media/abc/giphy.gif"]);
+  assert.deepEqual(liveMediaUrls("https://klipy.com/gifs/anime-tsundere-6"), ["https://static2.klipy.com/ii/e293a233a303a98e471f78d04e13a1b0/e0/d8/GIVgKXMP.gif"]);
+  assert.deepEqual(liveMediaUrls("https://example.org/a.gif"), ["https://example.org/a.gif"], "a direct link to a .gif");
+});
+
+test("LIVE-02/03 (26.1-13): the settings of the timing change through the same limits as the form of the editor, all or nothing (T-26.1-29)", () => {
+  const draft = draftWithAssistant();
+  assert.equal(applyLiveSettings(draft, { idleEnabled: false, activityEnabled: false, autoTimingMode: "fixed", autoIntervalSeconds: 90, patienceVariants: [4, 7] }), true);
+  assert.equal(draft.assistantIdleEnabled, false);
+  assert.equal(draft.assistantActivityEnabled, false);
+  assert.equal(draft.assistantAutoTimingMode, "fixed");
+  assert.equal(draft.assistantAutoIntervalSeconds, 90);
+  assert.deepEqual(draft.assistantPatienceVariants, [4, 7]);
+  assert.equal(draft.assistantPatienceSeconds, 4, "the first variant is the patience, as the field of the editor sets it");
+  assert.equal(applyLiveSettings(draft, { autoMinSeconds: 10, autoMaxSeconds: 3600 }), true);
+  assert.equal(draft.assistantAutoMinSeconds, 10);
+  assert.equal(draft.assistantAutoMaxSeconds, 3600);
+  assert.equal(applyLiveSettings(draft, { autoIntervalSeconds: 1 }), true);
+  assert.equal(applyLiveSettings(draft, {}), true, "an empty patch is not an error and writes nothing");
+});
+
+test("LIVE-02/03 (26.1-13): a wrong value is not written and nothing else of the patch is either", () => {
+  const draft = draftWithAssistant();
+  const before = JSON.stringify(draft);
+  const wrong: Parameters<typeof applyLiveSettings>[1][] = [
+    { autoIntervalSeconds: 0 }, { autoIntervalSeconds: 3601 }, { autoIntervalSeconds: Number.NaN }, { autoIntervalSeconds: Number.POSITIVE_INFINITY }, { autoIntervalSeconds: "5" as unknown as number },
+    { autoMinSeconds: 0 }, { autoMaxSeconds: 4000 },
+    { autoMinSeconds: 130 }, { autoMaxSeconds: 30 }, { autoMinSeconds: 100, autoMaxSeconds: 50 },
+    { patienceVariants: [] }, { patienceVariants: [0] }, { patienceVariants: [3, -1] }, { patienceVariants: [Number.NaN] },
+    { autoTimingMode: "never" as unknown as "fixed" },
+    { idleEnabled: "yes" as unknown as boolean },
+    { idleEnabled: false, autoIntervalSeconds: 0 },
+  ];
+  for (const patch of wrong) {
+    assert.equal(applyLiveSettings(draft, patch), false, JSON.stringify(patch));
+    assert.equal(liveSettingsOk(draft, patch), false, JSON.stringify(patch));
+    assert.equal(JSON.stringify(draft), before, `nothing written for ${JSON.stringify(patch)}`);
+  }
+  assert.equal(liveSettingsOk(draft, { autoMinSeconds: 100 }), true, "the check alone writes nothing");
+  assert.equal(JSON.stringify(draft), before);
+});
+
+test("LIVE-02 (26.1-13): the live Vivian has the bars of its groups, the cross of its phrases and the popover of the timing", () => {
+  const seam = read("components/portia-editor-live.tsx");
+  assert.match(seam, /live\.addBar\(\{ kind: "assistant-group", group \}\)/);
+  assert.match(seam, /live\.remove\(\{ kind: "assistant-phrase", group, index \}/);
+  assert.match(seam, /function LiveTiming\(/);
+  assert.match(seam, /applyLiveSettings\(/);
+  assert.match(seam, /Время показа/);
+  for (const text of ["Совет", "Фразу обиды", "Фразу бездействия", "Фразу активности"]) assert.ok(seam.includes(`"${text}"`), text);
+});
+
+test("LIVE-01 (26.1-13): the six live surfaces of the seam are exactly the six live apps", () => {
+  const seam = read("components/portia-editor-live.tsx");
+  const surfaces = [...seam.matchAll(/data-live-app="([a-z]+)"/g)].map((match) => match[1]).sort();
+  const apps = [...new Set((LIVE_TABS as readonly string[]).map((tab) => liveAppForTab(tab)))].sort();
+  assert.deepEqual(surfaces, apps);
+  assert.equal(apps.length, 6);
+  assert.deepEqual([...seam.matchAll(/createLiveApi\("([a-z]+)"/g)].map((match) => match[1]).sort(), apps, "every surface makes the tools of its own app");
+  assert.equal((seam.match(/LiveEditContext\.Provider value=/g) ?? []).length, 6, "one provider per live app");
+  // the toggle is drawn for a tab only through liveAppForTab
+  assert.match(seam, /const app = liveAppForTab\(tab\);\n  const on = app !== null && enabled\.includes\(tab\);/);
+});
+
+test("LIVE-02 (26.1-13): the live Vivian blocks come after the live block and before users-tab in the style file", () => {
+  const css = read("app/portia.css");
+  const at = css.indexOf(".assistant-live {");
+  assert.ok(at > css.indexOf(".live-surface { width: 100%"), "after the live block");
+  assert.ok(at < css.indexOf("/* users-tab:start"), "before users-tab");
+  assert.ok(css.indexOf("/* users-tab:start") < css.indexOf("/* ui-unify:start"), "users-tab stands before ui-unify");
 });

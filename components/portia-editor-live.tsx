@@ -13,8 +13,8 @@ import { EmbeddedMediaStrip, FormattedText } from "@/components/portia-virus-car
 import { localDateKey, type BroadcastTab } from "@/lib/broadcasts";
 import type { ImageFraming } from "@/lib/image-framing";
 import {
-  applyLiveAdd, applyLiveCards, applyLiveChoice, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveLogText, applyLiveMove, applyLivePhrase, applyLiveRemove, applyLiveText, findLiveVirus, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveFormatKey, liveNewId, livePhraseLines, livePhraseSlice, liveRecycleKeys, liveRemovedKeys, liveTextKey, LIVE_PHRASE_GROUPS,
-  type LiveAddKind, type LiveApp, type LivePhraseGroup, type LiveCardsTarget, type LiveChoiceTarget, type LiveContainer, type LiveDateTarget, type LiveFlagTarget, type LiveImageTarget, type LiveList, type LiveRemovable, type LiveTarget,
+  applyLiveAdd, applyLiveCards, applyLiveChoice, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveLogText, applyLiveMove, applyLivePhrase, applyLiveRemove, applyLiveSettings, applyLiveText, findLiveVirus, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveFormatKey, liveNewId, livePhraseLines, livePhraseSlice, liveRecycleKeys, liveRemovedKeys, liveSettingsOk, liveTextKey, LIVE_PHRASE_GROUPS,
+  type LiveAddKind, type LiveApp, type LivePhraseGroup, type LiveCardsTarget, type LiveChoiceTarget, type LiveContainer, type LiveDateTarget, type LiveFlagTarget, type LiveImageTarget, type LiveList, type LiveRemovable, type LiveSettingsPatch, type LiveTarget,
 } from "@/lib/live-edit";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
 import { findGuide, findInfo, type PortiaContent, type RichTextDocument } from "@/lib/portia-content";
@@ -30,7 +30,7 @@ export const liveCopy = {
   untitled: "Без названия",
   addLabel: "Добавить:",
   addGroup: "Добавить элемент",
-  kinds: { section: "Раздел", card: "Карточку", heading: "Заголовок", text: "Текст", table: "Таблицу", photo: "Фото", video: "Видео", callout: "Врезку", cards: "Карточки", row: "Строку", subsection: "Подраздел", news: "Новость", quest: "Квест", mutation: "Мутацию", log: "Запись учёного", file: "Файл" } satisfies Record<LiveAddKind, string>,
+  kinds: { section: "Раздел", card: "Карточку", heading: "Заголовок", text: "Текст", table: "Таблицу", photo: "Фото", video: "Видео", callout: "Врезку", cards: "Карточки", row: "Строку", subsection: "Подраздел", news: "Новость", quest: "Квест", mutation: "Мутацию", log: "Запись учёного", file: "Файл", phrase: "Фразу" } satisfies Record<LiveAddKind, string>,
   cover: "Обложку",
   coverLabel: "Обложка",
   full: "Больше нельзя",
@@ -126,6 +126,20 @@ export const liveCopy = {
   assistantGroups: { advice: "Советы", offended: "Фразы обиды", idle: "Фразы бездействия", activity: "Фразы активности" } satisfies Record<LivePhraseGroup, string>,
   assistantHeadings: { advice: "ВИВЬЯН // СОВЕТ", offended: "ВИВЬЯН // ОБИДЕЛАСЬ", idle: "ВИВЬЯН // ВЫ ЗДЕСЬ?", activity: "ВИВЬЯН // НАБЛЮДЕНИЕ" } satisfies Record<LivePhraseGroup, string>,
   assistantEmpty: "Фраз пока нет",
+  assistantAdd: { advice: "Совет", offended: "Фразу обиды", idle: "Фразу бездействия", activity: "Фразу активности" } satisfies Record<LivePhraseGroup, string>,
+  timing: "Время показа",
+  timingGroup: "Время показа фраз",
+  timingIdle: "Фразы при долгом бездействии",
+  timingActivity: "Фразы во время активности",
+  timingMode: "Когда показывать фразы",
+  timingFixed: "Через одинаковое время",
+  timingRandom: "Через случайное время",
+  timingInterval: "Интервал, секунд",
+  timingMin: "Минимум, секунд",
+  timingMax: "Максимум, секунд",
+  timingPatience: "Терпение, секунд — через запятую",
+  timingWrong: "Секунды: 1–3600, минимум не выше максимума",
+  timingPatienceWrong: "Числа больше нуля, через запятую",
   richEmpty: "Нажмите, чтобы написать",
   lists: { "guide-sections": "раздел", "guide-cards": "карточка", "guide-blocks": "блок", "info-sections": "раздел", "info-subsections": "подраздел", "info-blocks": "блок", viruses: "вирус", recycle: "файл" } satisfies Record<LiveList["kind"], string>,
   removeLabel: "Удалить",
@@ -133,7 +147,7 @@ export const liveCopy = {
   removeText: (label: string) => `Удалить вместе с содержимым: ${label}.`,
   removeConfirm: "УДАЛИТЬ",
   removeCancel: "ОТМЕНА",
-  removeNames: { "guide-section": "раздел", "guide-card": "карточку", "guide-block": "блок", "guide-table-row": "строку", "info-section": "раздел", "info-subsection": "подраздел", "info-block": "блок", "info-table-row": "строку", broadcast: "запись", mutation: "мутацию", log: "запись", "recycle-file": "файл", "recycled-virus": "вирус" } satisfies Record<LiveRemovable["kind"], string>,
+  removeNames: { "guide-section": "раздел", "guide-card": "карточку", "guide-block": "блок", "guide-table-row": "строку", "info-section": "раздел", "info-subsection": "подраздел", "info-block": "блок", "info-table-row": "строку", broadcast: "запись", mutation: "мутацию", log: "запись", "recycle-file": "файл", "recycled-virus": "вирус", "assistant-phrase": "фразу" } satisfies Record<LiveRemovable["kind"], string>,
   imageAdd: "Добавить фото",
   sectionPhoto: "Фото раздела",
   imageReplace: "Заменить",
@@ -394,7 +408,7 @@ function AssistantSurface({ bridge }: { bridge: LiveEditorBridge }) {
   return <div className="live-surface" data-live-app="assistant">
     <LiveEditContext.Provider value={live}>
       <div className="assistant-live">
-        <div className="assistant-live-head"><h1>{liveCopy.assistantTitle}</h1></div>
+        <div className="assistant-live-head"><h1>{liveCopy.assistantTitle}</h1><LiveTiming bridge={bridge} /></div>
         {LIVE_PHRASE_GROUPS.map((group) => {
           const lines = livePhraseLines(bridge.draft, group);
           return <section key={group} className="assistant-live-group" data-group={group} aria-label={liveCopy.assistantGroups[group]}>
@@ -405,13 +419,98 @@ function AssistantSurface({ bridge }: { bridge: LiveEditorBridge }) {
                   <span>{liveCopy.assistantHeadings[group]}</span>
                   {live.rich({ kind: "assistant-phrase", group, index }, { text: line, document: livePhraseSlice(bridge.draft, group, index), className: "assistant-formatted-text" })}
                 </div>
+                {/* the last phrase of «обида», «бездействие» and «активность» stays: the save would bring a default phrase back */}
+                {(group === "advice" || lines.length > 1) && live.remove({ kind: "assistant-phrase", group, index }, line.length > 40 ? `${line.slice(0, 40)}…` : line)}
               </div>)}
               {!lines.length && <div className="assistant-live-empty empty-state"><span>{liveCopy.assistantEmpty}</span></div>}
             </div>
+            {live.addBar({ kind: "assistant-group", group })}
           </section>;
         })}
       </div>
     </LiveEditContext.Provider>
+  </div>;
+}
+
+/** A whole number of seconds in a compact field. What is typed stays in the field while it is out of the limits (then the short error stands beside it); a right value goes to the draft at once; leaving the field shows the draft's own value. */
+function LiveSecondsField({ bridge, label, value, patchOf }: { bridge: LiveEditorBridge; label: string; value: number; patchOf: (seconds: number) => LiveSettingsPatch }) {
+  const [typed, setTyped] = useState<string | null>(null);
+  const errorId = useId();
+  const wrong = typed !== null && (typed.trim() === "" || !liveSettingsOk(bridge.draft, patchOf(Number(typed))));
+  return <label className="editor-field live-number">
+    <span>{label}</span>
+    <input
+      type="number"
+      min={1}
+      max={3600}
+      step={1}
+      value={typed ?? String(value)}
+      aria-invalid={wrong || undefined}
+      aria-describedby={wrong ? errorId : undefined}
+      onChange={(event) => {
+        const raw = event.target.value;
+        setTyped(raw);
+        if (raw.trim() !== "") bridge.changeDraft((next) => { applyLiveSettings(next, patchOf(Number(raw))); });
+      }}
+      onBlur={() => setTyped(null)}
+    />
+    {wrong && <small id={errorId} role="alert">{liveCopy.timingWrong}</small>}
+  </label>;
+}
+
+/** The seconds of patience, as the editor's field takes them: numbers above zero separated by commas. */
+function LivePatienceField({ bridge }: { bridge: LiveEditorBridge }) {
+  const [typed, setTyped] = useState<string | null>(null);
+  const errorId = useId();
+  const draft = bridge.draft;
+  const parse = (raw: string) => raw.split(/[,;\s]+/).filter(Boolean).map(Number);
+  const wrong = typed !== null && !liveSettingsOk(draft, { patienceVariants: parse(typed) });
+  return <label className="editor-field live-number">
+    <span>{liveCopy.timingPatience}</span>
+    <input
+      value={typed ?? (draft.assistantPatienceVariants ?? [draft.assistantPatienceSeconds]).join(", ")}
+      inputMode="decimal"
+      aria-invalid={wrong || undefined}
+      aria-describedby={wrong ? errorId : undefined}
+      onChange={(event) => {
+        const raw = event.target.value;
+        setTyped(raw);
+        const variants = parse(raw);
+        bridge.changeDraft((next) => { applyLiveSettings(next, { patienceVariants: variants }); });
+      }}
+      onBlur={() => setTyped(null)}
+    />
+    {wrong && <small id={errorId} role="alert">{liveCopy.timingPatienceWrong}</small>}
+  </label>;
+}
+
+/** «Время показа»: a compact popover with the switches of the automatic phrases, the way they are timed and the patience; every value goes through applyLiveSettings, so the limits are the form's. */
+function LiveTiming({ bridge }: { bridge: LiveEditorBridge }) {
+  const [open, setOpen] = useState(false);
+  const draft = bridge.draft;
+  const write = (patch: LiveSettingsPatch) => bridge.changeDraft((next) => { applyLiveSettings(next, patch); });
+  return <div className="live-tools assistant-live-timing">
+    <button type="button" className="secondary-control live-button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>{liveCopy.timing}</button>
+    {open && <LivePopover onClose={() => setOpen(false)}>
+      <div className="live-timing" role="group" aria-label={liveCopy.timingGroup}>
+        <label className="live-flag"><input type="checkbox" checked={draft.assistantIdleEnabled} onChange={(event) => write({ idleEnabled: event.target.checked })} /><span>{liveCopy.timingIdle}</span></label>
+        <label className="live-flag"><input type="checkbox" checked={draft.assistantActivityEnabled} onChange={(event) => write({ activityEnabled: event.target.checked })} /><span>{liveCopy.timingActivity}</span></label>
+        <LivePatienceField bridge={bridge} />
+        <label className="editor-field">
+          <span>{liveCopy.timingMode}</span>
+          <select value={draft.assistantAutoTimingMode} onChange={(event) => write({ autoTimingMode: event.target.value as LiveSettingsPatch["autoTimingMode"] })}>
+            <option value="fixed">{liveCopy.timingFixed}</option>
+            <option value="random">{liveCopy.timingRandom}</option>
+          </select>
+        </label>
+        {draft.assistantAutoTimingMode === "fixed"
+          ? <LiveSecondsField bridge={bridge} label={liveCopy.timingInterval} value={draft.assistantAutoIntervalSeconds} patchOf={(seconds) => ({ autoIntervalSeconds: seconds })} />
+          : <div className="live-timing-pair">
+            <LiveSecondsField bridge={bridge} label={liveCopy.timingMin} value={draft.assistantAutoMinSeconds} patchOf={(seconds) => ({ autoMinSeconds: seconds })} />
+            <LiveSecondsField bridge={bridge} label={liveCopy.timingMax} value={draft.assistantAutoMaxSeconds} patchOf={(seconds) => ({ autoMaxSeconds: seconds })} />
+          </div>}
+      </div>
+    </LivePopover>}
   </div>;
 }
 
@@ -731,7 +830,7 @@ export function LiveAddBar({ bridge, container, onAdded }: { bridge: LiveEditorB
         const id = liveNewId(container, kind);
         bridge.changeDraft((next) => { applyLiveAdd(next, container, kind, id); });
         onAdded?.(kind, id, container);
-      }}>{liveCopy.kinds[kind]}</button>;
+      }}>{container.kind === "assistant-group" ? liveCopy.assistantAdd[container.group] : liveCopy.kinds[kind]}</button>;
     })}
     {container.kind === "virus" && virus && <LiveImage bridge={bridge} target={{ kind: "virus-infected", virusId: virus.id }} value={virus.infectedImage} framing={virus.infectedImageFraming} label={liveCopy.infectedAdd} fieldLabel={liveCopy.infectedLabel} compact />}
     {container.kind === "guide-card" && card && <LiveImage bridge={bridge} target={{ kind: "guide-card-cover", cardId: card.id }} value={card.cover} framing={card.coverFraming} label={liveCopy.cover} fieldLabel={liveCopy.coverLabel} compact />}

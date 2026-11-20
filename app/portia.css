@@ -2969,6 +2969,19 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 .assistant-live-group[data-group="offended"] .assistant-live-bubble > span:not(.assistant-formatted-text) { color: #efb84e; }
 .assistant-live-group[data-group="offended"] .assistant-formatted-text > span { color: #ffd98c !important; }
 .assistant-live-empty { padding: 10px 12px; border: 1px dashed var(--line); color: var(--muted); font: 12px var(--sans); }
+.assistant-live-row > .live-remove-wrap { position: static; flex: none; margin-top: 8px; }
+.assistant-live-group .live-add-bar { margin-top: 0; }
+/* «Время показа»: компактный поповер, поля 28px на ПК; на телефоне — по размеру касания. */
+.assistant-live-timing { flex: none; }
+.live-timing { display: grid; gap: 10px; min-width: 0; }
+.live-timing-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.live-timing .live-number, .live-timing label.editor-field { display: grid; gap: 4px; min-width: 0; }
+.live-timing .live-number > span, .live-timing label.editor-field > span { font: 700 11px var(--sans); letter-spacing: .08em; text-transform: uppercase; }
+.live-timing input:not([type="checkbox"]), .live-timing select { width: 100%; height: 28px; min-height: 28px; padding: 0 8px; box-sizing: border-box; }
+.live-timing .live-number small { color: var(--danger); font: 11px var(--sans); }
+@media (max-width: 900px) {
+  .live-timing input:not([type="checkbox"]), .live-timing select { height: var(--tap-target); min-height: var(--tap-target); }
+}
 /* users-tab:start — Phase 22 «Пользователи» (USR-01..USR-09): sharp corners, values from 22-UI-SPEC, nothing else in the file changes */
 .tab-count { min-width: 24px; margin-left: 8px; padding: 0 8px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px/1.35 var(--mono); text-align: center; }
 .users-tab { display: grid; gap: 24px; min-width: 0; }

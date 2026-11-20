@@ -1405,3 +1405,39 @@ test("owner 2026-11-20 (OWN-01): a tile title gets a size from lib/guide-tile.ts
   assert.match(thin, /var\(--tap-target\)/, "the thin tile keeps the touch minimum");
   assert.doesNotMatch(styles, /\.guide-tile[^{}]*\{[^}]*(?:-webkit-line-clamp|text-overflow:\s*ellipsis)/, "no guide tile rule cuts text");
 });
+
+// LIVE-04/LIVE-05 (26.1-13): the sweep over the whole family of the visitor's desktop (the window parts and the virus card). The visitor draws no live class and calls no live tool
+// without the answer of useLiveEdit, never provides the context, and never turns a link to a GIF back into text.
+const visitorFamily = [...desktopFamily, { file: "portia-virus-card.tsx", text: lf(readFileSync(new URL("../components/portia-virus-card.tsx", import.meta.url), "utf8")) }];
+
+test("LIVE-04 (26.1-13): no component of the visitor draws a live class or calls a live tool outside the answer of useLiveEdit, and none provides the context", () => {
+  const apiCall = /\blive\.(?:text|rich|image|video|cards|addBar|order|date|flag|choice|remove)\(/;
+  const liveClass = /["`]live-[a-z]/;
+  const guarded = /\blive\b\s*(?:\?|&&|!==? null)|if \(!?live\)|\{live\b|live \?/;
+  let uses = 0;
+  for (const { file, text } of visitorFamily) {
+    assert.doesNotMatch(text, /LiveEditContext/, `${file}: only the seam of the editor knows the context object`);
+    assert.doesNotMatch(text, /portia-editor-live/, `${file}: the visitor does not import the seam of the editor`);
+    const lines = text.split("\n");
+    let own = 0;
+    for (const [index, line] of lines.entries()) {
+      if (!apiCall.test(line) && !liveClass.test(line)) continue;
+      own += 1;
+      // a helper that takes the tools as an argument is called only with a non-null answer
+      if (/\(live: LiveEditApi\b/.test(line)) continue;
+      const near = lines.slice(Math.max(0, index - 5), index + 1).join(" ");
+      assert.ok(guarded.test(near), `${file}:${index + 1}: a live class or tool outside a live branch: ${line.trim().slice(0, 100)}`);
+    }
+    if (own) assert.match(text, /\buseLive(?:Edit|Virus)\(/, `${file} asks for the tools before it uses them`);
+    uses += own;
+  }
+  assert.ok(uses > 30, "the sweep really saw the live branches of the visitor's components");
+});
+
+test("LIVE-05 (26.1-13): no component of the visitor and no live surface of the editor turns a link to a GIF back into text", () => {
+  for (const { file, text } of visitorFamily) assert.doesNotMatch(text, /embedMedia=\{false\}/, file); // planner-discipline-allow: embedMedia={false}
+  const seam = lf(readFileSync(new URL("../components/portia-editor-live.tsx", import.meta.url), "utf8"));
+  assert.doesNotMatch(seam, /embedMedia=\{false\}/); // planner-discipline-allow: embedMedia={false}
+  assert.match(seam, /<FormattedText\b[^>]*eagerMedia/, "a text at rest is the visitor's FormattedText, loaded at once");
+  assert.match(seam, /<EmbeddedMediaStrip text=\{text\} eager \/>/, "the GIFs of a text under edit stay on show");
+});

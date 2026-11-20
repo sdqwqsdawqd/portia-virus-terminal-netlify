@@ -485,7 +485,7 @@ export function applyLiveCards(draft: PortiaContent, target: LiveCardsTarget, ca
 }
 
 /** What the bar «Добавить: …» can add (`row` is a row of a table block). The cover is not here: it is a picture place, not a new element. */
-export type LiveAddKind = "section" | "subsection" | "card" | "heading" | "text" | "table" | "photo" | "video" | "callout" | "cards" | "row" | "news" | "quest" | "mutation" | "log" | "file";
+export type LiveAddKind = "section" | "subsection" | "card" | "heading" | "text" | "table" | "photo" | "video" | "callout" | "cards" | "row" | "news" | "quest" | "mutation" | "log" | "file" | "phrase";
 
 /** A place that takes new elements: the list of sections, one section (cards), one card (blocks), one table block (rows); in «Информации» the table of contents (sections and subsections), one subsection (blocks), one table block (rows). */
 export type LiveContainer =
@@ -502,7 +502,9 @@ export type LiveContainer =
   /** The end of a virus card: a mutation, a scientist record (the photo after infection is a picture place, drawn beside the bar). */
   | { kind: "virus"; virusId: string }
   /** The bin: a new file (a virus is written in the editor, its fields are the card's). */
-  | { kind: "recycle" };
+  | { kind: "recycle" }
+  /** A group of the phrases of the assistant: a new, empty phrase at its end. */
+  | { kind: "assistant-group"; group: LivePhraseGroup };
 
 /** An ordered list the live mode can reorder. */
 export type LiveList =
@@ -531,7 +533,9 @@ export type LiveRemovable =
   | { kind: "mutation"; virusId: string; index: number }
   | { kind: "log"; virusId: string; logId: string }
   | { kind: "recycle-file"; fileId: string }
-  | { kind: "recycled-virus"; virusId: string };
+  | { kind: "recycled-virus"; virusId: string }
+  /** A phrase of the assistant; the last one of «обида», «бездействие» and «активность» cannot go (the save would bring a default phrase back). */
+  | { kind: "assistant-phrase"; group: LivePhraseGroup; index: number };
 
 type GuideBlockKind = "heading" | "text" | "table" | "photo" | "video" | "callout" | "cards";
 type InfoBlockKind = "text" | "table" | "photo" | "video";
@@ -563,6 +567,7 @@ export function liveAddKinds(container: LiveContainer): LiveAddKind[] {
   if (container.kind === "broadcasts") return ["news", "quest"];
   if (container.kind === "virus") return ["mutation", "log"];
   if (container.kind === "recycle") return ["file"];
+  if (container.kind === "assistant-group") return ["phrase"];
   return ["heading", "text", "table", "photo", "video", "callout", "cards"];
 }
 
@@ -576,6 +581,7 @@ export function liveNewId(container: LiveContainer, kind: LiveAddKind): string {
   if (kind === "log") return makeId("log");
   if (kind === "file") return makeId("file");
   if (kind === "mutation") return makeId("mutation");
+  if (kind === "phrase") return makeId("phrase");
   return makeId("block");
 }
 
@@ -612,6 +618,13 @@ export function applyLiveAdd(draft: PortiaContent, container: LiveContainer, kin
     draft.recycleFiles.push({ id, name: "НОВЫЙ_ФАЙЛ.txt", location: "C:\\PORTIA\\RECYCLE_BIN", kind: "text", content: "", image: "", virusId: "" });
     draft.recycleOrder = [...liveRecycleKeys(draft).filter((key) => key !== `file:${id}`), `file:${id}`];
     return id;
+  }
+  if (container.kind === "assistant-group") {
+    // A phrase has no id: it is found by its position, and its new, empty line goes at the end of the group (the editor's field gets one by a line break).
+    const lines = readPhrases(draft, container.group);
+    lines.push({ text: "", styles: [] });
+    writePhrases(draft, container.group, lines);
+    return String(lines.length - 1);
   }
   if (container.kind === "virus") {
     const virus = findLiveVirus(draft, container.virusId);
@@ -703,6 +716,8 @@ export function liveRemovedKeys(draft: PortiaContent, item: LiveRemovable): stri
   if (item.kind === "mutation") return Array.from({ length: Math.max(0, (findLiveVirus(draft, item.virusId)?.mutations.length ?? 0) - item.index) }, (_, step) => portiaTextKey.mutation(item.virusId, item.index + step));
   if (item.kind === "log") return [`scientist:${item.logId}`];
   if (item.kind === "recycle-file") return [portiaTextKey.recycle(item.fileId)];
+  // A phrase has the format key of its position: the removed one and every later one change their key.
+  if (item.kind === "assistant-phrase") return Array.from({ length: Math.max(0, livePhraseLines(draft, item.group).length - item.index) }, (_, step) => `${PHRASE_KEY[item.group]}#${item.index + step}`);
   if (item.kind === "recycled-virus") {
     const virus = findLiveVirus(draft, item.virusId);
     return [...Object.keys(draft.formattedText).filter((key) => key.startsWith(`virus:${item.virusId}:`)), ...(virus?.scientistLogs ?? []).map((log) => `scientist:${log.id}`)];
@@ -753,6 +768,13 @@ export function applyLiveRemove(draft: PortiaContent, item: LiveRemovable): bool
     removeMutation(draft, virus, item.index);
     return true;
   }
+  if (item.kind === "assistant-phrase") {
+    const lines = readPhrases(draft, item.group);
+    if (!Number.isInteger(item.index) || item.index < 0 || item.index >= lines.length || (item.group !== "advice" && lines.length <= 1)) return false;
+    lines.splice(item.index, 1);
+    writePhrases(draft, item.group, lines);
+    return true;
+  }
   if (item.kind === "recycle-file") {
     if (!draft.recycleFiles.some((file) => file.id === item.fileId)) return false;
     removeRecycleFile(draft, item.fileId);
@@ -785,7 +807,7 @@ export function liveMediaUrls(text: string): string[] {
 
 /** True when the container takes no more of `kind` (the bar then disables that button instead of recording an edit that changes nothing). */
 export function liveAddBlocked(draft: PortiaContent, container: LiveContainer, kind: LiveAddKind): boolean {
-  if (container.kind === "guide-root" || container.kind === "broadcasts" || container.kind === "recycle") return false;
+  if (container.kind === "guide-root" || container.kind === "broadcasts" || container.kind === "recycle" || container.kind === "assistant-group") return false;
   if (container.kind === "virus") return kind === "log" && (findLiveVirus(draft, container.virusId)?.scientistLogs.length ?? 0) >= MAX_SCIENTIST_LOGS;
   if (container.kind === "guide-section") return (draft.guideSections.find((item) => item.id === container.sectionId)?.cards.length ?? 0) >= MAX_SUBSECTIONS;
   if (container.kind === "guide-card") return (findGuide(draft.guideSections, container.cardId)?.card?.blocks.length ?? 0) >= MAX_BLOCKS;
@@ -802,4 +824,61 @@ export function liveAddBlocked(draft: PortiaContent, container: LiveContainer, k
 /** True when the container takes nothing more of any kind. */
 export function liveContainerFull(draft: PortiaContent, container: LiveContainer): boolean {
   return liveAddKinds(container).every((kind) => liveAddBlocked(draft, container, kind));
+}
+
+/** The timing settings of the assistant the live mode changes («Время показа»); every field is optional, the rest of the draft keeps its value. */
+export type LiveSettingsPatch = {
+  idleEnabled?: boolean;
+  activityEnabled?: boolean;
+  /** The seconds of patience, one or more; the first one is the patience of the assistant (as in the editor's field). */
+  patienceVariants?: number[];
+  autoTimingMode?: PortiaContent["assistantAutoTimingMode"];
+  autoIntervalSeconds?: number;
+  autoMinSeconds?: number;
+  autoMaxSeconds?: number;
+};
+
+/** The same limits as the number fields of the editor's form (min 1, max 3600). */
+const AUTO_SECONDS = { min: 1, max: 3600 } as const;
+
+const wholeSeconds = (value: unknown): number | null => {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const whole = Math.round(value);
+  return whole >= AUTO_SECONDS.min && whole <= AUTO_SECONDS.max ? whole : null;
+};
+
+/** The writer of a patch when every value of it is right (the minimum not above the maximum counted with the draft's own other value); null when one is not. */
+function settingsWriter(draft: PortiaContent, patch: LiveSettingsPatch): (() => void) | null {
+  if (patch.idleEnabled !== undefined && typeof patch.idleEnabled !== "boolean") return null;
+  if (patch.activityEnabled !== undefined && typeof patch.activityEnabled !== "boolean") return null;
+  if (patch.autoTimingMode !== undefined && patch.autoTimingMode !== "fixed" && patch.autoTimingMode !== "random") return null;
+  const variants = patch.patienceVariants;
+  if (variants !== undefined && (!Array.isArray(variants) || !variants.length || !variants.every((value) => typeof value === "number" && Number.isFinite(value) && value > 0))) return null;
+  const interval = patch.autoIntervalSeconds === undefined ? undefined : wholeSeconds(patch.autoIntervalSeconds);
+  const min = patch.autoMinSeconds === undefined ? undefined : wholeSeconds(patch.autoMinSeconds);
+  const max = patch.autoMaxSeconds === undefined ? undefined : wholeSeconds(patch.autoMaxSeconds);
+  if (interval === null || min === null || max === null) return null;
+  if ((min ?? draft.assistantAutoMinSeconds) > (max ?? draft.assistantAutoMaxSeconds)) return null;
+  return () => {
+    if (patch.idleEnabled !== undefined) draft.assistantIdleEnabled = patch.idleEnabled;
+    if (patch.activityEnabled !== undefined) draft.assistantActivityEnabled = patch.activityEnabled;
+    if (patch.autoTimingMode !== undefined) draft.assistantAutoTimingMode = patch.autoTimingMode;
+    if (variants !== undefined) { draft.assistantPatienceVariants = [...variants]; draft.assistantPatienceSeconds = variants[0]; }
+    if (interval !== undefined) draft.assistantAutoIntervalSeconds = interval;
+    if (min !== undefined) draft.assistantAutoMinSeconds = min;
+    if (max !== undefined) draft.assistantAutoMaxSeconds = max;
+  };
+}
+
+/** True when the patch would be written as it is (the field shows its own error otherwise); writes nothing. */
+export function liveSettingsOk(draft: PortiaContent, patch: LiveSettingsPatch): boolean {
+  return settingsWriter(draft, patch) !== null;
+}
+
+/** Writes the settings; false, and nothing written (not even a right part of the patch), when one value is outside the limits of the editor's form (T-26.1-29). */
+export function applyLiveSettings(draft: PortiaContent, patch: LiveSettingsPatch): boolean {
+  const write = settingsWriter(draft, patch);
+  if (!write) return false;
+  write();
+  return true;
 }
