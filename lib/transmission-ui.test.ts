@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { lf } from "./component-source.ts";
+import { templateCardCss, templateExportViolations, templateCardDocument } from "./portia-template-export.ts";
+import { TRANSMISSION_CHOICES } from "./transmission-routes.ts";
 
 // OWN-03 (owner 2026-11-20), the screens: several routes of transmission are chosen with checkboxes in the shared ClassificationField
 // (the editor, the recycle bin and the template builder all use it), and the virus card draws every route with its own icon and, on a
@@ -103,4 +105,31 @@ test("OWN-03 the styles: picker, option, list, item, description; a phone-sized 
   for (const name of ["route-list", "route-item", "route-description"]) {
     assert.match(exporter, new RegExp(`"${name}"`), `${name} is a card class of the exported file`);
   }
+});
+
+// Reads the declaration blocks of the plain rules (no @media) whose selector is exactly `selector`, as the builder reads the live sheets.
+function cssRule(selector: string) {
+  const found = [...css.matchAll(/^([^@{}\n][^{}\n]*)\{([^{}]*)\}$/gm)].filter((match) => match[1].trim() === selector);
+  assert.ok(found.length >= 1, `${selector} has a rule`);
+  return { selector, declarations: found.map((match) => match[2].trim()).join(" ") };
+}
+
+test("OWN-03 the exported file of the template carries the look of the routes and not a description opened in advance", () => {
+  const carried = templateCardCss([cssRule(".route-list"), cssRule(".route-item"), cssRule(".route-description"), cssRule(".route-picker")], {});
+  for (const selector of [".route-list", ".route-item", ".route-description"]) assert.ok(carried.includes(`${selector}{`), `${selector} reaches the file`);
+  assert.ok(!carried.includes(".route-picker"), "the editor's picker is not a class of the card and does not travel");
+  // The captured card is the closed state: no description paragraph, every route button collapsed. The page is the closed policy's own.
+  const markup = `<article class="record-view"><div class="class-cell transmission"><span>Способ распространения</span><strong class="route-list"><button type="button" class="route-item" aria-expanded="false">Аэрозольный</button></strong></div></article>`;
+  const document = templateCardDocument(markup, carried, "Вирус");
+  assert.deepEqual(templateExportViolations(document), []);
+  assert.ok(!document.includes('class="route-description"'), "no opened description in the captured card");
+  assert.match(cell, /useState<string \| null>\(null\)/);
+});
+
+test("OWN-03 the long texts live in the model, not in the components: the picker and the card read them from transmission-routes", () => {
+  for (const choice of TRANSMISSION_CHOICES) {
+    assert.ok(!dossier.includes(choice.description), `${choice.name}: the description is not retyped in the picker`);
+    assert.ok(!card.includes(choice.description), `${choice.name}: the description is not retyped in the card`);
+  }
+  assert.match(cell, /\{description\}/, "the opened paragraph shows the model's text");
 });
