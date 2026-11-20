@@ -37,13 +37,15 @@ const recycleKinds: RecycleFile["kind"][] = ["virus", "text", "image"];
 
 /**
  * The viewer of a file or of a virus of the bin, laid over the list. The caller keys it by the entry it shows, so a new one fades in.
- * `viruses` are the viruses of the archive and of the bin (the text of a «file of a virus» is built from the linked one). `openLog` and `onOpenLog` are the record of a scientist
+ * `viruses` are the viruses of the archive and of the bin (the text of a «file of a virus» is built from the linked one). `linkChoices` are the viruses the live
+ * «Связанный вирус» list offers: the archive only, as in the classic editor and in `applyLiveChoice` (WR-04); it defaults to `viruses`. `openLog` and `onOpenLog` are the record of a scientist
  * the live mode opens inside the viewer; the window leaves them out.
  */
-export function TrashViewer({ entry, formattedText, viruses, viewerLevel, onClose, openLog = null, onOpenLog, onCloseLog }: {
+export function TrashViewer({ entry, formattedText, viruses, linkChoices = viruses, viewerLevel, onClose, openLog = null, onOpenLog, onCloseLog }: {
   entry: TrashEntry;
   formattedText: PortiaContent["formattedText"];
   viruses: readonly Virus[];
+  linkChoices?: readonly Virus[];
   viewerLevel: number;
   onClose: () => void;
   openLog?: string | null;
@@ -83,7 +85,7 @@ export function TrashViewer({ entry, formattedText, viruses, viewerLevel, onClos
           <div className="trash-document-meta">{live
             ? <>{live.choice({ kind: "recycle-file-kind", fileId: file.id }, file.kind, { label: "Тип файла", options: recycleKinds.map((kind) => ({ value: kind, label: recycleFileType(kind) })) })} / {live.text({ kind: "recycle-file-location", fileId: file.id }, file.location)}</>
             : <>{recycleFileType(file.kind)} / {file.location}</>}</div>
-          {live && file.kind === "virus" && <div className="live-trash-link">{live.choice({ kind: "recycle-file-virus", fileId: file.id }, file.virusId, { label: "Связанный вирус", options: [{ value: "", label: "Без связи" }, ...viruses.map((virus) => ({ value: virus.id, label: `${virus.name} / ${virus.code}` }))] })}</div>}
+          {live && file.kind === "virus" && <div className="live-trash-link">{live.choice({ kind: "recycle-file-virus", fileId: file.id }, file.virusId, { label: "Связанный вирус", options: [{ value: "", label: "Без связи" }, ...linkChoices.map((virus) => ({ value: virus.id, label: `${virus.name} / ${virus.code}` }))] })}</div>}
           {file.kind === "virus"
             ? <>
               {linked && <pre>{linked}</pre>}

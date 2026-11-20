@@ -925,6 +925,19 @@ test("LIVE-02 (26.1-12): the type of a file takes one of three, the linked virus
   assert.equal(draft.recycleFiles[0].virusId, "");
 });
 
+test("26.1 WR-04: the live «Связанный вирус» list offers the archive viruses only, the same as applyLiveChoice accepts and the classic editor", () => {
+  const trash = read("components/portia-desktop-trash.tsx");
+  const live = read("components/portia-editor-live.tsx");
+  // The viewer builds the linked text from archive and bin viruses, but the choice list comes from its own prop.
+  assert.ok(trash.includes("linkChoices = viruses"));
+  assert.ok(trash.includes("...linkChoices.map((virus) => ({ value: virus.id"));
+  assert.ok(!/\.\.\.viruses\.map\(\(virus\) => \(\{ value: virus\.id/.test(trash), "the choice list is not built from the archive plus bin list");
+  assert.ok(live.includes("linkChoices={draft.viruses}"));
+  const draft = draftWithBin();
+  draft.recycledViruses = [{ id: "bin-virus" } as never];
+  assert.equal(applyLiveChoice(draft, { kind: "recycle-file-virus", fileId: "f1" }, "bin-virus"), false, "a virus of the bin is not accepted, so it must not be offered");
+});
+
 test("LIVE-02 (26.1-12): the picture of a file replaces the address and drops the frame; the frame can be set and cleared", () => {
   const draft = draftWithBin();
   const target = { kind: "recycle-file-image", fileId: "f2" } as const;

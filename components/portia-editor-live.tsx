@@ -391,7 +391,7 @@ function RecycleSurface({ bridge }: { bridge: LiveEditorBridge }) {
             })}
             {!keys.length && <div className="editor-empty empty-state"><strong>{liveCopy.trashEmpty}</strong></div>}
           </div>
-          {open && <TrashViewer key={picked} entry={open} formattedText={draft.formattedText} viruses={[...draft.viruses, ...(draft.recycledViruses ?? [])]} viewerLevel={editorLevel} onClose={() => select(null)} openLog={openLog} onOpenLog={setOpenLog} onCloseLog={() => setOpenLog(null)} />}
+          {open && <TrashViewer key={picked} entry={open} formattedText={draft.formattedText} viruses={[...draft.viruses, ...(draft.recycledViruses ?? [])]} linkChoices={draft.viruses} viewerLevel={editorLevel} onClose={() => select(null)} openLog={openLog} onOpenLog={setOpenLog} onCloseLog={() => setOpenLog(null)} />}
         </div>
         {live.addBar({ kind: "recycle" })}
       </div>
