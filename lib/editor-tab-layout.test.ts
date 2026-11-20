@@ -787,6 +787,12 @@ test("OWN-09: the click after a drag is swallowed once, the page does not scroll
   assert.ok(handleSource.includes("suppressClick"), "the model says when the click is swallowed");
   assert.ok(handleSource.includes('"touchmove"') && handleSource.includes("passive: false"), "a non-passive touchmove stops the page scroll once lifted");
   assert.ok(handleSource.includes('"selectstart"'), "no text selection while dragging");
+  // 26.1 WR-05: the browser decides at touchstart whether the touch can be cancelled, so a standing non-passive listener sits on the zone from mount and
+  // refuses the scroll only while the hold is lifted; the one added at the lift stays as a second line.
+  assert.ok(handleSource.includes('zone.addEventListener("touchmove", refuseScrollWhileLifted, { passive: false })'), "a standing non-passive touchmove on the zone");
+  assert.ok(handleSource.includes('zone.removeEventListener("touchmove", refuseScrollWhileLifted)'), "removed with the effect");
+  assert.ok(handleSource.includes('hold.current.phase === "lifted" && event.cancelable'), "it refuses only while lifted");
+  assert.ok(handleSource.indexOf("refuseScrollWhileLifted, { passive: false }") < handleSource.indexOf('zone.addEventListener("pointerdown"'), "registered with the effect, before any press");
 });
 
 test("OWN-09: the order button stays for the keyboard: label, arrows, the ≡ only inside the plaque", () => {

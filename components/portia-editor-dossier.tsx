@@ -286,12 +286,19 @@ export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: 
       pointer.current = { x: dragHandoff.x, y: dragHandoff.y };
       beginLift(row, dragHandoff.dragId);
     }
+    // WR-05 (26.1 review): Chromium and WebKit decide at touchstart whether a touch sequence can be cancelled, from the touchmove listeners that exist THEN
+    // (and touch-action is read at that moment too, so it cannot be switched on once the element is lifted). The listener added at the lift comes too late,
+    // so the zone carries a standing non-passive one that refuses the scroll only while the element is held. A press that is not held scrolls as before.
+    // Not verified on a physical phone: devices stay BLOCKED until a phase proves them.
+    const refuseScrollWhileLifted = (event: TouchEvent) => { if (hold.current.phase === "lifted" && event.cancelable) event.preventDefault(); };
+    zone.addEventListener("touchmove", refuseScrollWhileLifted, { passive: false });
     zone.addEventListener("pointerdown", onPress);
     window.addEventListener("blur", onBlur);
     window.addEventListener("pointermove", onTrack);
     window.addEventListener("pointerup", onRelease);
     window.addEventListener("pointercancel", onRelease);
     return () => {
+      zone.removeEventListener("touchmove", refuseScrollWhileLifted);
       zone.removeEventListener("pointerdown", onPress);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("pointermove", onTrack);
