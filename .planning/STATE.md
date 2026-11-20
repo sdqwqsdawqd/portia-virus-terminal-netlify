@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: "26.1"
 current_phase_name: Правки владельца
 status: executing
-stopped_at: Completed 26.1-11-PLAN.md
-last_updated: "2026-11-20T21:33:55.011Z"
+stopped_at: Completed 26.1-12-PLAN.md
+last_updated: "2026-11-20T21:54:31.955Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 26.1 execution started
-state_head: aa728642f4a36a753f34a01514f1075793cb34ba
+state_head: a46cee656c0db5c521182b5680f91898500544a8
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 85
-  completed_plans: 82
+  completed_plans: 83
 ---
 
 Total Phases: 6
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: 26.1 (Правки владельца) — EXECUTING
-Plan: 13 of 14
+Plan: 14 of 14
 Status: Ready to execute
 Last activity: 2026-11-20 — Phase 26.1 execution started
 
@@ -123,6 +123,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase 26.1 P15 | 1h | 3 tasks | 9 files |
 | Phase 26.1 P10 | 2h | 3 tasks | 12 files |
 | Phase 26.1 P11 | 2h | 3 tasks | 8 files |
+| Phase 26.1 P12 | 2h | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -386,6 +387,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 26.1]: 26.1-10: live mode = one LiveEditContext (shared module) provided only by the editor seam; editor change is one D-21 hunk PORTIA-26.1-LIVE with the whole bridge, so 26.1-11..13 add apps without touching the editor
 - [Phase 26.1]: 26.1-11: живая «Сводка» - лента участника по датам с неопубликованными записями (пометка «Черновик»), порядок не меняется; даты квеста проверяются до записи в черновик
 - [Phase 26.1]: 26.1-11: вид «Информации» и карточки «Сводки» живут в шве portia-desktop-info.tsx; защищённый редактор не менялся
+- [Phase 26.1]: 26.1-12: the live card of a virus is one component for the archive, the recycle bin and the template; a virus of the bin asks the tools of both apps (useLiveVirus), the template has no provider
 
 ### Pending Todos
 
@@ -444,8 +446,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-20T21:33:46.304Z
-Stopped at: Completed 26.1-11-PLAN.md
+Last session: 2026-11-20T21:54:30.839Z
+Stopped at: Completed 26.1-12-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
