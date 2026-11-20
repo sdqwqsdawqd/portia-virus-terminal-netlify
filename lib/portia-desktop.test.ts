@@ -575,6 +575,40 @@ test("OWN-06: the preview CSS: above the taskbar, 220px, panel colours, accent f
   assert.ok(styles.includes("  .taskbar-preview { display: none; }"), "phone: no preview");
 });
 
+// owner 2026-11-20 OWN-11: the figure fades as one layer, so the items no longer show the body through.
+test("OWN-11: the offended Vivian fades as one figure", () => {
+  const lines = styles.split("\n");
+  const line = (start: string) => lines.find((candidate) => candidate.startsWith(start)) ?? "";
+  // 1. Opacity and the grey filter sit once, on the whole figure, without the accent filter.
+  const figure = line(".desktop-assistant.is-offended .assistant-figure {");
+  assert.ok(figure, "the figure has an offended rule");
+  assert.ok(figure.includes("opacity: .78"));
+  assert.ok(figure.includes("filter: brightness(.92) grayscale(.85) saturate(.4)"));
+  assert.ok(!figure.includes("var(--assistant-filter)"), "the accent filter never reaches the figure rule");
+  // 2. The pose stays on the picture and on the items, without their own opacity or grey filter.
+  for (const selector of [".desktop-assistant.is-offended .assistant-button img {", ".desktop-assistant.is-offended .assistant-items {"]) {
+    const pose = line(selector);
+    assert.ok(pose, selector);
+    for (const part of ["translate: 0 4px", "rotate: -3deg", "scale: -1 .94"]) assert.ok(pose.includes(part), `${selector} keeps ${part}`);
+    assert.ok(!pose.includes("opacity") && !pose.includes("filter"), `${selector} has no opacity or filter of its own`);
+  }
+  // 3. The recovery is smooth on the one layer; the reduced mode shortens it.
+  const base = line(".assistant-figure {");
+  assert.ok(base.includes("transition: filter 360ms ease, opacity 360ms ease"));
+  assert.ok(line('html[data-motion="reduced"] .assistant-figure {').includes("transition-duration: var(--motion-fast)"));
+  // 4. The pose animations of the picture and of the items are the same rules, selector aside.
+  const pictureAnimations = lines.filter((candidate) => candidate.includes(".assistant-button img {") && candidate.includes("animation:") && (candidate.includes(".is-offended") || candidate.includes(".is-recovering")));
+  assert.ok(pictureAnimations.length >= 4, "full and reduced motion each have a sulk and a recovery rule");
+  for (const picture of pictureAnimations) assert.ok(lines.includes(picture.replace(".assistant-button img {", ".assistant-items {")), `the items repeat: ${picture.slice(0, 90)}`);
+  assert.ok(lines.some((candidate) => candidate.startsWith('html[data-motion="off"] .desktop-assistant .assistant-items') && candidate.includes("animation: none")), "off: no animation on the items");
+  assert.ok(lines.some((candidate) => candidate.includes('html[data-motion="off"] .desktop-assistant .assistant-button img') && candidate.includes("animation: none")), "off: no animation on the picture");
+  // 5. The accent filter is only on the button (and on the settings stage copy of Vivian), never on the figure or the items.
+  const accentUses = lines.filter((candidate) => candidate.includes("filter: var(--assistant-filter)"));
+  assert.ok(accentUses.some((candidate) => candidate.startsWith(".assistant-button {")));
+  assert.ok(accentUses.every((candidate) => candidate.startsWith(".assistant-button {") || candidate.startsWith(".companion-stage-figure.is-assistant {")), "the accent filter stays on the button");
+  assert.ok(!accentUses.some((candidate) => candidate.includes(".assistant-figure") || candidate.includes(".assistant-items")));
+});
+
 test("shared shortcut hover feedback never translates the icon container", () => {
   const hover = /\.desktop-icon:hover \.desktop-icon-symbol[^\{]*\{([^}]*)\}/.exec(styles)?.[1] ?? "";
   assert.ok(hover);

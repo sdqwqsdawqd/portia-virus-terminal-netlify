@@ -334,7 +334,10 @@ test("animations are full by default; reduced and off only by the saved setting,
   // Windows under «Уменьшены»: fade only, no scale, at the fast duration; Vivian's idle offended pose is static in every mode.
   assert.match(css, /html\[data-motion="reduced"\] \.app-window:not\(.is-closing, .is-minimizing\) \{ animation: fade-in var\(--motion-fast\) ease-out !important; \}/);
   assert.match(css, /html\[data-motion="reduced"\] \.assistant-button img \{ transition-duration: var\(--motion-fast\); \}/);
-  assert.match(css, /(^|\n)\.desktop-assistant\.is-offended \.assistant-button img \{[^}]*rotate:[^}]*grayscale\([^}]*opacity:/);
+  // owner 2026-11-20 OWN-11: the figure fades as one layer, so the items no longer show the body through; the pose stays on the picture.
+  assert.match(css, /(^|\n)\.desktop-assistant\.is-offended \.assistant-button img \{[^}]*rotate:[^}]*\}/);
+  assert.doesNotMatch(css.match(/(^|\n)\.desktop-assistant\.is-offended \.assistant-button img \{[^}]*\}/)?.[0] ?? "", /grayscale|opacity/);
+  assert.match(css, /(^|\n)\.desktop-assistant\.is-offended \.assistant-figure \{[^}]*opacity:[^}]*grayscale\(/);
   const group = desktopSource.match(/title="Анимации" values=\{(\[\[.*?\]\])\}/)?.[1];
   assert.ok(group, "«Анимации» SettingGroup not found");
   assert.deepEqual([...motionModes], ["on", "reduced", "off"]);
@@ -395,7 +398,10 @@ test("quick 261117-bi1 R4b: under «Выключены» Vivian has no keyframe 
     assert.match(lean.body, /transform:\s*none/, `${state}: no lean or press`);
   }
   // The static sulking pose and the hover glow stay: they show state, they do not move.
-  assert.match(css, /(^|\n)\.desktop-assistant\.is-offended \.assistant-button img \{[^}]*rotate:[^}]*grayscale\([^}]*opacity:/);
+  // owner 2026-11-20 OWN-11: the figure fades as one layer, so the items no longer show the body through; the pose stays on the picture.
+  assert.match(css, /(^|\n)\.desktop-assistant\.is-offended \.assistant-button img \{[^}]*rotate:[^}]*\}/);
+  assert.doesNotMatch(css.match(/(^|\n)\.desktop-assistant\.is-offended \.assistant-button img \{[^}]*\}/)?.[0] ?? "", /grayscale|opacity/);
+  assert.match(css, /(^|\n)\.desktop-assistant\.is-offended \.assistant-figure \{[^}]*opacity:[^}]*grayscale\(/);
 });
 
 const rgbToHex = (rgb: Rgb) => "#" + rgb.map((v) => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, "0")).join("");
