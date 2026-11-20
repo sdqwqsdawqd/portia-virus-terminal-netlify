@@ -859,3 +859,32 @@ test("OWN-09: the e2e drag holds the head of the card 450 ms and no longer grabs
   assert.ok(spec.includes("waitForTimeout(450)"), "the hold lasts longer than 400 ms");
   assert.ok(spec.includes('toHaveAttribute("data-lifted", "true")'), "the lifted card is checked before the move");
 });
+
+test("OWN-09: ColumnSwapHandle lives in the dossier seam, is held by the header cell and keeps the arrows; the editor only imports it", () => {
+  const start = dossierCode.indexOf("export function ColumnSwapHandle(");
+  assert.ok(start >= 0, "exported from the seam");
+  const swap = dossierCode.slice(start, dossierCode.indexOf("export function ", start + 10) >= 0 ? dossierCode.indexOf("export function ", start + 10) : undefined);
+  assert.ok(!editor.includes("function ColumnSwapHandle"), "no copy in the protected editor file (D-21)");
+  assert.match(editor, /import \{[^}]*\bColumnSwapHandle\b[^}]*\} from "@\/components\/portia-editor-dossier";/, "the editor imports it from the seam");
+  assert.equal(editor.split("<ColumnSwapHandle ").length - 1, 2, "the two calls in TableBlockEditor stay");
+  assert.ok(swap.includes("holdStep("), "the header is held through the same model");
+  assert.ok(swap.includes('closest<HTMLElement>("[data-column]")'), "the header cell is the zone and the thing that is lifted");
+  assert.ok(swap.includes('cell.addEventListener("pointerdown"'));
+  assert.ok(swap.includes('cell.dataset.lifted = "true"') && swap.includes("delete cell.dataset.lifted"));
+  assert.ok(swap.includes('dataset.dragging = "column"'), "'column', not 'true': editKeyFor folds only row drags, a swap is one change on drop");
+  assert.ok(swap.includes("onSwapRef.current()"), "a drop on the other header swaps");
+  assert.ok(swap.includes("Переставить столбец «${label}»") && swap.includes('aria-keyshortcuts="ArrowLeft ArrowRight"'), "the name and the arrows are as before");
+  assert.ok(swap.includes('event.key !== "ArrowLeft" && event.key !== "ArrowRight"'));
+  assert.ok(swap.includes("owner 2026-11-20 (OWN-09)") || dossierSeam.includes("Two table columns swap"), "the comment moved with the function");
+  assert.ok(!swap.includes("title="), "no tooltip (D-18)");
+});
+
+test("OWN-09: a lifted column header looks lifted too", () => {
+  const lifted = '.info-table-head > [data-column][data-lifted="true"]';
+  assert.equal(declared(lifted, "z-index"), "5");
+  assert.equal(declared(lifted, "cursor"), "grabbing");
+  assert.match(declared(lifted, "box-shadow") ?? "", /^0 10px 24px/);
+  assert.equal(declared(lifted, "translate"), undefined);
+  assert.equal(declared(`html[data-motion="full"] ${lifted}`, "translate"), "0 -2px");
+  assert.match(declared(`${lifted} *`, "cursor") ?? "", /^grabbing/);
+});

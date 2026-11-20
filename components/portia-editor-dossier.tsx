@@ -527,3 +527,112 @@ export function ImageEditorField({ label, value, placement, maxHint, removeLabel
     {value && previewFailed && <span className="editor-media-error">Не удалось открыть. Нужна прямая HTTPS-ссылка на файл.</span>}
   </div>;
 }
+
+// Two table columns swap, so a column header is held and dropped on the other header (or moved with ArrowLeft/ArrowRight) instead of sorting live.
+// owner 2026-11-20 (OWN-09): no ≡ handle; the header cell itself is held 400 ms like a row, the button is the keyboard and screen reader way.
+export function ColumnSwapHandle({ label, onSwap }: { label: string; onSwap: () => void }) {
+  const button = useRef<HTMLButtonElement>(null);
+  const onSwapRef = useRef(onSwap);
+  useEffect(() => { onSwapRef.current = onSwap; });
+  useEffect(() => {
+    const cell = button.current?.closest<HTMLElement>("[data-column]") ?? null;
+    const head = cell?.closest<HTMLElement>(".info-table-head") ?? null;
+    if (!cell || !head) return;
+    // The cell stands inside a block card that is itself a sortable row; that card is its owner, not a nested row.
+    const owner = cell.closest<HTMLElement>("[data-sort-index]") ?? cell;
+    let state: HoldState = idleHold;
+    let timer: number | null = null;
+    let pressedId = -1;
+    let captured = false;
+    let endLift: (() => void) | null = null;
+    const otherCell = (x: number, y: number) => {
+      const found = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-column]") ?? null;
+      return found && found !== cell && found.closest(".info-table-head") === head ? found : null;
+    };
+    const clear = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = null;
+      state = idleHold;
+      if (button.current) delete button.current.dataset.dragging;
+      delete cell.dataset.lifted;
+      head.querySelectorAll("[data-drop-target]").forEach((item) => item.removeAttribute("data-drop-target"));
+      endLift?.();
+      endLift = null;
+      if (captured && cell.hasPointerCapture(pressedId)) cell.releasePointerCapture(pressedId);
+      captured = false;
+    };
+    const lift = () => {
+      if (!button.current || cell.dataset.lifted) return;
+      cell.dataset.lifted = "true";
+      // "column", not "true": editKeyFor folds only row drags into one step, and a column swap is a single change on drop.
+      button.current.dataset.dragging = "column";
+      try { cell.setPointerCapture(pressedId); captured = true; } catch {}
+      const refuse = (event: Event) => { if (event.cancelable) event.preventDefault(); };
+      window.getSelection()?.removeAllRanges();
+      window.addEventListener("touchmove", refuse, { passive: false });
+      document.addEventListener("selectstart", refuse);
+      document.addEventListener("dragstart", refuse);
+      document.addEventListener("contextmenu", refuse);
+      endLift = () => {
+        window.removeEventListener("touchmove", refuse);
+        document.removeEventListener("selectstart", refuse);
+        document.removeEventListener("dragstart", refuse);
+        document.removeEventListener("contextmenu", refuse);
+      };
+    };
+    const onPress = (event: PointerEvent) => {
+      if (!event.isPrimary || event.button !== 0 || !holdTargetAllowed(holdTargetOf(event.target, owner))) return;
+      clear();
+      pressedId = event.pointerId;
+      state = holdStep(idleHold, { type: "down", x: event.clientX, y: event.clientY, at: event.timeStamp });
+      timer = window.setTimeout(() => {
+        state = holdStep(state, { type: "tick", at: state.at + HOLD_MS });
+        if (state.phase === "lifted") lift();
+      }, HOLD_MS);
+    };
+    const onTrack = (event: PointerEvent) => {
+      if (!event.isPrimary || timer === null) return;
+      if (state.phase === "pressing") {
+        state = holdStep(state, { type: "move", x: event.clientX, y: event.clientY, at: event.timeStamp });
+        if (state.phase === "cancelled") { clear(); return; }
+        if (state.phase === "lifted") lift();
+      }
+      if (state.phase !== "lifted") return;
+      const over = otherCell(event.clientX, event.clientY);
+      head.querySelectorAll("[data-column]").forEach((item) => item.toggleAttribute("data-drop-target", item === over));
+    };
+    const onRelease = (event: PointerEvent) => {
+      if (!event.isPrimary) return;
+      const dropped = state.phase === "lifted" && event.type === "pointerup" ? otherCell(event.clientX, event.clientY) : null;
+      const swallow = holdStep(state, { type: event.type === "pointercancel" ? "cancel" : "up" }).suppressClick;
+      clear();
+      if (swallow) swallowNextClick();
+      if (dropped) onSwapRef.current();
+    };
+    cell.addEventListener("pointerdown", onPress);
+    window.addEventListener("blur", clear);
+    window.addEventListener("pointermove", onTrack);
+    window.addEventListener("pointerup", onRelease);
+    window.addEventListener("pointercancel", onRelease);
+    return () => {
+      cell.removeEventListener("pointerdown", onPress);
+      window.removeEventListener("blur", clear);
+      window.removeEventListener("pointermove", onTrack);
+      window.removeEventListener("pointerup", onRelease);
+      window.removeEventListener("pointercancel", onRelease);
+      clear();
+    };
+  }, []);
+  return <button
+    ref={button}
+    className="order-drag-handle column-swap-handle"
+    type="button"
+    aria-label={`Переставить столбец «${label}»`}
+    aria-keyshortcuts="ArrowLeft ArrowRight"
+    onKeyDown={(event) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      onSwap();
+    }}
+  ><span aria-hidden="true">≡</span></button>;
+}

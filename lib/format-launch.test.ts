@@ -100,6 +100,9 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //  18. PORTIA-26.1-EMP2 (26.1-02 Task 2; OWN-07, D-21) — вопрос о несохранённых сотрудниках задаётся только при закрытии окна: уход с вкладки «Сотрудники» ничего не спрашивает,
 //      состояние ожидающей вкладки leaveTo и её ветка убраны; при закрытии с несохранёнными черновиками с другой вкладки редактор сам переходит на «Сотрудники», где шов задаёт вопрос
 //      (applyEmployeesCloseHunk); русских строк не добавлено (вопрос и его кнопки лежат в шве). Источник одобрения: 26.1-OWNER-REQUEST OWN-07 («Сохранить?» только при закрытии) и план 26.1-02.
+//  19. PORTIA-26.1-HOLD (26.1-08; OWN-09, D-21) — столбцы таблицы переставляются удержанием заголовка, ручки ≡ нет: функция ColumnSwapHandle (с комментарием над ней) переехала в шов
+//      components/portia-editor-dossier.tsx, редактор только импортирует её оттуда (applyColumnSwapSeamHunk); вызовы в TableBlockEditor не менялись, русская подпись «Переставить столбец…»
+//      переехала вместе с функцией (D-58 берёт ожидаемый набор из образца после этой правки). Источник одобрения: 26.1-OWNER-REQUEST OWN-09 (2026-11-20, «убрать ручки везде») и план 26.1-08.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -1167,6 +1170,22 @@ function applyEmployeesCloseHunk(text: string): string {
   );
 }
 
+/**
+ * PORTIA-26.1-HOLD (26.1-08; OWN-09, D-21): ColumnSwapHandle живёт в шве components/portia-editor-dossier.tsx (удержание заголовка столбца вместо ручки ≡).
+ * Блок вырезается целиком по двум якорям — строке-комментарию «// Two table columns swap…» и строке `function normalizePhraseLines(` (каждая ровно одна);
+ * имя добавляется в импорт из шва. Русских строк не добавлено, строки функции переехали вместе с ней.
+ */
+function applyColumnSwapSeamHunk(text: string): string {
+  const lines = text.split("\n");
+  const starts = lines.flatMap((line, index) => (line.startsWith("// Two table columns swap, so a header") ? [index] : []));
+  assert.equal(starts.length, 1, "column swap seam: exactly one approved anchor for the start of the moved code");
+  const ends = lines.flatMap((line, index) => (line.startsWith("function normalizePhraseLines(") ? [index] : []));
+  assert.equal(ends.length, 1, "column swap seam: exactly one approved anchor for the end of the moved code");
+  assert.ok(starts[0] < ends[0], "the moved code stands above normalizePhraseLines");
+  lines.splice(starts[0], ends[0] - starts[0]);
+  return replaceOnce(lines.join("\n"), "ClassificationField, ConfirmDialog, DossierTabs", "ClassificationField, ColumnSwapHandle, ConfirmDialog, DossierTabs", "column swap seam: import");
+}
+
 /** Реестр одобренных правок (D-64): `apply` — порядок применения к образцу; `normalizeActual` — что вырезается из текущего файла перед сравнением. */
 const approvedEditorEdits: readonly { id: string; apply: (text: string) => string; normalizeActual?: (text: string) => string }[] = [
   { id: "D-57", apply: applyLaunchButtonHunk },
@@ -1191,6 +1210,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "GUIDE-PHOTO-FRAMING", apply: applyGuidePhotoFramingHunk },
   { id: "PORTIA-26.1-EMP", apply: applyEmployeesSeamHunk },
   { id: "PORTIA-26.1-EMP2", apply: applyEmployeesCloseHunk },
+  { id: "PORTIA-26.1-HOLD", apply: applyColumnSwapSeamHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -1342,6 +1362,10 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutEmployeesClose = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-EMP2").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutEmployeesClose), null, "a file without the PORTIA-26.1-EMP2 hunk is a difference");
   assert.throws(() => applyEmployeesCloseHunk(expected), /exactly one approved anchor/, "the employees close hunk cannot be applied twice");
+  const withoutColumnSwapSeam = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-HOLD").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutColumnSwapSeam), null, "a file without the PORTIA-26.1-HOLD hunk is a difference");
+  assert.throws(() => applyColumnSwapSeamHunk(expected), /exactly one approved anchor/, "the column swap seam hunk cannot be applied twice");
+  assert.ok(!expected.includes("function ColumnSwapHandle"), "the approved editor no longer holds ColumnSwapHandle");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

@@ -45,7 +45,7 @@ import { useImageRewrite } from "@/components/portia-image-rewrite";
 import { AppDeniedPanel } from "@/components/portia-desktop-states";
 import { UsersTab, UsersTabCount, useUsersPendingCount } from "@/components/portia-users-tab";
 import { accessCheckFailedText } from "@/lib/app-state";
-import { ArchivedVirusEditor, ClassificationField, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
+import { ArchivedVirusEditor, ClassificationField, ColumnSwapHandle, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
 import { cardToggleName } from "@/lib/card-toggle-name";
 import { EditorActionBar, EditorDraftBar, EditorDraftBarContext, EditorEmptyDetail, EditorTabBody, type EditorDraftBarState } from "@/components/portia-editor-tab-shell";
 
@@ -161,49 +161,6 @@ function recycleKeys(content: PortiaContent) {
     ...content.recycleFiles.map((file) => `file:${file.id}`),
     ...(content.recycledViruses ?? []).map((virus) => `virus:${virus.id}`),
   ])];
-}
-
-// Two table columns swap, so a header ≡ is dropped on the other header (or moved with ArrowLeft/ArrowRight) instead of sorting live.
-function ColumnSwapHandle({ label, onSwap }: { label: string; onSwap: () => void }) {
-  const otherCell = (button: HTMLElement, x: number, y: number) => {
-    const cell = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-column]") ?? null;
-    return cell && cell !== button.closest("[data-column]") && cell.closest(".info-table-head") === button.closest(".info-table-head") ? cell : null;
-  };
-  const clear = (button: HTMLElement) => {
-    delete button.dataset.dragging;
-    button.closest(".info-table-head")?.querySelectorAll("[data-drop-target]").forEach((cell) => cell.removeAttribute("data-drop-target"));
-  };
-  return <button
-    className="order-drag-handle column-swap-handle"
-    type="button"
-    aria-label={`Переставить столбец «${label}»`}
-    aria-keyshortcuts="ArrowLeft ArrowRight"
-    onPointerDown={(event) => {
-      if (!event.isPrimary || event.button !== 0) return;
-      event.currentTarget.setPointerCapture(event.pointerId);
-      // "column", not "true": editKeyFor folds only row drags into one step, and a column swap is a single change on drop.
-      event.currentTarget.dataset.dragging = "column";
-    }}
-    onPointerMove={(event) => {
-      const button = event.currentTarget;
-      if (!button.dataset.dragging) return;
-      const cell = otherCell(button, event.clientX, event.clientY);
-      button.closest(".info-table-head")?.querySelectorAll("[data-column]").forEach((item) => item.toggleAttribute("data-drop-target", item === cell));
-    }}
-    onPointerUp={(event) => {
-      const button = event.currentTarget;
-      const dropped = button.dataset.dragging && otherCell(button, event.clientX, event.clientY);
-      clear(button);
-      if (dropped) onSwap();
-    }}
-    onPointerCancel={(event) => clear(event.currentTarget)}
-    onLostPointerCapture={(event) => clear(event.currentTarget)}
-    onKeyDown={(event) => {
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-      event.preventDefault();
-      onSwap();
-    }}
-  ><span aria-hidden="true">≡</span></button>;
 }
 
 function normalizePhraseLines(lines: string[], document: RichTextDocument | undefined, fallback: string) {
