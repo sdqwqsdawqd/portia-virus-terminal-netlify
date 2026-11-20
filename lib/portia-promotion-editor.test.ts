@@ -68,7 +68,7 @@ test("bank settings keep drafts until an authoritative save settles", () => {
   assert.ok(ordinary.includes('setCommandState({ phase: "saving"'));
   assert.ok(qualification.includes('setCommandState({ phase: "saving"'));
   assert.ok(ordinary.includes("delete next[transition.targetTitleId]"));
-  assert.ok(qualification.includes("delete next[transition.transitionId]"));
+  assert.ok(qualification.includes("delete next[transitionKey]"));
   assert.ok(ordinary.includes("result?.state"));
   assert.ok(qualification.includes("result?.state"));
   assert.ok((ordinary + qualification).includes('role="status"'));
@@ -76,9 +76,11 @@ test("bank settings keep drafts until an authoritative save settles", () => {
 
 test("preview blockers explain exact active pool shortages", () => {
   assert.ok(ordinary.includes("taskBankLimitError"));
-  assert.ok(qualification.includes("qualificationBankLimitError"));
+  // owner 2026-11-20, OWN-08: quotas removed; the qualification editor counts the active questions itself.
+  assert.ok(qualification.includes("qualificationTestQuotas"));
+  assert.ok(!qualification.includes("qualificationBankLimitError"));
   assert.ok(ordinary.includes("bank?.requiredCount"));
-  assert.ok(qualification.includes("bank?.quotas"));
+  assert.ok(!qualification.includes("bank?.quotas"));
 });
 
 test("item editors prevent duplicate writes and preserve text typed during save", () => {
@@ -278,8 +280,9 @@ test("any bank mutation shows the stale-preview banner until the set is rebuilt"
 test("a save response never overwrites newer edits of counts and quotas", () => {
   assert.ok(ordinary.includes("submittedCount"));
   assert.ok(ordinary.includes("current[transition.targetTitleId] !== submittedCount"));
-  assert.ok(qualification.includes("submittedQuotas"));
-  assert.ok(qualification.includes("JSON.stringify(current[transition.transitionId]) !== JSON.stringify(submittedQuotas)"));
+  // owner 2026-11-20, OWN-08: quotas removed - no quota draft, nothing to overwrite; the rules draft keeps the same guard.
+  assert.ok(!qualification.includes("submittedQuotas") && !qualification.includes("quotaDrafts"));
+  assert.ok(qualification.includes("current[transitionKey] !== submittedRules"));
 });
 
 test("a failed save keeps the typed draft and reports the network failure in Russian", () => {
@@ -346,11 +349,37 @@ test("quick 261117-px5: questions are built in a dialog with one row per option 
   assert.match(styles, /\.promotion-question-types button\s*\{[^}]*flex:\s*0 0 auto/);
 });
 
-test("quick 261117-px5: quotas are explained in one line and an unsatisfiable save is blocked with it", () => {
-  assert.ok(qualificationEditor.includes("qualificationQuotaSummary"));
-  assert.ok(qualificationEditor.includes('id="promotion-quota-summary"'));
-  assert.match(qualificationEditor, /disabled=\{busy \|\| !quotaSummary\.ok\}[^>]*aria-describedby="promotion-quota-summary"/);
-  for (const label of ["Один ответ", "Несколько", "Свободный"]) assert.ok(qualificationEditor.includes(label), label);
+test("owner 2026-11-20, OWN-08: quotas removed - one composition line, no quota fields, no save-quotas button", () => {
+  for (const gone of ["quotaDrafts", "promotion-quota-settings", "promotion-quota-summary", "qualificationQuotaSummary", "СОХРАНИТЬ КВОТЫ", "Сначала сохраните квоты", "quotasAreDraft"]) assert.ok(!qualificationEditor.includes(gone), gone);
+  for (const label of [">Один ответ<", ">Несколько<", ">Свободный<"]) assert.ok(!qualificationEditor.includes(label), label);
+  assert.ok(!/type="number"/.test(qualificationEditor), "no number field is left in the editor");
+  assert.ok(qualificationEditor.includes("qualificationTestSummary(activePools)"));
+  assert.ok(qualificationEditor.includes("Сначала добавьте вопрос."));
+});
+
+test("owner 2026-11-20, OWN-08: «+ ВОПРОС» works for a transition without a bank and the first question creates it", () => {
+  assert.match(qualificationEditor, /<button className="primary-control" type="button" disabled=\{busy\} onClick=\{\(event\) => openNewQuestion\(event\.currentTarget\)\}>\+ ВОПРОС<\/button>/);
+  const create = qualificationEditor.slice(qualificationEditor.indexOf("const bankIdForQuestion"), qualificationEditor.indexOf("const mutate = async"));
+  assert.ok(create.includes('action: "save-qualification-bank"'));
+  assert.ok(create.includes("qualificationTestQuotas([{ type: firstType, active: true }])"));
+  assert.ok(create.includes("qualificationBanks"));
+  // The bank is made first, then the question is saved into the bank the answer names.
+  assert.ok(create.indexOf('"save-qualification-bank"') < create.indexOf('action: "save-question"'));
+  assert.match(create, /action: "save-question", bankId,/);
+  // A refused bank keeps the question in the dialog: the function returns before save-question and the dialog is closed only on a result.
+  assert.ok(create.includes("if (!bankId) return;"));
+});
+
+test("owner 2026-11-20, OWN-08: the set is every active question, capped at 100 with a visible line", () => {
+  assert.ok(qualificationEditor.includes("qualificationSetMessages.capped("));
+  assert.ok(qualificationEditor.includes("QUALIFICATION_TEST_MAX"));
+  assert.match(qualificationEditor, /className="promotion-command-state error" role="status">\{cappedLine\}/);
+  assert.ok(qualificationEditor.includes("Отмечено: {selectedPool.length} из {QUALIFICATION_TEST_MAX}"));
+  assert.ok(qualificationEditor.includes("СОБРАТЬ АВТОМАТИЧЕСКИ") && !qualificationEditor.includes("СОБРАТЬ СЛУЧАЙНО"));
+  assert.ok(qualificationEditor.includes("qualificationSetProblem(selectedPool.length)"));
+  assert.ok(qualificationEditor.includes("qualificationSetMessages.tooLarge.text") && qualificationEditor.includes("qualificationSetMessages.empty.text"));
+  // The marked set is sent as the active marked ids only, so a question switched off after marking never reaches the server.
+  assert.ok(qualificationEditor.includes("manualIds: selectedPool.map((item) => item.id)"));
 });
 
 test("quick 261117-px5: rules are saved with their own action, keep the open preview and refuse without the migration", () => {
@@ -359,7 +388,7 @@ test("quick 261117-px5: rules are saved with their own action, keep the open pre
   assert.ok(qualificationEditor.includes("СОХРАНИТЬ ПРАВИЛА"));
   assert.ok(qualificationEditor.includes("keepPreview: true"));
   assert.ok(qualificationEditor.includes("Правила станут доступны после обновления базы — миграция ждёт владельца."));
-  assert.ok(qualificationEditor.includes("Сначала сохраните квоты для этого перехода."));
+  assert.ok(qualificationEditor.includes("Сначала добавьте вопрос."));
   assert.ok(qualificationEditor.includes("QUALIFICATION_RULES_MAX_LENGTH"));
   const route = readFileSync(new URL("../app/api/promotion/banks/route.ts", import.meta.url), "utf8");
   assert.ok(route.includes('body.action === "save-qualification-rules"'));

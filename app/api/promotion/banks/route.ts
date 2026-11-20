@@ -11,6 +11,7 @@ import {
 } from "@/lib/portia-promotion-reviewer";
 import { qualificationPromotionTransitions } from "@/lib/portia-promotion";
 import { createPreviewToken, verifyPreviewToken } from "@/lib/portia-promotion-preview-token";
+import { pickAutoQualificationSet, qualificationSetMessages, qualificationSetProblem, qualificationTestQuotas } from "@/lib/portia-qualification-builder";
 import { qualificationRulesSaveFailure, qualificationRulesText } from "@/lib/portia-qualification-rules";
 import { parseJsonObject } from "@/lib/request-json";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -29,6 +30,12 @@ async function bankState(supabase: Awaited<ReturnType<typeof createServerSupabas
   const { data, error } = await supabase.rpc("portia_promo_bank_state");
   return error || !data || typeof data !== "object" ? null : data as BankState;
 }
+
+// OWN-08 (owner 2026-11-20): a set outside 1..100 is its own answer (422 with its own code), never the «bank changed» conflict.
+const setProblemResponse = (problem: "empty" | "too-large") => {
+  const message = problem === "empty" ? qualificationSetMessages.empty : qualificationSetMessages.tooLarge;
+  return Response.json({ error: message.text, code: message.code }, { status: 422, headers: noStoreHeaders });
+};
 
 export async function GET() {
   const supabase = await createServerSupabaseClient();
@@ -62,14 +69,19 @@ export async function POST(request: Request) {
         let items: Array<TaskPreviewItem | QualificationPreviewItem>;
         if (priorIds && priorIds.includes(replaceId)) {
           items = replacePreviewItem(bank.items, priorIds, replaceId, kind);
+        } else if (kind === "ordinary") {
+          items = selectTaskPreview(bank.items as TaskPreviewItem[], bank.requiredCount ?? 0, { manualIds });
         } else {
-          items = kind === "ordinary"
-            ? selectTaskPreview(bank.items as TaskPreviewItem[], bank.requiredCount ?? 0, { manualIds })
-            : selectQualificationPreview(bank.items as QualificationPreviewItem[], bank.quotas ?? { single: 0, multiple: 0, freeText: 0 }, { manualIds });
+          // The set is every active question (or the marked ones); the bank quotas are not used here.
+          const questions = bank.items as QualificationPreviewItem[];
+          const picked = manualIds ?? pickAutoQualificationSet(questions, Math.random);
+          const problem = qualificationSetProblem(picked.length);
+          if (problem) return setProblemResponse(problem);
+          items = selectQualificationPreview(questions, qualificationTestQuotas(questions, picked), { manualIds: picked });
         }
         const expiresAt = Date.now() + 10 * 60 * 1000;
         const preview = createPreviewToken({ kind, bankId, version: bank.version, ids: items.map((item) => item.id), expiresAt }, secret);
-        return Response.json({ preview, expiresAt: new Date(expiresAt).toISOString(), version: bank.version, items }, { headers: noStoreHeaders });
+        return Response.json({ preview, expiresAt: new Date(expiresAt).toISOString(), version: bank.version, items, activeCount: bank.items.filter((item) => item.active).length }, { headers: noStoreHeaders });
       } catch (error) {
         const reason = error instanceof Error ? error.message : "";
         if (reason === "stale-preview") return Response.json({ error: "Банк изменился. Соберите набор заново.", code: "stale-preview" }, { status: 409, headers: noStoreHeaders });
@@ -104,7 +116,7 @@ export async function POST(request: Request) {
       const failure = qualificationRulesSaveFailure(error.code);
       return Response.json({ error: failure.error, code: failure.code }, { status: failure.status, headers: noStoreHeaders });
     }
-    if (!data) return Response.json({ error: "Сначала сохраните квоты для этого перехода.", code: "bank-missing" }, { status: 409, headers: noStoreHeaders });
+    if (!data) return Response.json({ error: "Сначала добавьте вопрос.", code: "bank-missing" }, { status: 409, headers: noStoreHeaders });
     const reloaded = await bankState(supabase);
     return reloaded
       ? Response.json({ id: data, state: reloaded }, { headers: noStoreHeaders })

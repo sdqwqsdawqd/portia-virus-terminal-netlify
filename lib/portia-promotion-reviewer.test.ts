@@ -180,7 +180,7 @@ test("promotion reviewer routes use server access and RPCs, never browser openTa
 test("bank route settles commands only with an authoritative state and returns preview version", () => {
   const route = readFileSync(new URL("../app/api/promotion/banks/route.ts", import.meta.url), "utf8");
   assert.ok(route.includes("authoritative-state-unavailable"));
-  assert.match(route, /Response\.json\(\{ preview, expiresAt: new Date\(expiresAt\)\.toISOString\(\), version: bank\.version, items \}/);
+  assert.match(route, /Response\.json\(\{ preview, expiresAt: new Date\(expiresAt\)\.toISOString\(\), version: bank\.version, items, activeCount: bank\.items\.filter\(\(item\) => item\.active\)\.length \}/);
   assert.ok(route.includes("selectTaskPreview"));
   assert.ok(route.includes("selectQualificationPreview"));
   assert.ok(!route.includes('code: "insufficient-pool"'), "bank settings must save before the pool is filled");
@@ -319,4 +319,18 @@ test("97d7abb: a preview built while the bank was sufficient stops verifying onc
   assert.equal(verifyPreviewToken(token, { kind: "ordinary", bankId: "bank", version: "version-with-count-3", now: 1 }, secret), null);
   assert.equal(verifyPreviewToken(token, { kind: "qualification", bankId: "bank", version: "version-with-count-2", now: 1 }, secret), null);
   assert.equal(verifyPreviewToken(token, { kind: "ordinary", bankId: "bank", version: "version-with-count-2", now: 10_001 }, secret), null);
+});
+
+test("owner 2026-11-20, OWN-08: the qualification preview is built from the active or marked questions, not from the bank quotas, and a set outside 1..100 is a 422", () => {
+  const route = bankRouteSource();
+  const preview = route.slice(route.indexOf('body.action === "preview"'), route.indexOf("const token = typeof body.preview"));
+  assert.ok(preview.includes("pickAutoQualificationSet(questions, Math.random)"));
+  assert.ok(preview.includes("qualificationTestQuotas(questions, picked)"));
+  assert.ok(!preview.includes("bank.quotas"), "the stored quotas are not used by the preview");
+  // The size is judged before the selection, and the answer is a 422 with its own code, not the version conflict.
+  assert.ok(preview.indexOf("qualificationSetProblem(picked.length)") !== -1 && preview.indexOf("qualificationSetProblem(picked.length)") < preview.indexOf("selectQualificationPreview(questions"));
+  const helper = route.slice(route.indexOf("const setProblemResponse"), route.indexOf("export async function GET"));
+  assert.ok(helper.includes("status: 422") && !helper.includes("Банк изменился") && !helper.includes("409"));
+  assert.ok(helper.includes("qualificationSetMessages.empty") && helper.includes("qualificationSetMessages.tooLarge"));
+  assert.ok(route.indexOf("requirePromotionReviewer(supabase)", route.indexOf("export async function POST")) < route.indexOf("const body = parseJsonObject", route.indexOf("export async function POST")));
 });
