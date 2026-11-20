@@ -397,3 +397,14 @@ test("quick 261117-px5: rules are saved with their own action, keep the open pre
   assert.ok(route.indexOf("save-qualification-rules") > route.indexOf("64 * 1024") && route.indexOf("save-qualification-rules") < route.indexOf("parsePromotionBankCommand(body)"));
   assert.match(route, /Response\.json\(\{ id: data, state: reloaded \}/);
 });
+
+test("owner 2026-11-20, OWN-08: a hand-picked set is 1 to 100 active questions, with the reason written next to the buttons", () => {
+  assert.ok(qualificationEditor.includes("const manualSelectionValid = Boolean(bank) && manualProblem === null;"));
+  assert.ok(!qualificationEditor.includes("manualSelectionValid = Boolean(bank) && selectedPool.length ==="), "the manual set is not compared with quotas");
+  assert.ok(qualificationEditor.includes("const manualProblem = qualificationSetProblem(selectedPool.length);"));
+  assert.ok(qualificationEditor.includes('aria-describedby={manualReason ? "promotion-manual-reason-side" : undefined}'));
+  assert.ok(qualificationEditor.includes('id="promotion-manual-reason"') && qualificationEditor.includes('id="promotion-manual-reason-side"'));
+  assert.ok(qualificationEditor.includes("setManualTried(true)"));
+  // The pool counts active questions only: a question switched off is not in the test.
+  assert.ok(qualificationEditor.includes("const selectedPool = activeItems.filter((item) => manualIds.includes(item.id));"));
+});

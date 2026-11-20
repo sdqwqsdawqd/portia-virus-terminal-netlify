@@ -37,6 +37,23 @@ const setProblemResponse = (problem: "empty" | "too-large") => {
   return Response.json({ error: message.text, code: message.code }, { status: 422, headers: noStoreHeaders });
 };
 
+// OWN-08 (owner 2026-11-20): quotas are gone from the editor; the stored counts only satisfy portia_promo_confirm_test (the set must be as long as their sum),
+// so they follow the set being confirmed. Called only after the token, the activity of every id and the size of the set (1..100) were checked.
+async function syncQualificationCounts(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, bank: Bank, ids: readonly string[]): Promise<{ bank: Bank } | { failure: "stale" | "program" }> {
+  const wanted = qualificationTestQuotas(bank.items as QualificationPreviewItem[], ids);
+  const stored = bank.quotas;
+  if (stored && stored.single === wanted.single && stored.multiple === wanted.multiple && stored.freeText === wanted.freeText) return { bank };
+  const command = parsePromotionBankCommand({ action: "save-qualification-bank", transitionId: bank.transitionId, quotas: wanted });
+  if (!command) return { failure: "program" };
+  const { error } = await supabase.rpc("portia_promo_bank_command", { p_action: command.action, p_payload: command });
+  if (error) return { failure: "stale" };
+  const reloaded = await bankState(supabase);
+  const fresh = reloaded?.qualificationBanks.find((item) => item.id === bank.id);
+  // The version moved with the counts: the confirmation below uses the reloaded bank, and every id must still be an active question of it.
+  if (!fresh || !ids.every((id) => fresh.items.some((item) => item.id === id && item.active))) return { failure: "stale" };
+  return { bank: fresh };
+}
+
 export async function GET() {
   const supabase = await createServerSupabaseClient();
   const auth = await requirePromotionReviewer(supabase);
@@ -95,9 +112,21 @@ export async function POST(request: Request) {
     if (new Set(ids).size !== ids.length) return Response.json({ error: "Набор содержит повторы.", code: "confirm-conflict" }, { status: 409, headers: noStoreHeaders });
     const selected = ids.map((id) => bank.items.find((item) => item.id === id && item.active)).filter(Boolean);
     if (selected.length !== ids.length) return Response.json({ error: "Банк изменился. Соберите набор заново.", code: "stale-preview" }, { status: 409, headers: noStoreHeaders });
+    let confirmBank = bank;
+    if (kind === "qualification") {
+      const problem = qualificationSetProblem(ids.length);
+      if (problem) return setProblemResponse(problem);
+      const synced = await syncQualificationCounts(supabase, bank, ids);
+      if ("failure" in synced) {
+        return synced.failure === "program"
+          ? Response.json({ error: "Не удалось подтвердить набор.", code: "confirm-failed" }, { status: 500, headers: noStoreHeaders })
+          : Response.json({ error: "Банк изменился. Соберите набор заново.", code: "stale-preview" }, { status: 409, headers: noStoreHeaders });
+      }
+      confirmBank = synced.bank;
+    }
     const rpc = kind === "ordinary"
       ? ["portia_promo_confirm_assignment", { p_request_id: requestId, p_bank_id: bankId, p_bank_version: bank.version, p_items: selected.map((item, sortOrder) => ({ source_item_id: item!.id, sort_order: sortOrder })) }]
-      : ["portia_promo_confirm_test", { p_request_id: requestId, p_bank_id: bankId, p_bank_version: bank.version, p_questions: selected.map((item, sortOrder) => ({ source_question_id: item!.id, sort_order: sortOrder })) }];
+      : ["portia_promo_confirm_test", { p_request_id: requestId, p_bank_id: bankId, p_bank_version: confirmBank.version, p_questions: selected.map((item, sortOrder) => ({ source_question_id: item!.id, sort_order: sortOrder })) }];
     const { data, error } = await supabase.rpc(rpc[0] as string, rpc[1] as Record<string, unknown>);
     return error || !data
       ? Response.json({ error: "Не удалось подтвердить набор.", code: error?.code === "42883" ? "pending-database" : "confirm-conflict" }, { status: error?.code === "42883" ? 503 : 409, headers: noStoreHeaders })

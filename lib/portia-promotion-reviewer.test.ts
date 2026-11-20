@@ -334,3 +334,29 @@ test("owner 2026-11-20, OWN-08: the qualification preview is built from the acti
   assert.ok(helper.includes("qualificationSetMessages.empty") && helper.includes("qualificationSetMessages.tooLarge"));
   assert.ok(route.indexOf("requirePromotionReviewer(supabase)", route.indexOf("export async function POST")) < route.indexOf("const body = parseJsonObject", route.indexOf("export async function POST")));
 });
+
+test("owner 2026-11-20, OWN-08: confirm brings the stored counts to the confirmed set, in a fixed order, without touching the SQL", () => {
+  const route = bankRouteSource();
+  const confirm = route.slice(route.indexOf("const token = typeof body.preview"));
+  const order = ["verifyPreviewToken(token", "new Set(ids).size !== ids.length", "item.id === id && item.active", "qualificationSetProblem(ids.length)", "syncQualificationCounts(supabase, bank, ids)", "portia_promo_confirm_test"].map((part) => confirm.indexOf(part));
+  assert.ok(order.every((at) => at !== -1), String(order));
+  assert.deepEqual([...order].sort((a, b) => a - b), order, "token, duplicates, activity, size, sync, confirm");
+  assert.ok(route.includes("OWN-08 (owner 2026-11-20)"));
+  // The version of the reloaded bank is what the SQL checks.
+  assert.match(confirm, /p_bank_version: confirmBank\.version, p_questions/);
+  const sync = route.slice(route.indexOf("async function syncQualificationCounts"), route.indexOf("export async function GET"));
+  assert.ok(sync.includes("parsePromotionBankCommand({ action: \"save-qualification-bank\", transitionId: bank.transitionId, quotas: wanted })"));
+  assert.ok(sync.includes('"portia_promo_bank_command"') && sync.includes("bankState(supabase)"));
+  assert.ok(sync.includes("fresh.items.some((item) => item.id === id && item.active)"), "activity is checked again after the reload");
+  // An unparsable command is a program error (500), never the version conflict.
+  const branch = confirm.slice(confirm.indexOf('if (kind === "qualification")'), confirm.indexOf("const rpc = kind"));
+  assert.match(branch, /"program"\s*\?\s*Response\.json\(\{ error: "Не удалось подтвердить набор\.", code: "confirm-failed" \}, \{ status: 500/);
+  // «Банк изменился» appears in the qualification branch only after the sync call; the empty/too-large answers come before it and are 422.
+  assert.ok(branch.indexOf("Банк изменился") > branch.indexOf("syncQualificationCounts("));
+  assert.ok(branch.indexOf("setProblemResponse(problem)") !== -1 && branch.indexOf("setProblemResponse(problem)") < branch.indexOf("syncQualificationCounts("));
+  const helper = route.slice(route.indexOf("const setProblemResponse"), route.indexOf("async function syncQualificationCounts"));
+  assert.ok(helper.includes("status: 422") && !helper.includes("Банк изменился"));
+  // Ordinary assignments keep their path; the route still starts with the reviewer check and the SQL is not part of this change.
+  assert.ok(confirm.includes('"portia_promo_confirm_assignment", { p_request_id: requestId, p_bank_id: bankId, p_bank_version: bank.version'));
+  assert.ok(route.slice(route.indexOf("export async function POST")).indexOf("requirePromotionReviewer(supabase)") < route.slice(route.indexOf("export async function POST")).indexOf("parseJsonObject"));
+});
