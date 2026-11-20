@@ -1,7 +1,7 @@
 import type { ImageFraming } from "./image-framing.ts";
 import { MAX_BLOCKS, MAX_SUBSECTIONS, MAX_TABLE_ROWS } from "./content-limits.ts";
-import { makeId, removeGuideBlock, removeGuideCard, removeGuideSection } from "./editor-items.ts";
-import { findGuide, portiaTextKey, type GuideBlock, type GuideCard, type PortiaContent } from "./portia-content.ts";
+import { makeId, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection } from "./editor-items.ts";
+import { findGuide, findInfo, portiaTextKey, type GuideBlock, type GuideCard, type InfoBlock, type InfoSubsection, type PortiaContent } from "./portia-content.ts";
 import { parseYoutubeId } from "./portia-content-normalize.ts";
 import { splitEmbeddedMedia } from "./rich-text-media.ts";
 
@@ -39,12 +39,18 @@ export type LiveTarget =
   | { kind: "guide-block-text"; cardId: string; blockId: string }
   /** «Информация» (26.1-11): the title of a section, and its body (formatted text, stored under portiaTextKey.info(sectionId)). */
   | { kind: "info-section-title"; sectionId: string }
-  | { kind: "info-section-body"; sectionId: string };
+  | { kind: "info-section-body"; sectionId: string }
+  | { kind: "info-subsection-title"; subsectionId: string }
+  /** The text of a text block of a subsection: formatted text, stored under portiaTextKey.infoBlock(blockId). */
+  | { kind: "info-block-text"; subsectionId: string; blockId: string }
+  | { kind: "info-table-key" | "info-table-value"; subsectionId: string; blockId: string; rowId: string }
+  | { kind: "info-video-url"; subsectionId: string; blockId: string };
 
 /** The key of the stored formatting (draft.formattedText) of a formatted text place; "" for a plain one. */
 export function liveTextKey(target: LiveTarget): string {
   if (target.kind === "guide-block-text") return portiaTextKey.guideBlock(target.blockId);
   if (target.kind === "info-section-body") return portiaTextKey.info(target.sectionId);
+  if (target.kind === "info-block-text") return portiaTextKey.infoBlock(target.blockId);
   return "";
 }
 
@@ -52,12 +58,15 @@ export function liveTextKey(target: LiveTarget): string {
 export type LiveImageTarget =
   | { kind: "guide-section-photo"; sectionId: string }
   | { kind: "guide-card-cover"; cardId: string }
-  | { kind: "guide-photo-url"; cardId: string; blockId: string };
+  | { kind: "guide-photo-url"; cardId: string; blockId: string }
+  | { kind: "info-photo-url"; subsectionId: string; blockId: string };
 
 /** The block «Карточки»: the ids of the cards it shows. */
 export type LiveCardsTarget = { kind: "guide-cards-block"; cardId: string; blockId: string };
 
 const findBlock = (draft: PortiaContent, cardId: string, blockId: string): GuideBlock | undefined => findGuide(draft.guideSections, cardId)?.card?.blocks.find((item) => item.id === blockId);
+
+const findInfoBlock = (draft: PortiaContent, subsectionId: string, blockId: string): InfoBlock | undefined => findInfo(draft.infoSections, subsectionId)?.subsection?.blocks.find((item) => item.id === blockId);
 
 /** Writes `value` into the place; false when the place is gone. Plain lines are cut to TEXT_LIMIT; a video link is read as a YouTube address (nothing recognised leaves no video). */
 export function applyLiveText(draft: PortiaContent, target: LiveTarget, value: string): boolean {
@@ -74,6 +83,32 @@ export function applyLiveText(draft: PortiaContent, target: LiveTarget, value: s
       const section = draft.infoSections.find((item) => item.id === target.sectionId);
       if (!section) return false;
       if (target.kind === "info-section-title") section.title = line; else section.body = value;
+      return true;
+    }
+    case "info-subsection-title": {
+      const subsection = findInfo(draft.infoSections, target.subsectionId)?.subsection;
+      if (!subsection) return false;
+      subsection.title = line;
+      return true;
+    }
+    case "info-table-key":
+    case "info-table-value": {
+      const block = findInfoBlock(draft, target.subsectionId, target.blockId);
+      const row = block?.type === "table" ? block.rows.find((item) => item.id === target.rowId) : undefined;
+      if (!row) return false;
+      if (target.kind === "info-table-key") row.key = line; else row.value = line;
+      return true;
+    }
+    case "info-block-text": {
+      const block = findInfoBlock(draft, target.subsectionId, target.blockId);
+      if (block?.type !== "text") return false;
+      block.text = value;
+      return true;
+    }
+    case "info-video-url": {
+      const block = findInfoBlock(draft, target.subsectionId, target.blockId);
+      if (block?.type !== "video") return false;
+      block.videoId = parseYoutubeId(value);
       return true;
     }
     case "guide-card-title": {
@@ -116,6 +151,11 @@ function pictureOf(draft: PortiaContent, target: LiveImageTarget): { address: st
     if (!card) return null;
     return { address: card.cover, set: (url) => { card.cover = url; }, frame: (frame) => { if (frame) card.coverFraming = frame; else delete card.coverFraming; } };
   }
+  if (target.kind === "info-photo-url") {
+    const infoBlock = findInfoBlock(draft, target.subsectionId, target.blockId);
+    if (infoBlock?.type !== "photo") return null;
+    return { address: infoBlock.url, set: (url) => { infoBlock.url = url; }, frame: (frame) => { if (frame) infoBlock.framing = frame; else delete infoBlock.framing; } };
+  }
   const block = findBlock(draft, target.cardId, target.blockId);
   if (block?.type !== "photo") return null;
   return { address: block.url, set: (url) => { block.url = url; }, frame: (frame) => { if (frame) block.framing = frame; else delete block.framing; } };
@@ -147,29 +187,43 @@ export function applyLiveCards(draft: PortiaContent, target: LiveCardsTarget, ca
 }
 
 /** What the bar «Добавить: …» can add (`row` is a row of a table block). The cover is not here: it is a picture place, not a new element. */
-export type LiveAddKind = "section" | "card" | "heading" | "text" | "table" | "photo" | "video" | "callout" | "cards" | "row";
+export type LiveAddKind = "section" | "subsection" | "card" | "heading" | "text" | "table" | "photo" | "video" | "callout" | "cards" | "row";
 
-/** A place that takes new elements: the list of sections, one section (cards), one card (blocks), one table block (rows). */
+/** A place that takes new elements: the list of sections, one section (cards), one card (blocks), one table block (rows); in «Информации» the table of contents (sections and subsections), one subsection (blocks), one table block (rows). */
 export type LiveContainer =
   | { kind: "guide-root" }
   | { kind: "guide-section"; sectionId: string }
   | { kind: "guide-card"; cardId: string }
-  | { kind: "guide-table"; cardId: string; blockId: string };
+  | { kind: "guide-table"; cardId: string; blockId: string }
+  /** The table of contents: a section anywhere, a subsection in `sectionId` (the section on show; "" when there is none). */
+  | { kind: "info-index"; sectionId: string }
+  | { kind: "info-subsection"; subsectionId: string }
+  | { kind: "info-table"; subsectionId: string; blockId: string };
 
 /** An ordered list the live mode can reorder. */
 export type LiveList =
   | { kind: "guide-sections" }
   | { kind: "guide-cards"; sectionId: string }
-  | { kind: "guide-blocks"; cardId: string };
+  | { kind: "guide-blocks"; cardId: string }
+  | { kind: "info-sections" }
+  | { kind: "info-subsections"; sectionId: string }
+  | { kind: "info-blocks"; subsectionId: string };
 
 /** An element the live mode can remove, after a question. */
 export type LiveRemovable =
   | { kind: "guide-section"; sectionId: string }
   | { kind: "guide-card"; cardId: string }
   | { kind: "guide-block"; cardId: string; blockId: string }
-  | { kind: "guide-table-row"; cardId: string; blockId: string; rowId: string };
+  | { kind: "guide-table-row"; cardId: string; blockId: string; rowId: string }
+  | { kind: "info-section"; sectionId: string }
+  | { kind: "info-subsection"; sectionId: string; subsectionId: string }
+  | { kind: "info-block"; subsectionId: string; blockId: string }
+  | { kind: "info-table-row"; subsectionId: string; blockId: string; rowId: string };
 
-const newBlock: Record<Exclude<LiveAddKind, "section" | "card" | "row">, (id: string) => GuideBlock> = {
+type GuideBlockKind = "heading" | "text" | "table" | "photo" | "video" | "callout" | "cards";
+type InfoBlockKind = "text" | "table" | "photo" | "video";
+
+const newBlock: Record<GuideBlockKind, (id: string) => GuideBlock> = {
   heading: (id) => ({ id, type: "heading", text: "" }),
   text: (id) => ({ id, type: "text", text: "" }),
   table: (id) => ({ id, type: "table", rows: [{ id: makeId("row"), key: "", value: "" }] }),
@@ -179,49 +233,91 @@ const newBlock: Record<Exclude<LiveAddKind, "section" | "card" | "row">, (id: st
   cards: (id) => ({ id, type: "cards", cardIds: [] }),
 };
 
+const newInfoBlock: Record<InfoBlockKind, (id: string) => InfoBlock> = {
+  text: (id) => ({ id, type: "text", text: "" }),
+  table: (id) => ({ id, type: "table", rows: [{ id: makeId("row"), key: "", value: "" }] }),
+  photo: (id) => ({ id, type: "photo", url: "" }),
+  video: (id) => ({ id, type: "video", videoId: "" }),
+};
+
 /** The kinds a container takes, in the order of its bar. */
 export function liveAddKinds(container: LiveContainer): LiveAddKind[] {
   if (container.kind === "guide-root") return ["section"];
   if (container.kind === "guide-section") return ["card"];
-  if (container.kind === "guide-table") return ["row"];
+  if (container.kind === "guide-table" || container.kind === "info-table") return ["row"];
+  if (container.kind === "info-index") return ["section", "subsection"];
+  if (container.kind === "info-subsection") return ["text", "table", "photo", "video"];
   return ["heading", "text", "table", "photo", "video", "callout", "cards"];
 }
 
+/** A new id for an element of `kind` made in `container`, with the prefix the editor's own buttons use. The surface makes it beforehand to put the new element on show. */
+export function liveNewId(container: LiveContainer, kind: LiveAddKind): string {
+  if (kind === "section") return makeId(container.kind === "guide-root" ? "guide" : "info");
+  if (kind === "subsection") return makeId("info");
+  if (kind === "card") return makeId("card");
+  if (kind === "row") return makeId("row");
+  return makeId("block");
+}
+
+/** The sections of «Информации» and the like: the one the container names, found in the draft. */
+const infoSectionOf = (draft: PortiaContent, sectionId: string) => draft.infoSections.find((item) => item.id === sectionId);
+
 /**
  * Adds a new element of `kind` to the container with the shape the editor's own buttons make; returns its id, or null when the container is gone,
- * does not take the kind, or is full (MAX_BLOCKS blocks, MAX_SUBSECTIONS cards, MAX_TABLE_ROWS rows).
+ * does not take the kind, or is full (MAX_BLOCKS blocks, MAX_SUBSECTIONS cards or subsections, MAX_TABLE_ROWS rows). `id` is the id to give it (liveNewId); absent, one is made.
  */
-export function applyLiveAdd(draft: PortiaContent, container: LiveContainer, kind: LiveAddKind): string | null {
+export function applyLiveAdd(draft: PortiaContent, container: LiveContainer, kind: LiveAddKind, id: string = liveNewId(container, kind)): string | null {
   if (!liveAddKinds(container).includes(kind)) return null;
   if (container.kind === "guide-root") {
-    const id = makeId("guide");
     draft.guideSections.push({ id, title: "НОВЫЙ РАЗДЕЛ", photo: "", cards: [] });
     return id;
   }
   if (container.kind === "guide-section") {
     const section = draft.guideSections.find((item) => item.id === container.sectionId);
     if (!section || section.cards.length >= MAX_SUBSECTIONS) return null;
-    const id = makeId("card");
     section.cards.push({ id, title: "НОВАЯ КАРТОЧКА", cover: "", blocks: [] });
     return id;
   }
   if (container.kind === "guide-table") {
     const block = findBlock(draft, container.cardId, container.blockId);
     if (block?.type !== "table" || block.rows.length >= MAX_TABLE_ROWS) return null;
-    const id = makeId("row");
     block.rows.push({ id, key: "", value: "" });
+    return id;
+  }
+  if (container.kind === "info-index") {
+    if (kind === "section") {
+      draft.infoSections.push({ id, title: "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] });
+      return id;
+    }
+    const section = infoSectionOf(draft, container.sectionId);
+    if (!section || section.subsections.length >= MAX_SUBSECTIONS) return null;
+    section.subsections.push({ id, title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] });
+    return id;
+  }
+  if (container.kind === "info-table") {
+    const block = findInfoBlock(draft, container.subsectionId, container.blockId);
+    if (block?.type !== "table" || block.rows.length >= MAX_TABLE_ROWS) return null;
+    block.rows.push({ id, key: "", value: "" });
+    return id;
+  }
+  if (container.kind === "info-subsection") {
+    const subsection = findInfo(draft.infoSections, container.subsectionId)?.subsection;
+    if (!subsection || subsection.blocks.length >= MAX_BLOCKS) return null;
+    subsection.blocks.push(newInfoBlock[kind as InfoBlockKind](id));
     return id;
   }
   const card = findGuide(draft.guideSections, container.cardId)?.card;
   if (!card || card.blocks.length >= MAX_BLOCKS) return null;
-  const id = makeId("block");
-  card.blocks.push(newBlock[kind as keyof typeof newBlock](id));
+  card.blocks.push(newBlock[kind as GuideBlockKind](id));
   return id;
 }
 
 function listOf(draft: PortiaContent, list: LiveList): unknown[] | null {
   if (list.kind === "guide-sections") return draft.guideSections;
   if (list.kind === "guide-cards") return draft.guideSections.find((item) => item.id === list.sectionId)?.cards ?? null;
+  if (list.kind === "info-sections") return draft.infoSections;
+  if (list.kind === "info-subsections") return infoSectionOf(draft, list.sectionId)?.subsections ?? null;
+  if (list.kind === "info-blocks") return findInfo(draft.infoSections, list.subsectionId)?.subsection?.blocks ?? null;
   return findGuide(draft.guideSections, list.cardId)?.card?.blocks ?? null;
 }
 
@@ -237,12 +333,16 @@ export function applyLiveMove(draft: PortiaContent, list: LiveList, from: number
 /** The formatting keys that go with a removed element, so the editor can close its format panel for them. */
 export function liveRemovedKeys(draft: PortiaContent, item: LiveRemovable): string[] {
   const keys = (cards: GuideCard[]) => cards.flatMap((card) => card.blocks.map((block) => portiaTextKey.guideBlock(block.id)));
+  const infoKeys = (subsections: InfoSubsection[]) => subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id)));
   if (item.kind === "guide-section") return keys(draft.guideSections.find((section) => section.id === item.sectionId)?.cards ?? []);
   if (item.kind === "guide-card") {
     const card = findGuide(draft.guideSections, item.cardId)?.card;
     return keys(card ? [card] : []);
   }
   if (item.kind === "guide-block") return [portiaTextKey.guideBlock(item.blockId)];
+  if (item.kind === "info-section") return [portiaTextKey.info(item.sectionId), ...infoKeys(infoSectionOf(draft, item.sectionId)?.subsections ?? [])];
+  if (item.kind === "info-subsection") return infoKeys(infoSectionOf(draft, item.sectionId)?.subsections.filter((sub) => sub.id === item.subsectionId) ?? []);
+  if (item.kind === "info-block") return [portiaTextKey.infoBlock(item.blockId)];
   return [];
 }
 
@@ -263,7 +363,22 @@ export function applyLiveRemove(draft: PortiaContent, item: LiveRemovable): bool
     removeGuideBlock(draft, item.cardId, item.blockId);
     return true;
   }
-  const block = findBlock(draft, item.cardId, item.blockId);
+  if (item.kind === "info-section") {
+    if (!infoSectionOf(draft, item.sectionId)) return false;
+    removeInfoSection(draft, item.sectionId);
+    return true;
+  }
+  if (item.kind === "info-subsection") {
+    if (!infoSectionOf(draft, item.sectionId)?.subsections.some((sub) => sub.id === item.subsectionId)) return false;
+    removeInfoSubsection(draft, item.sectionId, item.subsectionId);
+    return true;
+  }
+  if (item.kind === "info-block") {
+    if (!findInfoBlock(draft, item.subsectionId, item.blockId)) return false;
+    removeInfoBlock(draft, item.subsectionId, item.blockId);
+    return true;
+  }
+  const block = item.kind === "info-table-row" ? findInfoBlock(draft, item.subsectionId, item.blockId) : findBlock(draft, item.cardId, item.blockId);
   if (block?.type !== "table" || !block.rows.some((row) => row.id === item.rowId)) return false;
   block.rows = block.rows.filter((row) => row.id !== item.rowId);
   return true;
@@ -274,11 +389,22 @@ export function liveMediaUrls(text: string): string[] {
   return splitEmbeddedMedia(text).flatMap((segment) => (segment.kind === "media" ? [segment.url] : []));
 }
 
-/** True when the container takes no more of its kind (the bar then disables its buttons instead of recording an edit that changes nothing). */
-export function liveContainerFull(draft: PortiaContent, container: LiveContainer): boolean {
+/** True when the container takes no more of `kind` (the bar then disables that button instead of recording an edit that changes nothing). */
+export function liveAddBlocked(draft: PortiaContent, container: LiveContainer, kind: LiveAddKind): boolean {
   if (container.kind === "guide-root") return false;
   if (container.kind === "guide-section") return (draft.guideSections.find((item) => item.id === container.sectionId)?.cards.length ?? 0) >= MAX_SUBSECTIONS;
   if (container.kind === "guide-card") return (findGuide(draft.guideSections, container.cardId)?.card?.blocks.length ?? 0) >= MAX_BLOCKS;
-  const block = findBlock(draft, container.cardId, container.blockId);
+  if (container.kind === "info-index") {
+    if (kind === "section") return false;
+    const section = infoSectionOf(draft, container.sectionId);
+    return !section || section.subsections.length >= MAX_SUBSECTIONS;
+  }
+  if (container.kind === "info-subsection") return (findInfo(draft.infoSections, container.subsectionId)?.subsection?.blocks.length ?? 0) >= MAX_BLOCKS;
+  const block = container.kind === "info-table" ? findInfoBlock(draft, container.subsectionId, container.blockId) : findBlock(draft, container.cardId, container.blockId);
   return block?.type === "table" && block.rows.length >= MAX_TABLE_ROWS;
+}
+
+/** True when the container takes nothing more of any kind. */
+export function liveContainerFull(draft: PortiaContent, container: LiveContainer): boolean {
+  return liveAddKinds(container).every((kind) => liveAddBlocked(draft, container, kind));
 }

@@ -10,7 +10,7 @@ import { EmbeddedMediaStrip, FormattedText } from "@/components/portia-virus-car
 import type { BroadcastTab } from "@/lib/broadcasts";
 import type { ImageFraming } from "@/lib/image-framing";
 import {
-  applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveContainerFull, liveRemovedKeys, liveTextKey,
+  applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddBlocked, liveAddKinds, liveAppForTab, liveNewId, liveRemovedKeys, liveTextKey,
   type LiveAddKind, type LiveApp, type LiveCardsTarget, type LiveContainer, type LiveImageTarget, type LiveList, type LiveRemovable, type LiveTarget,
 } from "@/lib/live-edit";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
@@ -27,7 +27,7 @@ export const liveCopy = {
   untitled: "Без названия",
   addLabel: "Добавить:",
   addGroup: "Добавить элемент",
-  kinds: { section: "Раздел", card: "Карточку", heading: "Заголовок", text: "Текст", table: "Таблицу", photo: "Фото", video: "Видео", callout: "Врезку", cards: "Карточки", row: "Строку" } satisfies Record<LiveAddKind, string>,
+  kinds: { section: "Раздел", card: "Карточку", heading: "Заголовок", text: "Текст", table: "Таблицу", photo: "Фото", video: "Видео", callout: "Врезку", cards: "Карточки", row: "Строку", subsection: "Подраздел" } satisfies Record<LiveAddKind, string>,
   cover: "Обложку",
   coverLabel: "Обложка",
   full: "Больше нельзя",
@@ -43,6 +43,11 @@ export const liveCopy = {
     "guide-block-text": "Текст",
     "info-section-title": "Название раздела",
     "info-section-body": "Текст раздела",
+    "info-subsection-title": "Название подраздела",
+    "info-block-text": "Текст",
+    "info-table-key": "Название строки",
+    "info-table-value": "Значение строки",
+    "info-video-url": "Ссылка на видео",
   } satisfies Record<LiveTarget["kind"], string>,
   placeholders: {
     "guide-section-title": "Название раздела",
@@ -56,18 +61,23 @@ export const liveCopy = {
     "guide-block-text": "Нажмите, чтобы написать",
     "info-section-title": "Название раздела",
     "info-section-body": "Нажмите, чтобы написать",
+    "info-subsection-title": "Название подраздела",
+    "info-block-text": "Нажмите, чтобы написать",
+    "info-table-key": "Название",
+    "info-table-value": "Значение",
+    "info-video-url": "Ссылка на видео",
   } satisfies Record<LiveTarget["kind"], string>,
   infoIndex: "Разделы информации",
   infoSubsections: (count: number) => `Подразделов: ${count}`,
   infoEmpty: "Разделов пока нет",
   richEmpty: "Нажмите, чтобы написать",
-  lists: { "guide-sections": "раздел", "guide-cards": "карточка", "guide-blocks": "блок" } satisfies Record<LiveList["kind"], string>,
+  lists: { "guide-sections": "раздел", "guide-cards": "карточка", "guide-blocks": "блок", "info-sections": "раздел", "info-subsections": "подраздел", "info-blocks": "блок" } satisfies Record<LiveList["kind"], string>,
   removeLabel: "Удалить",
   removeTitle: "Удалить?",
   removeText: (label: string) => `Удалить вместе с содержимым: ${label}.`,
   removeConfirm: "УДАЛИТЬ",
   removeCancel: "ОТМЕНА",
-  removeNames: { "guide-section": "раздел", "guide-card": "карточку", "guide-block": "блок", "guide-table-row": "строку" } satisfies Record<LiveRemovable["kind"], string>,
+  removeNames: { "guide-section": "раздел", "guide-card": "карточку", "guide-block": "блок", "guide-table-row": "строку", "info-section": "раздел", "info-subsection": "подраздел", "info-block": "блок", "info-table-row": "строку" } satisfies Record<LiveRemovable["kind"], string>,
   imageAdd: "Добавить фото",
   sectionPhoto: "Фото раздела",
   imageReplace: "Заменить",
@@ -150,22 +160,39 @@ function InfoSurface({ bridge }: { bridge: LiveEditorBridge }) {
   // What is shown: the picked article, else the section the editor has open, else the first section; a vanished id (a removed section) falls through.
   const entry = findInfo(sections, picked) ?? findInfo(sections, bridge.infoSection) ?? (sections[0] ? { section: sections[0], subsection: null } : null);
   const select = (id: string, sectionId: string) => { setPicked(id); bridge.setInfoSection(sectionId); };
+  // A section or subsection the bar adds is put on show at once, and the editor's own selection follows.
+  const live = createLiveApi("info", bridge, { onAdded: (kind, id, container) => {
+    if (kind === "section") select(id, id);
+    else if (kind === "subsection" && container.kind === "info-index") select(id, container.sectionId);
+  } });
   return <div className="live-surface" data-live-app="info">
-    <LiveEditContext.Provider value={createLiveApi("info", bridge)}>
+    <LiveEditContext.Provider value={live}>
       <div className="info-library">
         <nav className="info-index" aria-label={liveCopy.infoIndex} id="info-sections-list">
           {sections.map((section, index) => {
             const open = section.id === entry?.section.id;
             const count = section.subsections.length;
-            return <div key={section.id}>
+            // A section is a row of the order list, and so is each of its subsections; the keyboard button stands inside the row, the × beside the button.
+            const order = live.order({ kind: "info-sections" }, index, section.title);
+            return <div key={section.id} className="live-index-row" {...order.rowProps}>
+              {order.handle}
               <button type="button" className={`${open && !entry?.subsection ? "active" : ""}${count ? " has-subsections" : ""}`} data-info-id={section.id} aria-expanded={count ? open : undefined} onClick={() => select(section.id, section.id)}>
                 <small>{indexNumber(index)}</small><span>{section.title || liveCopy.untitled}</span>{count ? <em className="info-sub-marker" aria-label={liveCopy.infoSubsections(count)}>{open ? "▾" : "▸"} {count}</em> : null}
               </button>
-              {open && count ? <div className="info-subsections">{section.subsections.map((sub, subIndex) => <button key={sub.id} type="button" className={sub.id === entry?.subsection?.id ? "active" : ""} data-info-id={sub.id} title={sub.title || liveCopy.untitled} onClick={() => select(sub.id, section.id)}>
-                <small>{indexNumber(index)}.{subIndex + 1}</small><span>{sub.title || liveCopy.untitled}</span>
-              </button>)}</div> : null}
+              {live.remove({ kind: "info-section", sectionId: section.id }, section.title)}
+              {open && count ? <div className="info-subsections">{section.subsections.map((sub, subIndex) => {
+                const subOrder = live.order({ kind: "info-subsections", sectionId: section.id }, subIndex, sub.title);
+                return <div key={sub.id} className="live-index-row" {...subOrder.rowProps}>
+                  {subOrder.handle}
+                  <button type="button" className={sub.id === entry?.subsection?.id ? "active" : ""} data-info-id={sub.id} title={sub.title || liveCopy.untitled} onClick={() => select(sub.id, section.id)}>
+                    <small>{indexNumber(index)}.{subIndex + 1}</small><span>{sub.title || liveCopy.untitled}</span>
+                  </button>
+                  {live.remove({ kind: "info-subsection", sectionId: section.id, subsectionId: sub.id }, sub.title)}
+                </div>;
+              })}</div> : null}
             </div>;
           })}
+          {live.addBar({ kind: "info-index", sectionId: entry?.section.id ?? "" })}
         </nav>
         <article className="info-document">
           {entry ? <InfoArticle key={entry.subsection?.id ?? entry.section.id} section={entry.section} subsection={entry.subsection} formattedText={bridge.draft.formattedText} phone={false} next={null} onNext={noNext} /> : <p className="guide-section-empty">{liveCopy.infoEmpty}</p>}
@@ -176,7 +203,10 @@ function InfoSurface({ bridge }: { bridge: LiveEditorBridge }) {
 }
 
 /** The tools of the live mode of `app`, over the editor's bridge. */
-export function createLiveApi(app: LiveApp, bridge: LiveEditorBridge): LiveEditApi {
+/** `onAdded` hears of every element the bar adds (its kind, its id, the container), so a surface can put the new section or subsection on show. */
+export type LiveHooks = { onAdded?: (kind: LiveAddKind, id: string, container: LiveContainer) => void };
+
+export function createLiveApi(app: LiveApp, bridge: LiveEditorBridge, hooks: LiveHooks = {}): LiveEditApi {
   return {
     app,
     text: (target, value, options) => <LiveText bridge={bridge} target={target} value={value} className={options?.className} />,
@@ -184,7 +214,7 @@ export function createLiveApi(app: LiveApp, bridge: LiveEditorBridge): LiveEditA
     image: (target, props) => <LiveImage bridge={bridge} target={target} value={props.value} framing={props.framing}>{props.children}</LiveImage>,
     video: (target, videoId) => <LiveVideo bridge={bridge} target={target} videoId={videoId} />,
     cards: (target, cardIds) => <LiveCardsPicker bridge={bridge} target={target} cardIds={cardIds} />,
-    addBar: (container) => <LiveAddBar bridge={bridge} container={container} />,
+    addBar: (container) => <LiveAddBar bridge={bridge} container={container} onAdded={hooks.onAdded} />,
     order: (list, index, title) => ({
       rowProps: { "data-sort-index": index },
       handle: <OrderDragHandle index={index} label={title || liveCopy.lists[list.kind]} onMove={(from, to) => bridge.changeDraft((next) => { applyLiveMove(next, list, from, to); })} />,
@@ -310,7 +340,7 @@ function LivePopover({ onClose, children }: { onClose: () => void; children: Rea
   </div>;
 }
 
-const frameBoxOf = { "guide-section-photo": "band", "guide-card-cover": "tile", "guide-photo-url": "free" } as const;
+const frameBoxOf = { "guide-section-photo": "band", "guide-card-cover": "tile", "guide-photo-url": "free", "info-photo-url": "natural" } as const;
 
 /** The picture place of the visitor's page (`children`, drawn by the visitor's own PortiaImage, GIFs play) and the way to change its address and visible part. */
 export function LiveImage({ bridge, target, value, framing, children, label, fieldLabel, compact = false }: { bridge: LiveEditorBridge; target: LiveImageTarget; value: string; framing?: ImageFraming; children?: ReactNode; label?: string; fieldLabel?: string; compact?: boolean }) {
@@ -380,12 +410,19 @@ export function LiveCardsPicker({ bridge, target, cardIds }: { bridge: LiveEdito
 }
 
 /** The compact bar «Добавить: …» of a place; a card page also holds the way to its cover. */
-export function LiveAddBar({ bridge, container }: { bridge: LiveEditorBridge; container: LiveContainer }) {
-  const full = liveContainerFull(bridge.draft, container);
+export function LiveAddBar({ bridge, container, onAdded }: { bridge: LiveEditorBridge; container: LiveContainer; onAdded?: LiveHooks["onAdded"] }) {
   const card = container.kind === "guide-card" ? findGuide(bridge.draft.guideSections, container.cardId)?.card : null;
   return <div className="live-add-bar live-tools" role="toolbar" aria-label={liveCopy.addGroup}>
     <span className="live-add-label">{liveCopy.addLabel}</span>
-    {liveAddKinds(container).map((kind) => <button key={kind} type="button" className="secondary-control live-button" disabled={full} title={full ? liveCopy.full : undefined} onClick={() => { if (!full) bridge.changeDraft((next) => { applyLiveAdd(next, container, kind); }); }}>{liveCopy.kinds[kind]}</button>)}
+    {liveAddKinds(container).map((kind) => {
+      const blocked = liveAddBlocked(bridge.draft, container, kind);
+      return <button key={kind} type="button" className="secondary-control live-button" disabled={blocked} title={blocked ? liveCopy.full : undefined} onClick={() => {
+        if (blocked) return;
+        const id = liveNewId(container, kind);
+        bridge.changeDraft((next) => { applyLiveAdd(next, container, kind, id); });
+        onAdded?.(kind, id, container);
+      }}>{liveCopy.kinds[kind]}</button>;
+    })}
     {container.kind === "guide-card" && card && <LiveImage bridge={bridge} target={{ kind: "guide-card-cover", cardId: card.id }} value={card.cover} framing={card.coverFraming} label={liveCopy.cover} fieldLabel={liveCopy.coverLabel} compact />}
   </div>;
 }

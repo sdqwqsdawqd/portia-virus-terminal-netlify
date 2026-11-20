@@ -2889,6 +2889,19 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 /* LIVE-02 (26.1-11): «Информация» в живом режиме — библиотека участника в потоке страницы редактора (оглавление слева, статья справа); высоту и прокрутку даёт страница, не окно. */
 .live-surface .info-library { height: auto; min-height: 420px; }
 .live-surface .info-index, .live-surface .info-document { overflow: visible; }
+/* Оглавление: раздел и подраздел — строки порядка (удержание), рядом «×»; правила .info-index button общие, поэтому инструменты оглавления на ступень точнее. */
+.live-surface .live-index-row { position: relative; min-width: 0; }
+.live-surface .info-index .order-drag-handle { grid-template-columns: none; }
+.live-surface .info-index .live-index-row > button:not(.order-drag-handle) { padding-right: 34px; }
+.live-surface .info-index .info-subsections .live-index-row > button:not(.order-drag-handle) { padding-right: 32px; }
+.live-surface .info-index .live-index-row > .live-remove-wrap { top: 10px; right: 6px; }
+.live-surface .info-index .info-subsections .live-index-row > .live-remove-wrap { top: 50%; transform: translateY(-50%); }
+.live-surface .info-index button.live-remove { display: grid; place-items: center; grid-template-columns: none; gap: 0; width: 22px; height: 22px; padding: 0; border: 1px solid var(--line); background: var(--panel-2); color: #b96a63; }
+.live-surface .info-index .live-add-bar { padding: 12px 6px 0; }
+.live-surface .info-index .live-add-bar button.live-button { display: inline-flex; align-items: center; grid-template-columns: none; width: auto; border: 1px solid var(--line); background: transparent; color: oklch(.812 calc(.02 * var(--accent-chroma)) var(--accent-hue)); }
+.live-surface .info-index .live-add-bar button.live-button:hover:not(:disabled) { border-color: var(--teal); background: var(--teal-soft); }
+.live-table .live-remove-wrap, .live-table .live-editable + .live-remove-wrap { position: static; margin-left: 6px; }
+.live-table .info-ledger dd { display: flex; align-items: center; gap: 6px; }
 /* users-tab:start — Phase 22 «Пользователи» (USR-01..USR-09): sharp corners, values from 22-UI-SPEC, nothing else in the file changes */
 .tab-count { min-width: 24px; margin-left: 8px; padding: 0 8px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px/1.35 var(--mono); text-align: center; }
 .users-tab { display: grid; gap: 24px; min-width: 0; }

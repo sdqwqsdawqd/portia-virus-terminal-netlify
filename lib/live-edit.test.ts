@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { MAX_BLOCKS, MAX_SUBSECTIONS } from "./content-limits.ts";
-import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveRemovedKeys, liveTextKey } from "./live-edit.ts";
+import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey } from "./live-edit.ts";
 import { portiaTextKey, type PortiaContent } from "./portia-content.ts";
 
 // LIVE-01..05 (26.1-10): the pure model of the live editing mode. The draft is the editor's draft; every function edits it in place, as the editor's updaters do.
@@ -364,4 +364,164 @@ test("LIVE-01/04 (26.1-11): the desktop draws the info article through InfoArtic
   assert.match(info, /live\.text\(\{ kind: "info-section-title"/);
   assert.match(info, /live\.rich\(\{ kind: "info-section-body"/);
   assert.doesNotMatch(info, /LiveEditContext\.Provider|portia-editor-live/);
+});
+
+function draftWithInfoBlocks(): PortiaContent {
+  return {
+    infoSections: [
+      { id: "i1", title: "Первый", body: "Тело", subsections: [
+        { id: "u1", title: "Под один", blocks: [
+          { id: "k1", type: "text", text: "Текст" },
+          { id: "k2", type: "table", rows: [{ id: "r1", key: "а", value: "б" }, { id: "r2", key: "в", value: "г" }] },
+          { id: "k3", type: "photo", url: "https://x/y.gif", framing: { x: 10, y: 20, zoom: 1.5 } },
+          { id: "k4", type: "video", videoId: "" },
+        ] },
+        { id: "u2", title: "Под два", blocks: [] },
+      ] },
+      { id: "i2", title: "Второй", body: "", subsections: [] },
+    ],
+    formattedText: { "info:i1:body": { runs: [{ text: "Тело" }] }, "info-block:k1:text": { runs: [{ text: "Текст" }] } },
+  } as unknown as PortiaContent;
+}
+
+test("LIVE-02 (26.1-11): the places of a subsection article: title, block text, table cells, video link", () => {
+  const draft = draftWithInfoBlocks();
+  assert.equal(applyLiveText(draft, { kind: "info-subsection-title", subsectionId: "u2" }, "Новое имя"), true);
+  assert.equal(draft.infoSections[0].subsections[1].title, "Новое имя");
+  assert.equal(applyLiveText(draft, { kind: "info-block-text", subsectionId: "u1", blockId: "k1" }, "Новый текст"), true);
+  assert.equal((draft.infoSections[0].subsections[0].blocks[0] as { text: string }).text, "Новый текст");
+  assert.equal(liveTextKey({ kind: "info-block-text", subsectionId: "u1", blockId: "k1" }), portiaTextKey.infoBlock("k1"));
+  assert.equal(applyLiveText(draft, { kind: "info-table-key", subsectionId: "u1", blockId: "k2", rowId: "r2" }, "ключ"), true);
+  assert.equal(applyLiveText(draft, { kind: "info-table-value", subsectionId: "u1", blockId: "k2", rowId: "r2" }, "значение"), true);
+  const rows = (draft.infoSections[0].subsections[0].blocks[1] as { rows: { key: string; value: string }[] }).rows;
+  assert.deepEqual(rows.map((row) => [row.key, row.value]), [["а", "б"], ["ключ", "значение"]]);
+  assert.equal(applyLiveText(draft, { kind: "info-video-url", subsectionId: "u1", blockId: "k4" }, "https://www.youtube.com/watch?v=dQw4w9WgXcQ"), true);
+  assert.equal((draft.infoSections[0].subsections[0].blocks[3] as { videoId: string }).videoId, "dQw4w9WgXcQ");
+  assert.equal(applyLiveText(draft, { kind: "info-video-url", subsectionId: "u1", blockId: "k4" }, "не ссылка"), true);
+  assert.equal((draft.infoSections[0].subsections[0].blocks[3] as { videoId: string }).videoId, "", "nothing recognised leaves no video");
+});
+
+test("LIVE-02 (26.1-11): a place of the wrong kind or a vanished id changes nothing", () => {
+  const draft = draftWithInfoBlocks();
+  const before = JSON.stringify(draft);
+  assert.equal(applyLiveText(draft, { kind: "info-block-text", subsectionId: "u1", blockId: "k2" }, "x"), false, "a table has no text");
+  assert.equal(applyLiveText(draft, { kind: "info-table-key", subsectionId: "u1", blockId: "k1", rowId: "r1" }, "x"), false);
+  assert.equal(applyLiveText(draft, { kind: "info-subsection-title", subsectionId: "nope" }, "x"), false);
+  assert.equal(applyLiveText(draft, { kind: "info-video-url", subsectionId: "u1", blockId: "k3" }, "x"), false);
+  assert.equal(JSON.stringify(draft), before);
+});
+
+test("LIVE-02 (26.1-11): the address of a photo block replaces the picture and drops its frame; the frame can be set and cleared", () => {
+  const draft = draftWithInfoBlocks();
+  const target = { kind: "info-photo-url", subsectionId: "u1", blockId: "k3" } as const;
+  const photo = () => draft.infoSections[0].subsections[0].blocks[2] as { url: string; framing?: unknown };
+  assert.equal(applyLiveImage(draft, target, "https://x/y.gif"), true);
+  assert.ok(photo().framing, "the same address keeps the frame");
+  assert.equal(applyLiveImage(draft, target, "https://x/z.png"), true);
+  assert.equal(photo().url, "https://x/z.png");
+  assert.equal(photo().framing, undefined);
+  assert.equal(applyLiveFraming(draft, target, { x: 1, y: 2, zoom: 2 }), true);
+  assert.deepEqual(photo().framing, { x: 1, y: 2, zoom: 2 });
+  assert.equal(applyLiveImage(draft, { kind: "info-photo-url", subsectionId: "u1", blockId: "k1" }, "https://x/q.png"), false, "a text block has no picture");
+});
+
+test("LIVE-02 (26.1-11): the bar adds a section, a subsection and every info block with the shape of the editor's own buttons", () => {
+  const draft = draftWithInfoBlocks();
+  const section = applyLiveAdd(draft, { kind: "info-index", sectionId: "i1" }, "section");
+  assert.ok(section);
+  assert.deepEqual(draft.infoSections.at(-1), { id: section, title: "НОВЫЙ РАЗДЕЛ", body: "", subsections: [] });
+  const sub = applyLiveAdd(draft, { kind: "info-index", sectionId: "i2" }, "subsection");
+  assert.ok(sub);
+  assert.deepEqual(draft.infoSections[1].subsections, [{ id: sub, title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }]);
+  for (const kind of ["text", "table", "photo", "video"] as const) {
+    const id = applyLiveAdd(draft, { kind: "info-subsection", subsectionId: "u2" }, kind);
+    assert.ok(id, kind);
+  }
+  const blocks = draft.infoSections[0].subsections[1].blocks;
+  assert.deepEqual(blocks.map((block) => block.type), ["text", "table", "photo", "video"]);
+  assert.deepEqual(blocks[0], { id: blocks[0].id, type: "text", text: "" });
+  assert.equal((blocks[1] as { rows: unknown[] }).rows.length, 1);
+  assert.deepEqual(blocks[2], { id: blocks[2].id, type: "photo", url: "" });
+  assert.deepEqual(blocks[3], { id: blocks[3].id, type: "video", videoId: "" });
+  assert.ok(applyLiveAdd(draft, { kind: "info-table", subsectionId: "u1", blockId: "k2" }, "row"));
+  assert.equal((draft.infoSections[0].subsections[0].blocks[1] as { rows: unknown[] }).rows.length, 3);
+  assert.equal(applyLiveAdd(draft, { kind: "info-subsection", subsectionId: "u2" }, "heading"), null, "an info block is not a guide heading");
+  assert.equal(applyLiveAdd(draft, { kind: "info-index", sectionId: "nope" }, "subsection"), null);
+  assert.equal(applyLiveAdd(draft, { kind: "info-subsection", subsectionId: "nope" }, "text"), null);
+  assert.deepEqual(liveAddKinds({ kind: "info-index", sectionId: "i1" }), ["section", "subsection"]);
+  assert.deepEqual(liveAddKinds({ kind: "info-subsection", subsectionId: "u1" }), ["text", "table", "photo", "video"]);
+  assert.deepEqual(liveAddKinds({ kind: "info-table", subsectionId: "u1", blockId: "k2" }), ["row"]);
+});
+
+test("LIVE-02 (26.1-11): an id made beforehand is the id the new element gets, so the surface can show it", () => {
+  const draft = draftWithInfoBlocks();
+  const container = { kind: "info-index", sectionId: "i1" } as const;
+  const id = liveNewId(container, "subsection");
+  assert.equal(applyLiveAdd(draft, container, "subsection", id), id);
+  assert.equal(draft.infoSections[0].subsections.at(-1)?.id, id);
+});
+
+test("LIVE-02 (26.1-11): the bar respects the limits of subsections and blocks", () => {
+  const draft = draftWithInfoBlocks();
+  draft.infoSections[1].subsections = Array.from({ length: MAX_SUBSECTIONS }, (_, index) => ({ id: `f${index}`, title: "", blocks: [] }));
+  assert.equal(applyLiveAdd(draft, { kind: "info-index", sectionId: "i2" }, "subsection"), null);
+  assert.equal(liveAddBlocked(draft, { kind: "info-index", sectionId: "i2" }, "subsection"), true);
+  assert.equal(liveAddBlocked(draft, { kind: "info-index", sectionId: "i2" }, "section"), false, "sections have no limit");
+  assert.equal(liveAddBlocked(draft, { kind: "info-index", sectionId: "" }, "subsection"), true, "no section to add to");
+  draft.infoSections[0].subsections[1].blocks = Array.from({ length: MAX_BLOCKS }, (_, index) => ({ id: `b${index}`, type: "text" as const, text: "" }));
+  assert.equal(applyLiveAdd(draft, { kind: "info-subsection", subsectionId: "u2" }, "text"), null);
+  assert.equal(liveContainerFull(draft, { kind: "info-subsection", subsectionId: "u2" }), true);
+  assert.equal(liveContainerFull(draft, { kind: "info-subsection", subsectionId: "u1" }), false);
+});
+
+test("LIVE-02 (26.1-11): sections, subsections and blocks of «Информации» move like moveArrayItem", () => {
+  const draft = draftWithInfoBlocks();
+  assert.equal(applyLiveMove(draft, { kind: "info-sections" }, 0, 1), true);
+  assert.deepEqual(draft.infoSections.map((item) => item.id), ["i2", "i1"]);
+  assert.equal(applyLiveMove(draft, { kind: "info-subsections", sectionId: "i1" }, 1, 0), true);
+  assert.deepEqual(draft.infoSections[1].subsections.map((item) => item.id), ["u2", "u1"]);
+  assert.equal(applyLiveMove(draft, { kind: "info-blocks", subsectionId: "u1" }, 0, 3), true);
+  assert.deepEqual(draft.infoSections[1].subsections[1].blocks.map((item) => item.id), ["k2", "k3", "k4", "k1"]);
+  assert.equal(applyLiveMove(draft, { kind: "info-blocks", subsectionId: "u1" }, 0, 9), false);
+  assert.equal(applyLiveMove(draft, { kind: "info-blocks", subsectionId: "nope" }, 0, 1), false);
+});
+
+test("LIVE-02 (26.1-11): removing in «Информации» goes through lib/editor-items: the formatting leaves with the element", () => {
+  const draft = draftWithInfoBlocks();
+  assert.deepEqual(liveRemovedKeys(draft, { kind: "info-block", subsectionId: "u1", blockId: "k1" }), [portiaTextKey.infoBlock("k1")]);
+  assert.deepEqual(liveRemovedKeys(draft, { kind: "info-subsection", sectionId: "i1", subsectionId: "u1" }).sort(), [portiaTextKey.infoBlock("k1"), portiaTextKey.infoBlock("k2"), portiaTextKey.infoBlock("k3"), portiaTextKey.infoBlock("k4")].sort());
+  assert.ok(liveRemovedKeys(draft, { kind: "info-section", sectionId: "i1" }).includes(portiaTextKey.info("i1")), "the body of the section goes too");
+  assert.equal(applyLiveRemove(draft, { kind: "info-block", subsectionId: "u1", blockId: "k1" }), true);
+  assert.equal(draft.formattedText[portiaTextKey.infoBlock("k1")], undefined);
+  assert.equal(draft.infoSections[0].subsections[0].blocks.length, 3);
+  assert.equal(applyLiveRemove(draft, { kind: "info-table-row", subsectionId: "u1", blockId: "k2", rowId: "r1" }), true);
+  assert.equal((draft.infoSections[0].subsections[0].blocks[0] as { rows: unknown[] }).rows.length, 1);
+  assert.equal(applyLiveRemove(draft, { kind: "info-subsection", sectionId: "i1", subsectionId: "u2" }), true);
+  assert.deepEqual(draft.infoSections[0].subsections.map((item) => item.id), ["u1"]);
+  assert.equal(applyLiveRemove(draft, { kind: "info-section", sectionId: "i1" }), true);
+  assert.equal(draft.formattedText[portiaTextKey.info("i1")], undefined);
+  assert.deepEqual(draft.infoSections.map((item) => item.id), ["i2"]);
+  assert.equal(applyLiveRemove(draft, { kind: "info-section", sectionId: "i1" }), false);
+  assert.equal(applyLiveRemove(draft, { kind: "info-block", subsectionId: "u1", blockId: "k9" }), false);
+});
+
+test("LIVE-02/05 (26.1-11): InfoArticle offers the places of its rows; a text block is rich (the visitor's FormattedText at rest), a photo is the visitor's PortiaImage", () => {
+  const info = read("components/portia-desktop-info.tsx");
+  for (const call of ["live.rich(", "live.video(", "live.image(", "live.text("]) assert.ok(info.includes(call), call);
+  assert.ok(info.includes('live.addBar({ kind: "info-subsection"'));
+  assert.ok(info.includes('live.addBar({ kind: "info-table"'));
+  assert.ok(info.includes('live.order({ kind: "info-blocks"'));
+  assert.ok(info.includes('live.remove({ kind: "info-block"'));
+  for (const target of ["info-subsection-title", "info-block-text", "info-table-key", "info-table-value", "info-video-url", "info-photo-url"]) assert.ok(info.includes(`kind: "${target}"`), target);
+  assert.match(info, /<PortiaImage\b[^>]*priority="lazy"/);
+  assert.doesNotMatch(info, /embedMedia=\{false\}/, "no live path turns a GIF link back into text"); // planner-discipline-allow: embedMedia={false}
+  assert.doesNotMatch(info, /<canvas|poster=/);
+});
+
+test("LIVE-02 (26.1-11): the live table of contents holds the order, the remove and the bar for sections and subsections", () => {
+  const seam = read("components/portia-editor-live.tsx");
+  const surface = seam.slice(seam.indexOf("function InfoSurface"), seam.indexOf("/** The tools of the live mode of `app`"));
+  for (const part of ['live.order({ kind: "info-sections" }', 'live.order({ kind: "info-subsections"', 'live.remove({ kind: "info-section"', 'live.remove({ kind: "info-subsection"', 'live.addBar({ kind: "info-index"']) assert.ok(surface.includes(part), part);
+  assert.match(surface, /<nav className="info-index"/);
+  assert.match(seam, /liveNewId\(container, kind\)/);
 });
