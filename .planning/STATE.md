@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: "26.1"
 current_phase_name: Правки владельца
 status: executing
-stopped_at: Completed 26.1-15-PLAN.md
-last_updated: "2026-11-20T17:40:08.504Z"
+stopped_at: Completed 26.1-10-PLAN.md
+last_updated: "2026-11-20T21:16:17.987Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 26.1 execution started
-state_head: ba73cb70e8e550ca814b3e50c6884ec630a80d26
+state_head: e6155d54098173b5c3e5cb55fa358e6b51c9c365
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 85
-  completed_plans: 80
+  completed_plans: 81
 ---
 
 Total Phases: 6
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: 26.1 (Правки владельца) — EXECUTING
-Plan: 11 of 14
+Plan: 12 of 14
 Status: Ready to execute
 Last activity: 2026-11-20 — Phase 26.1 execution started
 
@@ -121,6 +121,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase 26.1 P08 | n/a | 3 tasks | 8 files |
 | Phase 26.1 P09 | n/a | 3 tasks | 11 files |
 | Phase 26.1 P15 | 1h | 3 tasks | 9 files |
+| Phase 26.1 P10 | 2h | 3 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -381,6 +382,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 26.1]: 26.1-08: ручки порядка скрыты (position absolute, clip-path), перенос удержанием 400 мс/6px на зоне строки; ColumnSwapHandle перенесён в шов вставкой PORTIA-26.1-HOLD
 - [Phase 26.1]: 26.1-09: card tabs choose by the pure rule resolveCardTab (new id selected at once, deleted selected -> neighbour); mutation tabs are numbers and have no order; non-selected cards are not rendered, the format panel closes on a tab switch
 - [Phase 26.1]: 26.1-15: pointerType absent counts as mouse; mouse/pen lift on a drift past 6px, touch holds 400ms; a row alone in its list neither shows the grab cursor nor starts a hold (hasPlaceToGo)
+- [Phase 26.1]: 26.1-10: live mode = one LiveEditContext (shared module) provided only by the editor seam; editor change is one D-21 hunk PORTIA-26.1-LIVE with the whole bridge, so 26.1-11..13 add apps without touching the editor
 
 ### Pending Todos
 
@@ -439,8 +441,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-20T17:40:07.296Z
-Stopped at: Completed 26.1-15-PLAN.md
+Last session: 2026-11-20T21:16:16.605Z
+Stopped at: Completed 26.1-10-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
