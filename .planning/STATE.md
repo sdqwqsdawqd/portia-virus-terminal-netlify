@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: "26.1"
 current_phase_name: Правки владельца
 status: executing
-stopped_at: Completed 26.1-05-PLAN.md
-last_updated: "2026-11-20T16:32:56.413Z"
+stopped_at: Completed 26.1-06-PLAN.md
+last_updated: "2026-11-20T16:42:58.061Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 26.1 execution started
-state_head: 9e02d88c4508c05545f1991f9136e52329956c9f
+state_head: b18e3f3bf25da6e704499690bc3ae273057e2787
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 84
-  completed_plans: 75
+  completed_plans: 76
 ---
 
 Total Phases: 6
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: 26.1 (Правки владельца) — EXECUTING
-Plan: 6 of 14
+Plan: 7 of 14
 Status: Ready to execute
 Last activity: 2026-11-20 — Phase 26.1 execution started
 
@@ -116,6 +116,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase 26.1 P03 | 40min | 2 tasks | 7 files |
 | Phase 26.1 P04 | n/a | 3 tasks | 8 files |
 | Phase 26.1 P05 | n/a | 2 tasks | 7 files |
+| Phase 26.1 P06 | n/a | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -370,6 +371,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 26.1]: 26.1-03 option-b: пути передачи — шесть путей владельца плюс «Неизвестно» седьмым исключающим выбором; список в прежней строке через «, »; старые значения переводятся при чтении и записи
 - [Phase 26.1]: 26.1-04: route list on the card is strong.route-list with buttons (keeps the transmission colour rule of the accent guard); classification field min 340px by sum in classification-fit test
 - [Phase 26.1]: 26.1-05: квот в редакторе квалификации нет; confirm приводит счётчики банка к составу набора (1..100) без SQL-миграции; набор вне предела — 422, не конфликт версии
+- [Phase 26.1]: 26.1-06: typed text inherits a style only when the characters on both sides share it; panel size is stored with its place under portia-format-panel-v1; the 44px header row stays (UI-05)
 
 ### Pending Todos
 
@@ -428,8 +430,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-20T16:32:55.302Z
-Stopped at: Completed 26.1-05-PLAN.md
+Last session: 2026-11-20T16:42:56.952Z
+Stopped at: Completed 26.1-06-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
