@@ -584,7 +584,7 @@ export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurfa
     panel.style.left = "";
     panel.style.top = "";
     const offset = paintPanelOffset(panel, { right: viewport.width - rect.left - size.width, bottom: viewport.height - rect.top - size.height });
-    writePanelPlacement(storageKey, { ...offset, ...size });
+    writePanelOffset(storageKey, { ...offset, ...size });
   };
 
   useEffect(() => {
@@ -755,17 +755,17 @@ function readPanelOffset(storageKey: string | null): PanelPlacement | null {
   try { return parsePanelPlacement(localStorage.getItem(storageKey)); } catch { return null; }
 }
 
-// Writes a place together with its size (OWN-05), under the one key that already holds the place.
-function writePanelPlacement(storageKey: string | null, placement: PanelPlacement) {
-  if (storageKey === null) return;
-  // A blocked storage only means the place is not remembered.
-  try { localStorage.setItem(storageKey, JSON.stringify(placement)); } catch { /* ignore */ }
+// The size the user already gave the panel, kept when only the place changes (OWN-05).
+function savedSize(storageKey: string | null) {
+  const saved = readPanelOffset(storageKey);
+  return saved?.width === undefined || saved.height === undefined ? null : { width: saved.width, height: saved.height };
 }
 
-// A move keeps the size the user already gave the panel.
-function writePanelOffset(storageKey: string | null, offset: PanelOffset) {
-  const saved = readPanelOffset(storageKey);
-  writePanelPlacement(storageKey, saved?.width !== undefined && saved.height !== undefined ? { ...offset, width: saved.width, height: saved.height } : offset);
+function writePanelOffset(storageKey: string | null, offset: PanelPlacement) {
+  if (storageKey === null) return;
+  // A blocked storage only means the place is not remembered. A move (no size given) keeps the saved size.
+  const kept = offset.width === undefined ? savedSize(storageKey) : null;
+  try { localStorage.setItem(storageKey, JSON.stringify({ ...offset, ...kept })); } catch { /* ignore */ }
 }
 
 // Writes the clamped right/bottom straight on the panel (no React render per move) and returns what was painted.

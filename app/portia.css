@@ -843,8 +843,8 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 .format-swatches > button > i { width: 20px; height: 20px; display: block; border: 1px solid rgba(255,255,255,.42); border-radius: var(--radius-control); box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
 .format-swatches > button.selected, .custom-color:focus-visible { border-color: var(--teal); box-shadow: 0 0 0 2px rgba(var(--desktop-glow), .17); }
 .format-swatches > button.selected::after { content: "✓"; position: absolute; right: -4px; bottom: -4px; width: 14px; height: 14px; display: grid; place-items: center; border-radius: var(--radius-round); background: var(--teal); color: oklch(.158 calc(.022 * var(--accent-chroma)) var(--accent-hue)); font: 700 9px var(--sans); }
-.format-swatches > button.no-background { width: auto; padding-inline: 10px; color: oklch(.741 calc(.022 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); }
-.format-swatches > button.no-background::before { content: ""; width: 18px; height: 1px; margin-right: 6px; background: #c3655c; transform: rotate(-35deg); }
+.format-swatches > button.no-background { width: auto; padding-inline: 10px; background: transparent; color: oklch(.741 calc(.022 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); }
+.format-swatches > button.no-background:not(.selected) { border: 1px dashed var(--line); }
 .custom-color > span { color: var(--teal); font: 700 16px var(--sans); pointer-events: none; }
 .format-choice-row > button { min-height: 30px; flex: 0 0 auto; padding: 5px 7px; border: 1px solid oklch(.426 calc(.034 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-control); background: oklch(.179 calc(.017 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.698 calc(.024 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); cursor: pointer; }
 .format-choice-row > button:not(:disabled):hover, .format-choice-row > button.selected { border-color: var(--teal); background: var(--teal-soft); color: oklch(.957 calc(.013 * var(--accent-chroma)) var(--accent-hue)); }
@@ -2759,6 +2759,24 @@ html[data-motion="off"] .assistant-button:hover + .assistant-items, html[data-mo
 .global-search-more { justify-self: start; min-height: 30px; margin-top: 8px; padding: 0 12px; border: 1px solid var(--line); background: var(--panel-2); color: inherit; font: 700 11px var(--sans); letter-spacing: .06em; text-align: left; cursor: pointer; }
 .global-search-more:hover, .global-search-more:focus-visible { border-color: var(--teal); color: var(--teal); }
 .global-search-more-note { margin: 8px 0 0; color: var(--muted); font: 400 12px/1.5 var(--sans); }
+/* OWN-05: «Редактор оформления» на ПК компактнее и меняет размер за угол. Строка шапки остаётся 44px и крестик 44px (UI-05, ui-unify): ужимаются отступы, подписи, образцы и кнопки.
+   Пока размер задан пользователем (data-sized), потолок высоты — экран; телефонная панель (до 900px) не затрагивается. */
+.floating-text-format[data-sized] { max-width: calc(100vw - 16px); max-height: calc(100svh - 16px); }
+@media (width > 900px) {
+  .floating-text-format > header { gap: 8px; padding-left: 8px; }
+  .format-presets { padding: 8px 8px 0; }
+  .rich-text-toolbar { gap: 6px; padding: 8px; }
+  .format-control { gap: 4px; padding: 6px; }
+  .format-control > span, .format-control-title > b { font-size: 11px; letter-spacing: .04em; }
+  .format-swatches, .format-choice-row { gap: 4px; }
+  .format-swatches > button, .custom-color { min-width: 22px; height: 22px; padding: 2px; }
+  .format-swatches > button > i { width: 16px; height: 16px; }
+  .format-swatches > button.no-background { padding-inline: 8px; }
+  .format-choice-row > button { min-height: 28px; padding: 3px 6px; }
+  .floating-text-format .custom-color-picker { grid-template-columns: minmax(120px, 1.2fr) minmax(110px, .8fr); }
+  .floating-text-format > footer { gap: 8px; padding: 6px 8px; }
+  .floating-text-format > footer button { min-height: 28px; padding: 3px 9px; }
+}
 /* users-tab:start — Phase 22 «Пользователи» (USR-01..USR-09): sharp corners, values from 22-UI-SPEC, nothing else in the file changes */
 .tab-count { min-width: 24px; margin-left: 8px; padding: 0 8px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px/1.35 var(--mono); text-align: center; }
 .users-tab { display: grid; gap: 24px; min-width: 0; }
@@ -3022,24 +3040,3 @@ html[data-motion="off"] .assistant-button:hover + .assistant-items, html[data-mo
 .access-card input:not([type=radio]), .owner-login-card input { box-sizing: border-box; min-height: 44px; border-radius: var(--radius-field); }
 .access-card button:not(.access-close), .access-reopen, .owner-login-card button { min-height: 44px; border-radius: var(--radius-control); }
 /* ui-unify:end */
-/* OWN-05: «Редактор оформления» на ПК компактнее и меняет размер за угол; пишется после ui-unify, чтобы шапка 44px из общего блока не перебила 32px.
-   Пока размер задан пользователем (data-sized), потолок высоты — экран; телефонная панель (до 900px) не затрагивается. */
-.floating-text-format[data-sized] { max-width: calc(100vw - 16px); max-height: calc(100svh - 16px); }
-@media (width > 900px) {
-  .floating-text-format > header { min-height: 32px; gap: 8px; padding: 0 32px 0 8px; }
-  .floating-text-format > header .corner-close { width: 32px; height: 32px; min-width: 32px; min-height: 32px; font-size: 16px; }
-  .floating-text-format > header button { width: 24px; height: 24px; }
-  .floating-text-format > header .format-reset-fragments { min-height: 24px; margin-left: 6px; padding: 2px 8px; }
-  .format-presets { padding: 8px 8px 0; }
-  .rich-text-toolbar { gap: 6px; padding: 8px; }
-  .format-control { gap: 4px; padding: 6px; }
-  .format-control > span, .format-control-title > b { font-size: 11px; letter-spacing: .04em; }
-  .format-swatches, .format-choice-row { gap: 4px; }
-  .format-swatches > button, .custom-color { min-width: 22px; height: 22px; padding: 2px; }
-  .format-swatches > button > i { width: 16px; height: 16px; }
-  .format-swatches > button.no-background { padding-inline: 8px; }
-  .format-choice-row > button { min-height: 28px; padding: 3px 6px; }
-  .floating-text-format .custom-color-picker { grid-template-columns: minmax(120px, 1.2fr) minmax(110px, .8fr); padding: 8px; }
-  .floating-text-format > footer { gap: 8px; padding: 6px 8px; }
-  .floating-text-format > footer button { min-height: 28px; padding: 3px 9px; }
-}

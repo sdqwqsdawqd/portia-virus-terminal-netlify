@@ -26,10 +26,23 @@ test("a size given by the user may reach the screen, not only the default height
   assert.ok(declares(sized, "max-width: calc(100vw - 16px)"));
 });
 
-test("the PC header is 32px and the controls are compact", () => {
-  assert.ok(bodies(".floating-text-format > header").some((body) => declares(body, "min-height: 32px")));
+// The heading row and the cross stay 44px (UI-05, tested in ui-unify.test.ts); the rest of the panel is what gets compact.
+test("the PC panel controls are compact", () => {
+  assert.ok(bodies(".floating-text-format > header").every((body) => !/min-height|padding-right|padding:/.test(body) || body.includes("44px")));
+  assert.ok(bodies(".rich-text-toolbar").some((body) => declares(body, "padding: 8px")));
   assert.ok(bodies(".format-swatches > button, .custom-color").some((body) => declares(body, "height: 22px")));
   assert.ok(bodies(".format-choice-row > button").some((body) => declares(body, "min-height: 28px")));
+});
+
+test("«Без фона» has no red slash, it is a neutral dashed variant with the ordinary selected mark", () => {
+  assert.equal(rules.filter((r) => r.selector.includes("no-background::before") || r.selector.includes("no-background::after")).length, 0);
+  assert.equal(css.includes("#c3655c"), false);
+  const [base] = bodies(".format-swatches > button.no-background");
+  assert.ok(declares(base, "background: transparent"));
+  assert.ok(declares(base, "font: 700 11px var(--sans)"));
+  const [idle] = bodies(".format-swatches > button.no-background:not(.selected)");
+  assert.ok(declares(idle, "border: 1px dashed var(--line)"));
+  assert.ok(bodies(".format-swatches > button.selected::after").length > 0);
 });
 
 test("the size is read and written with the place under the one existing key", () => {
@@ -48,7 +61,8 @@ test("the size is saved after the user's resize only, never from the first place
 });
 
 test("a move keeps the saved size", () => {
-  const writer = component.slice(component.indexOf("function writePanelOffset("), component.indexOf("// Writes the clamped right/bottom"));
+  const writer = component.slice(component.indexOf("function savedSize("), component.indexOf("// Writes the clamped right/bottom"));
   assert.match(writer, /saved\.width/);
   assert.match(writer, /saved\.height/);
+  assert.match(writer, /offset\.width === undefined \? savedSize\(storageKey\)/);
 });
