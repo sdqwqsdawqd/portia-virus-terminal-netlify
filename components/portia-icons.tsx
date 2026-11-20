@@ -10,14 +10,17 @@ export type PortiaIconName =
   | "class-lucidium" | "class-transitium" | "class-oblivium"
   | "class-stabilar" | "class-impulsar" | "class-infernar"
   | "class-isomorph" | "class-polymorph" | "class-xenomorph"
-  | "route-aerosol" | "route-contact" | "route-fecal-oral" | "route-vector" | "route-blood" | "route-sexual" | "route-unknown"
+  | "route-droplet" | "route-dust" | "route-contact" | "route-oral" | "route-sexual" | "route-unknown"
+  | "route-aerosol" | "route-vector" | "route-blood"
   | "lock-open" | "lock-closed";
 
 // Classification badges: the 18 signs of the six axes are the owner's round-5 drawing (26-ICON-DECISION.md, «Геометрия»),
 // each <symbol> copied verbatim into JSX. One base sign per axis; the level reads from growing distortion, there is no separate
 // level mark. Line 1.5 (not the 1.75 of the other icons); the filled parts carry stroke="none" so the root stroke does not swell them.
-// Owner 2026-11-20 (OWN-03): six routes of transmission plus «Неизвестно», redrawn in the line language of the class signs (line 1.5,
-// round caps, currentColor only, filled parts stroke="none"); not levelled, so each is its own small picture without a frame.
+// Routes of transmission are not levelled, so each is its own small picture without a frame.
+// Owner 2026-11-20 (OWN-03, clarification 11): the old route icons are back as they were (root line 1.75, the drop helper below); «Аэрозольный», «Трансмиссивный»
+// and «Гемоконтактный» had none and are drawn in their style: drop(), dots with fill="currentColor", minor lines with opacity=".55", no colours, no dashes.
+const drop = (x: number, y: number, k: number) => <path d={`M${x} ${y}c${-k} ${1.3 * k} ${-1.5 * k} ${2.1 * k} ${-1.5 * k} ${2.8 * k}a${1.5 * k} ${1.5 * k} 0 0 0 ${3 * k} 0c0 ${-0.7 * k} ${-0.5 * k} ${-1.5 * k} ${-1.5 * k} ${-2.8 * k}Z`} />;
 // Access locks (sketch #locks-a): a padlock whose shackle swings aside when open.
 const lockBody = <><rect x="5" y="10.5" width="14" height="10" rx="2" /><circle cx="12" cy="14.6" r="1.3" /><path d="M12 15.9v2" /></>;
 
@@ -111,13 +114,15 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
   "class-stabilar": <><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 12A8.5 8.5 0 1 0 20.5 12A8.5 8.5 0 1 0 3.5 12Z" /><path d="M7.5 10H10.5" /><path d="M13.5 10H16.5" /><path d="M9 15.5H15" /></g></>,
   "class-impulsar": <><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 12A8.5 8.5 0 1 0 20.5 12A8.5 8.5 0 1 0 3.5 12Z" /><path d="M7.5 8.6L10.5 10.6" /><path d="M16.5 8.6L13.5 10.6" /><path d="M8.8 16.4A5 5 0 0 1 15.2 16.4" /></g></>,
   "class-infernar": <><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2.5L14.98 4.79L18.72 5.28L19.21 9.02L21.5 12L19.21 14.98L18.72 18.72L14.98 19.21L12 21.5L9.02 19.21L5.28 18.72L4.79 14.98L2.5 12L4.79 9.02L5.28 5.28L9.02 4.79Z" /><path d="M7.2 8L10.6 10.8" /><path d="M16.8 8L13.4 10.8" /><path d="M8.4 16.2L10.2 14.6L12 16.2L13.8 14.6L15.6 16.2" /></g></>,
-  "route-aerosol": <><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="5" cy="12" rx="1.8" ry="3" /><path d="M8.4 10.6L10.6 9.6" /><path d="M8.6 12H10.6" /><path d="M8.4 13.4L10.6 14.4" /><circle cx="13.6" cy="12" r="2" /><circle cx="19" cy="6.6" r="1.7" /><circle cx="19" cy="17.4" r="1.7" /></g><g fill="currentColor" stroke="none"><circle cx="20.6" cy="12" r="1.1" /><circle cx="15.6" cy="5.6" r=".9" /><circle cx="15.6" cy="18.4" r=".9" /></g></>,
-  "route-contact": <><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5.5 10V6.5A2.5 2.5 0 0 1 8 4H16A2.5 2.5 0 0 1 18.5 6.5V10" /><path d="M7 10V17.6" /><path d="M10.33 10V19.5" /><path d="M13.67 10V19.5" /><path d="M17 10V17.6" /><path d="M3 21.5H21" /><path d="M3.8 14.6L5.4 15.6" /><path d="M20.2 14.6L18.6 15.6" /></g></>,
-  "route-fecal-oral": <><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6.5C4.3 4.7 5.6 4.7 6.9 6.5S9.5 8.3 10.8 6.5" /><path d="M10.8 6.5C15 5.2 17.5 8 17.5 14.4" /><path d="M15.7 12.7L17.5 14.5L19.3 12.7" /><ellipse cx="17.5" cy="18.2" rx="3" ry="2.2" /><path d="M14.5 18.2C9.5 19.4 4 16.8 3.8 10.6" /></g></>,
-  "route-vector": <><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="6.2" r="1.3" /><path d="M12 4.9V2.4" /><ellipse cx="12" cy="10.5" rx="2.2" ry="2.2" /><ellipse cx="12" cy="16.8" rx="1.7" ry="3.4" /><path d="M10 9.6C7 6.6 4.5 7 3.8 9C4.2 11 7.5 11.5 10 10.8" /><path d="M14 9.6C17 6.6 19.5 7 20.2 9C19.8 11 16.5 11.5 14 10.8" /><path d="M9.8 12.4L4.8 14.2" /><path d="M10.3 14.6L6.2 19.2" /><path d="M14.2 12.4L19.2 14.2" /><path d="M13.7 14.6L17.8 19.2" /></g></>,
-  "route-blood": <><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3.4 9.6V14.4" /><path d="M3.4 12H6.8" /><path d="M6.8 8.6V15.4" /><path d="M7.6 9.5H16V14.5H7.6Z" /><path d="M10.2 9.5V11.2" /><path d="M12.6 9.5V11.2" /><path d="M15 9.5V11.2" /><path d="M16 11V13" /><path d="M16 12H21" /></g><g fill="currentColor" stroke="none"><path d="M21 15.2C19.9 16.6 19.2 17.5 19.2 18.4A1.8 1.8 0 0 0 22.8 18.4C22.8 17.5 22.1 16.6 21 15.2Z" /></g></>,
-  "route-sexual": <><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="9.4" cy="14.2" rx="5.6" ry="3.4" transform="rotate(-45 9.4 14.2)" /><ellipse cx="14.6" cy="9.8" rx="5.6" ry="3.4" transform="rotate(-45 14.6 9.8)" /></g></>,
-  "route-unknown": <><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3.5A8.5 8.5 0 1 1 3.5 12" /><path d="M9.7 10A2.3 2.3 0 1 1 13.2 12C12.4 12.5 12 13 12 13.8" /></g><g fill="currentColor" stroke="none"><circle cx="12" cy="16.8" r="1.1" /></g></>,
+  "route-droplet": <>{drop(9, 3.5, 2.6)}{drop(16.5, 11, 1.7)}<path d="M5 20.5h14" opacity=".55" /></>,
+  "route-dust": <><path d="M3.5 9.5h9.2a2.6 2.6 0 1 0-2.6-2.6M3.5 14h12.4a2.6 2.6 0 1 1-2.6 2.6" /><circle cx="18.6" cy="7.4" r=".9" fill="currentColor" /><circle cx="20.4" cy="11.6" r=".9" fill="currentColor" /><circle cx="7" cy="19.2" r=".9" fill="currentColor" /></>,
+  "route-contact": <><rect x="3.6" y="5.2" width="10" height="10" rx="2.2" /><rect x="10.4" y="8.8" width="10" height="10" rx="2.2" /></>,
+  "route-oral": <>{drop(12, 2.6, 1.3)}<path d="M5.6 9.6h12.8l-1.5 9.6a1.8 1.8 0 0 1-1.8 1.5H8.9a1.8 1.8 0 0 1-1.8-1.5Z" /><path d="M7.6 13h8.8" opacity=".55" /></>,
+  "route-sexual": <><circle cx="9.2" cy="12" r="5.4" /><circle cx="14.8" cy="12" r="5.4" /></>,
+  "route-unknown": <><circle cx="12" cy="12" r="8.5" strokeDasharray="2.2 2.6" /><path d="M9.6 9.6a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.2 1-1.2 1.9v.4" /><circle cx="12" cy="16.9" r=".9" fill="currentColor" /></>,
+  "route-aerosol": <>{drop(7, 3.5, 1.9)}{drop(17.5, 13.6, 1.1)}<path d="M12.5 8h5.8a2.2 2.2 0 1 0-2.2-2.2M3.5 15.6h8.4a2.2 2.2 0 1 1-2.2 2.2" /><circle cx="20.8" cy="4.8" r=".9" fill="currentColor" /><circle cx="21" cy="9.6" r=".9" fill="currentColor" /><circle cx="5.8" cy="20.4" r=".9" fill="currentColor" /></>,
+  "route-vector": <><circle cx="7" cy="8.4" r="1.4" /><path d="M6.1 9.5 3.4 14.8" /><ellipse cx="13.6" cy="11.4" rx="5.8" ry="2.4" transform="rotate(20 13.6 11.4)" /><path d="M11.2 8.6C11.8 5 15.2 3.2 19.6 3.8 19.2 7.4 15.4 9.2 11.2 8.6Z" />{drop(3.2, 16.4, .75)}<path d="M11.2 12.8 9.4 18.6M14.6 13.6 15.8 19.4" opacity=".55" /></>,
+  "route-blood": <><g transform="rotate(-45 12 12)"><path d="M2.5 12H7" /><rect x="7" y="9.6" width="10" height="4.8" rx="1" /><path d="M17 8.4v7.2M17 12h4M21 9.8v4.4" /><path d="M10 9.6v1.6M12.5 9.6v1.6M15 9.6v1.6" opacity=".55" /></g>{drop(5, 19.6, .65)}</>,
   "lock-open": <>{lockBody}<path d="M8 10.5V7.5a4 4 0 0 1 7.7-1.6" /></>,
   "lock-closed": <>{lockBody}<path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /></>,
 };
@@ -130,7 +135,7 @@ export const classificationIcon: Record<string, PortiaIconName> = {
   "Люцидиум": "class-lucidium", "Транзитиум": "class-transitium", "Обливиум": "class-oblivium",
   "Изоморф": "class-isomorph", "Полиморф": "class-polymorph", "Ксеноморф": "class-xenomorph",
   "Стабилар": "class-stabilar", "Импульсар": "class-impulsar", "Инфернар": "class-infernar",
-  "Аэрозольный": "route-aerosol", "Контактно-бытовой": "route-contact", "Фекально-оральный": "route-fecal-oral",
+  "Аэрозольный": "route-aerosol", "Контактно-бытовой": "route-contact", "Фекально-оральный": "route-oral",
   "Трансмиссивный": "route-vector", "Гемоконтактный": "route-blood", "Половой путь": "route-sexual", "Неизвестно": "route-unknown",
 };
 

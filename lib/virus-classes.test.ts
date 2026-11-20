@@ -259,9 +259,8 @@ function lineOf(source: string, start: string) {
   return line;
 }
 
-// Owner 2026-11-20, OWN-03: route icons are redrawn; everything else stays byte for byte. The route drawings, the helper `drop`
-// (used only by the old route drawings), the route keys of the type and the route lines of the class map are not compared with the
-// sample; their own rules are in the next tests. The type and the class map are compared line by line without the lines naming a route.
+// Owner 2026-11-20, OWN-03 (clarification 11): the old route icons are back, byte for byte (checked in the next tests); three routes that never had one are drawn new.
+// Here the route keys of the type and the route lines of the class map are left out of the line by line comparison: their own rules follow.
 const withoutRouteLines = (text: string | undefined) => (text ?? "").split("\n").filter((line) => !line.includes("route-")).join("\n");
 
 test("26-12 lock-* and all non-class, non-route icons, their helpers, the type, the class map and PortiaIcon equal ICON_SAMPLE_COMMIT byte for byte", () => {
@@ -280,18 +279,26 @@ test("26-12 lock-* and all non-class, non-route icons, their helpers, the type, 
   assert.equal(sliceOf(iconsSource, "export function PortiaIcon(", "\n}\n"), sliceOf(sample, "export function PortiaIcon(", "\n}\n"), "PortiaIcon");
 });
 
-// OWN-03 (26.1-03, option-b): six routes and «Неизвестно», each its own new drawing.
-const routeIconKeys = ["route-aerosol", "route-contact", "route-fecal-oral", "route-vector", "route-blood", "route-sexual", "route-unknown"];
+// OWN-03 (26.1-15, clarification 11): the old six route icons are back byte for byte from the sample; the three routes that had no old icon are new.
+const oldRouteKeys = ["route-droplet", "route-dust", "route-contact", "route-oral", "route-sexual", "route-unknown"];
+const newRouteKeys = ["route-aerosol", "route-vector", "route-blood"];
 const routeNames: Record<string, string> = {
-  "Аэрозольный": "route-aerosol", "Контактно-бытовой": "route-contact", "Фекально-оральный": "route-fecal-oral",
+  "Аэрозольный": "route-aerosol", "Контактно-бытовой": "route-contact", "Фекально-оральный": "route-oral",
   "Трансмиссивный": "route-vector", "Гемоконтактный": "route-blood", "Половой путь": "route-sexual", "Неизвестно": "route-unknown",
 };
 
-test("OWN-03 the route icon keys are the new seven; the old route keys and the old helper are gone", () => {
-  const typed = [...typeBlock.matchAll(/"(route-[a-z-]+)"/g)].map((match) => match[1]);
-  assert.deepEqual(typed, routeIconKeys);
-  for (const old of ["route-droplet", "route-dust", "route-oral"]) assert.ok(!iconsSource.includes(old), `${old} is gone`);
-  assert.ok(!iconsSource.includes("const drop ="), "the drop helper served only the old route drawings");
+test("OWN-03 the route icon keys are the old six plus the new three; route-fecal-oral is gone", () => {
+  const typed = [...typeBlock.matchAll(/"(route-[a-z-]+)"/g)].map((match) => match[1]).sort();
+  assert.deepEqual(typed, [...oldRouteKeys, ...newRouteKeys].sort());
+  assert.ok(!iconsSource.includes("route-fecal-oral"), "route-fecal-oral is gone: the old route-oral is back");
+});
+
+test("OWN-03 the old route drawings and the drop helper equal ICON_SAMPLE_COMMIT byte for byte", () => {
+  const sample = readSampleIcons();
+  const sampleIconPaths = sliceOf(sample, "const iconPaths:", "// The badge for each canonical term");
+  for (const key of oldRouteKeys) assert.equal(drawing(key), entryIn(sampleIconPaths, key), `${key} is unchanged since ${ICON_SAMPLE_COMMIT.slice(0, 7)}`);
+  assert.equal(lineOf(iconsSource, "const drop ="), lineOf(sample, "const drop ="), "const drop =");
+  assert.equal(typeof lineOf(iconsSource, "const drop ="), "string");
 });
 
 test("OWN-03 the class map gives each of the seven route names its icon and keeps no old route name", () => {
@@ -300,14 +307,19 @@ test("OWN-03 the class map gives each of the seven route names its icon and keep
   for (const old of ["Воздушно-капельный", "Воздушно-пылевой", '"Половой"']) assert.ok(!iconMapBlock.includes(old), `${old} is not in the map`);
 });
 
-test("OWN-03 every route drawing: line 1.5 with round caps, currentColor only, no dashes, and none equals a drawing of the sample", () => {
+test("OWN-03 the three new route drawings are in the style of the old ones: root line 1.75, the drop helper, filled dots, fading only on minor lines, no colours, no dashes", () => {
   const sampleIconPaths = sliceOf(readSampleIcons(), "const iconPaths:", "// The badge for each canonical term");
   const sampleDrawings = [...sampleIconPaths.matchAll(/\n  ("[a-z-]+"|[a-z]+):/g)].map((match) => entryIn(sampleIconPaths, match[1].replaceAll('"', "")).trim());
-  for (const key of routeIconKeys) {
+  for (const key of newRouteKeys) {
     const item = drawing(key);
-    assert.ok(item.trim().startsWith('<><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">'), `${key} line group`);
+    assert.doesNotMatch(item, /strokeWidth/, `${key} takes the root line 1.75 of PortiaIcon, no group of its own`);
     assert.doesNotMatch(item, /#[0-9a-fA-F]{3,8}\b|rgb\(|hsl\(/, `${key} has no colour beyond currentColor`);
-    assert.doesNotMatch(item, /strokeDasharray|opacity\s*=|\{[a-zA-Z]/, `${key} has no dashes, fading or shared helper`);
+    assert.doesNotMatch(item, /strokeDasharray/, `${key} has no dashes`);
+    for (const fade of item.matchAll(/opacity="([^"]+)"/g)) assert.equal(fade[1], ".55", `${key}: minor lines fade to .55 like the old routes`);
+    for (const dot of item.matchAll(/<circle[^>]*fill="currentColor"[^>]*\/>/g)) assert.match(dot[0], /r="\.9"/, `${key}: dots are .9 like the old dust`);
     assert.ok(!sampleDrawings.includes(item.trim()), `${key} is a new drawing, not one of the sample`);
   }
+  assert.ok(drawing("route-aerosol").includes("drop(") && /<circle[^>]*fill="currentColor"/.test(drawing("route-aerosol")), "aerosol is built from the drop of the droplet icon and the curls and dots of the dust icon");
+  assert.ok(drawing("route-aerosol").includes("a2.2 2.2 0 1"), "aerosol has dust curls");
+  assert.ok(drawing("route-blood").includes("drop("), "the haemocontact icon has a drop at the needle");
 });
