@@ -729,7 +729,7 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
   .editor-toc button, .editor-record-list .editor-toc button { min-height: 44px; }
   .nested-editor-card, .editor-record-row { scroll-margin-top: 12px; }
 }
-.recommendation-order-list { display: grid; gap: 6px; margin-top: 14px; max-width: 720px; }
+.recommendation-order-list { display: grid; gap: 6px; margin-top: 14px; } /* owner 2026-11-20 (OWN-02): the editor list fills the window, no 720px column */
 .recommendation-order-row { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: stretch; gap: 7px; padding: 7px; border: 1px solid oklch(.353 calc(.032 * var(--accent-chroma)) var(--accent-hue)); background: rgba(255,255,255,.012); }
 .recommendation-order-row > span { min-width: 0; display: flex; align-items: center; gap: 10px; overflow: hidden; color: oklch(.79 calc(.02 * var(--accent-chroma)) var(--accent-hue)); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .recommendation-order-row > span small { flex: 0 0 auto; color: var(--teal); font: 11px var(--sans); }
@@ -867,7 +867,7 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 .access-editor-add .primary-control { min-height: var(--control-height); }
 .access-editor-message { padding: 11px 13px; border: 1px solid oklch(.465 calc(.063 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.826 calc(.077 * var(--accent-chroma)) var(--accent-hue)); font-size: 12px; }
 .access-editor-message.error { border-color: #754b46; color: #e0aaa3; }
-.access-editor-list { display: grid; gap: 7px; max-width: 760px; }
+.access-editor-list { display: grid; gap: 7px; } /* owner 2026-11-20 (OWN-02): the editor list fills the window, no 760px column */
 .access-editor-list > div:not(.editor-empty) { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; border: 1px solid oklch(.353 calc(.032 * var(--accent-chroma)) var(--accent-hue)); background: oklch(.176 calc(.016 * var(--accent-chroma)) var(--accent-hue)); }
 .access-editor-list > div > div { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .access-editor-list strong { overflow: hidden; color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 700 12px var(--sans); text-overflow: ellipsis; }

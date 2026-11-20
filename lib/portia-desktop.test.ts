@@ -331,8 +331,9 @@ test("editor scrolls as one page and its tabs use the whole window", () => {
   assert.doesNotMatch(styles, /\.flat-editor-form\s*\{[^}]*max-width/);
   for (const cap of [/\.compact-editor\s*\{/, /\.assistant-editor\s*\{/, /\.access-editor\s*\{/]) assert.doesNotMatch(styles, cap);
   assert.match(styles, /\.content-editor > \.promotion-editor\s*\{[^}]*flex:\s*1 1 0/);
-  assert.match(styles, /\.recommendation-order-list\s*\{[^}]*max-width:\s*720px/);
-  assert.match(styles, /\.access-editor-list\s*\{[^}]*max-width:\s*760px/);
+  // Owner 2026-11-20 (OWN-02) supersedes the 720px / 760px columns of these two editor lists: they fill the window.
+  assert.doesNotMatch(styles, /\.recommendation-order-list\s*\{[^}]*max-width/);
+  assert.doesNotMatch(styles, /\.access-editor-list\s*\{[^}]*max-width/);
 });
 
 test("window tiles keep their own size and the search shows the picked recommendations (D-43)", () => {

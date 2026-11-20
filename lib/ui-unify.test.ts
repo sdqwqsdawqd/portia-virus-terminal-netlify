@@ -1027,3 +1027,19 @@ test("UI-06 (UAT 2026-11-16 gap 3): the promotion gate and status fill a maximiz
     for (const selector of rule.selectors) assert.ok(!(selector.includes("is-maximized") && selector.includes("template-card-preview")), selector);
   }
 });
+
+test("owner 2026-11-20 OWN-02: content columns fill the window (guide card, nested cards, editor lists), the deliberate columns stay", () => {
+  // Lifted: a reading column inside a window left the right part empty (screenshots 3 and 4 of the owner).
+  for (const selector of [".guide-page", ".guide-photo", ".recommendation-order-list", ".access-editor-list"]) {
+    const cap = lastDeclaration(portiaCss, selector, "max-width");
+    assert.ok(cap === undefined || cap === "none" || cap === "100%", `${selector} has no px column (${cap})`);
+    assert.ok(!/^\d+px$/u.test(cap ?? ""), selector);
+  }
+  assert.equal(lastDeclaration(portiaCss, ".guide-page .info-document-copy", "max-width"), "none", "the text of an open card takes the card width");
+  // Kept on purpose, so that a later sweep does not lift them by mistake: «Информация» (owner: already fine there), a title, a lone media, a skeleton.
+  assert.equal(lastDeclaration(portiaCss, ".info-document-copy", "max-width"), "82ch");
+  assert.equal(lastDeclaration(portiaCss, ".info-document h1", "max-width"), "780px");
+  assert.equal(lastDeclaration(portiaCss, ".info-block-photo", "max-width"), "820px");
+  assert.equal(lastDeclaration(portiaCss, ".info-block-video", "max-width"), "820px");
+  assert.equal(lastDeclaration(portiaCss, ".global-search-header", "max-width"), "680px");
+});
