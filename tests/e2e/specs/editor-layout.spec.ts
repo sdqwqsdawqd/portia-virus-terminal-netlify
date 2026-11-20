@@ -207,6 +207,26 @@ test.describe("[STAB-EDIT-02] D-42 pointer drag between columns", () => {
       expect(await sectionOrder(page)).toEqual(ids);
     });
   });
+
+  test("[STAB-EDIT-02] PC: press and drag at once with the mouse lifts the card and moves it, without waiting 400 ms (OWN-09, 26.1-15)", async ({ browser, stagingRun, baseURL }, testInfo) => {
+    test.skip(isPhone(), "PC layout");
+    await openInfo(browser, stagingRun, baseURL ?? fallbackBase, testInfo, "layout-drag-at-once", async ({ page, run }) => {
+      const ids = Array.from({ length: 7 }, (_, index) => `${run}-info-${index + 1}`);
+      expect(await sectionOrder(page)).toEqual(ids);
+      const from = centre(await box(headOf(page, ids[1])));
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      // OWN-09 (26.1-15): no pause between the press and the move: the first drift past 6 px lifts the card.
+      await page.mouse.move(from.x + 12, from.y + 4, { steps: 2 });
+      await expect(card(page, ids[1])).toHaveAttribute("data-lifted", "true");
+      const to = centre(await box(card(page, ids[6])));
+      await page.mouse.move(to.x, to.y, { steps: 14 });
+      await page.mouse.up();
+      expect(await sectionOrder(page)).toEqual([ids[0], ...ids.slice(2), ids[1]]);
+      await page.keyboard.press("Control+z");
+      expect(await sectionOrder(page)).toEqual(ids);
+    });
+  });
 });
 
 const guideSeed = (run: string, count: number) => Array.from({ length: count }, (_, index) => ({

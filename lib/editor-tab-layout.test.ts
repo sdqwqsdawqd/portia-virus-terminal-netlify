@@ -889,6 +889,55 @@ test("OWN-09: a lifted column header looks lifted too", () => {
   assert.match(declared(`${lifted} *`, "cursor") ?? "", /^grabbing/);
 });
 
+// ---- 26.1-15 (OWN-09, owner 2026-11-20 after 26.1-08): «нельзя переносить, хотя появляется курсор захвата» ----
+// Root cause: a mouse press that is dragged at once drifts past 6 px long before the 400 ms of the hold, the model cancelled it, and the open hand was shown all the time.
+
+const swapSource = (() => {
+  const start = dossierCode.indexOf("export function ColumnSwapHandle(");
+  assert.ok(start >= 0, "ColumnSwapHandle is found in the dossier seam");
+  return dossierCode.slice(start);
+})();
+
+test("OWN-09 (26.1-15): both gestures tell the model which pointer pressed, so a mouse lifts by moving and a finger by holding", () => {
+  assert.ok(handleSource.includes("pointerType: event.pointerType"), "OrderDragHandle passes the kind of pointer on the press");
+  assert.ok(swapSource.includes("pointerType: event.pointerType"), "ColumnSwapHandle passes the kind of pointer on the press");
+  assert.ok(handleSource.includes("pressed: event.buttons !== 0") && swapSource.includes("pressed: event.buttons !== 0"), "a missed release (button up, no pointerup) ends the press instead of dragging with no button down");
+});
+
+test("OWN-09 (26.1-15): the tracker follows the pointer after the lift whether or not the hold timer is still set (it is cleared at the lift)", () => {
+  assert.ok(!/holdTimer\.current === null\) return/.test(handleSource), "OrderDragHandle: the tracker does not stop when the lift timer is cleared");
+  assert.ok(!/timer === null\) return/.test(swapSource), "ColumnSwapHandle: the tracker does not stop when the lift timer is cleared");
+  assert.ok(handleSource.includes('hold.current.phase === "idle"'), "OrderDragHandle: the tracker is gated by the phase of the hold");
+  assert.ok(swapSource.includes('state.phase === "idle"'), "ColumnSwapHandle: the tracker is gated by the phase of the hold");
+  assert.ok(handleSource.includes("liftPressed()") && /const liftPressed = \(\) => \{[^}]*window\.clearTimeout\(holdTimer\.current\)/.test(handleSource), "a lift by a move cancels the 400 ms timer, so it cannot fire a second lift");
+});
+
+test("OWN-09 (26.1-15): a lift by a move starts following the pointer in the same event", () => {
+  const track = handleSource.slice(handleSource.indexOf("const onTrack"));
+  assert.ok(track.indexOf("liftPressed()") >= 0 && track.indexOf("liftPressed()") < track.indexOf("if (active.current) moveTo("), "lift first, then the swap under the pointer, in one move event");
+});
+
+test("OWN-09 (26.1-15): the e2e spec has the second gesture, press and drag at once, next to the 450 ms hold", () => {
+  const spec = lf(readFileSync(new URL("../tests/e2e/specs/editor-layout.spec.ts", import.meta.url), "utf8"));
+  assert.ok(spec.includes("press and drag at once"), "a test named for the immediate drag");
+  assert.ok(spec.includes("// OWN-09 (26.1-15): no pause between the press and the move"), "the drag begins right after the press: no waitForTimeout between down and move");
+});
+
+test("OWN-09 (26.1-15): a row with nowhere to go (the selected card under its tab strip) is marked, shows no open hand and starts no hold", () => {
+  assert.match(dossierSeam, /import \{[^}]*\bhasPlaceToGo\b[^}]*\} from "@\/lib\/hold-gesture"/, "the seam uses the pure rule");
+  assert.equal(handleSource.split("hasPlaceToGo(").length - 1, 1, "one call: the helper that counts the places");
+  assert.ok(handleSource.split("movable(").length - 1 >= 3, "the helper is used by the press and by the marker");
+  assert.ok(handleSource.includes('row.dataset.sortAlone = "true"') && handleSource.includes("delete row.dataset.sortAlone"), "the row is marked while it is alone");
+  assert.ok(handleSource.includes("|| !movable()) return;"), "a lone row never starts a hold");
+  const MOUSE = "hover: hover";
+  assert.equal(declared("[data-sort-index][data-sort-alone] > .nested-editor-head", "cursor", MOUSE), "auto");
+  assert.equal(declared("[data-sort-index][data-sort-alone] > .nested-editor-head > .nested-editor-toggle", "cursor", MOUSE), "pointer");
+  assert.equal(declared(".editor-section-tabs nav > [data-sort-alone] > button:not(.order-drag-handle)", "cursor", MOUSE), "pointer");
+  assert.equal(declared(".editor-card-tabs nav > .editor-card-tab[data-sort-alone] > button:not(.order-drag-handle)", "cursor", MOUSE), "pointer");
+  assert.equal(declared(".editor-record-row[data-sort-alone] > button:not(.order-drag-handle)", "cursor", MOUSE), "pointer");
+  assert.equal(declared(".info-table-row[data-sort-alone]", "cursor", MOUSE), "auto");
+});
+
 // 26.1-09 (OWN-10): the cards of a section are tabs, like the sections; the strip and its selection live in a seam (D-21), the editor only calls it.
 const cardTabsSeam = family.find((part) => part.file === "portia-editor-card-tabs.tsx")?.text ?? "";
 const cardTabsCode = stripComments(cardTabsSeam);

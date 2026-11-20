@@ -676,6 +676,11 @@ html[data-motion="full"] [data-sort-index][data-lifted="true"], html[data-motion
 @media (hover: hover) and (pointer: fine) {
   .editor-section-tabs nav > .editor-section-tab > button:not(.order-drag-handle), .editor-card-tabs nav > .editor-card-tab[data-sort-index] > button:not(.order-drag-handle), [data-sort-index] > .nested-editor-head, [data-sort-index] > .nested-editor-head > .nested-editor-toggle, .editor-record-row[data-sort-index] > button:not(.order-drag-handle), .info-table-row[data-sort-index], .info-table-head > [data-column] { cursor: grab; }
 }
+/* OWN-09 (26.1-15): a row with nowhere to go (marked data-sort-alone by OrderDragHandle: the selected section, subsection or card under its tab strip, a list of one) shows no open hand and starts no hold. */
+@media (hover: hover) and (pointer: fine) {
+  [data-sort-index][data-sort-alone] > .nested-editor-head, .info-table-row[data-sort-alone] { cursor: auto; }
+  [data-sort-index][data-sort-alone] > .nested-editor-head > .nested-editor-toggle, .editor-section-tabs nav > [data-sort-alone] > button:not(.order-drag-handle), .editor-card-tabs nav > .editor-card-tab[data-sort-alone] > button:not(.order-drag-handle), .editor-record-row[data-sort-alone] > button:not(.order-drag-handle) { cursor: pointer; }
+}
 /* Gel lanes: while a handle is held the list shows a rail and the moving record is a lit band. */
 .editor-record-list:has(.order-drag-handle[data-dragging="true"]), .recommendation-order-list:has(.order-drag-handle[data-dragging="true"]), .flat-editor-form:has(.order-drag-handle[data-dragging="true"]) { box-shadow: inset 2px 0 0 var(--teal-dim); }
 .editor-record-row:has(.order-drag-handle[data-dragging="true"]), .recommendation-order-row:has(.order-drag-handle[data-dragging="true"]), .nested-editor-card:has(> .nested-editor-head .order-drag-handle[data-dragging="true"]), .info-table-row:has(.order-drag-handle[data-dragging="true"]) { position: relative; z-index: 1; outline: 1px solid var(--teal); background: var(--teal-soft); box-shadow: 0 8px 20px rgba(0,0,0,.35); }

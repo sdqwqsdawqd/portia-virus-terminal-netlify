@@ -11,7 +11,7 @@ import type { ImageFraming } from "@/lib/image-framing";
 import { isLocalMediaPath } from "@/lib/media-url";
 import { MAX_SCIENTIST_LOGS } from "@/lib/content-limits";
 import { passesTarget, type Box } from "@/lib/sort-order";
-import { HOLD_MS, holdStep, holdTargetAllowed, idleHold, type HoldState, type HoldTarget } from "@/lib/hold-gesture";
+import { HOLD_MS, hasPlaceToGo, holdStep, holdTargetAllowed, idleHold, type HoldState, type HoldTarget } from "@/lib/hold-gesture";
 import { classificationIconFor, PortiaIcon } from "@/components/portia-icons";
 import { CardTabs, cardTabsCopy, useCardTabSelection } from "@/components/portia-editor-card-tabs";
 import { TRANSMISSION_CHOICES, formatTransmissionRoutes, parseTransmissionRoutes, toggleTransmissionRoute } from "@/lib/transmission-routes";
@@ -65,7 +65,8 @@ function holdTargetOf(target: EventTarget | null, row: HTMLElement): HoldTarget 
 
 // owner 2026-11-20 (OWN-09): the row itself is held to drag; the button is the keyboard and screen reader way.
 // The button is invisible until the keyboard focuses it. The press is heard on the zone of the row (a card's head, otherwise the whole row);
-// after HOLD_MS without a drift the row is lifted (data-lifted) and follows the pointer as before. The button still carries data-dragging and
+// a mouse or a pen lifts the row as soon as it drifts past the threshold (26.1-15: pressing and dragging at once), a finger after HOLD_MS without a drift,
+// and a still mouse hold of HOLD_MS lifts too; the lifted row (data-lifted) follows the pointer as before. The button still carries data-dragging and
 // data-drag-id for the whole drag, so editKeyFor folds one drag into one undo step.
 export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: { index: number; onMove: (from: number, to: number) => void; label: string; itemId?: string; onMoveAcross?: (groupId: string, toIndex: number) => void }) {
   const button = useRef<HTMLButtonElement>(null);
@@ -83,9 +84,27 @@ export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: 
   const endLift = useRef<(() => void) | null>(null);
   useEffect(() => { indexRef.current = index; onMoveRef.current = onMove; onMoveAcrossRef.current = onMoveAcross; itemIdRef.current = itemId; });
   const placed = useRef<{ index: number; left: number; top: number } | null>(null);
+  // Has the row anywhere to go (26.1-15)? Under a strip of tabs only the selected section, subsection or card stands in the page: a list of one, nobody to swap with.
+  // Such a row is marked data-sort-alone (no open hand) and does not start a hold, so its head still folds and unfolds on a click.
+  function movable() {
+    const row = button.current?.closest<HTMLElement>("[data-sort-index]");
+    const parent = row?.parentElement;
+    if (!row || !parent) return false;
+    const columns = parent.hasAttribute("data-sort-column") ? parent.parentElement : null;
+    const rows = columns ? columns.querySelectorAll(":scope > [data-sort-column] > [data-sort-index]") : parent.querySelectorAll(":scope > [data-sort-index]");
+    const kind = parent.dataset.sortGroup;
+    const crossesLists = Boolean(onMoveAcrossRef.current && itemIdRef.current && kind);
+    return hasPlaceToGo({
+      rows: rows.length,
+      crossesLists,
+      sameKindLists: crossesLists ? document.querySelectorAll(`[data-sort-group="${kind}"]`).length : 0,
+      otherDropGroups: crossesLists ? Array.from(document.querySelectorAll<HTMLElement>("[data-drop-group]")).filter((card) => card.dataset.dropGroup !== parent.dataset.groupId).length : 0,
+    });
+  }
   // Per-handle FLIP: every row whose index changed slides itself (along both axes, rows can sit in columns), so the dragged row and its displaced neighbours all animate.
   useLayoutEffect(() => {
     const row = button.current?.closest<HTMLElement>("[data-sort-index]");
+    if (row) { if (movable()) delete row.dataset.sortAlone; else row.dataset.sortAlone = "true"; }
     if (!row || row.offsetParent === null) { placed.current = null; return; }
     const { offsetLeft: left, offsetTop: top } = row;
     const previous = placed.current;
@@ -143,6 +162,9 @@ export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: 
   const liftPressed = () => {
     const pressed = press.current;
     if (!pressed || active.current) return;
+    // A lift by a move must not leave the 400 ms timer behind: it would fire a second lift.
+    if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
+    holdTimer.current = null;
     beginLift(pressed.row, makeId("drag"));
     try {
       pressed.zone.setPointerCapture(pressed.pointerId);
@@ -228,12 +250,13 @@ export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: 
     if (!row || !zone) return;
     const onPress = (event: PointerEvent) => {
       // A second finger or a right-click must not start a hold or orphan the first one's timer and frame loop.
-      if (!event.isPrimary || event.button !== 0 || !holdTargetAllowed(holdTargetOf(event.target, row))) return;
+      if (!event.isPrimary || event.button !== 0 || !holdTargetAllowed(holdTargetOf(event.target, row)) || !movable()) return;
       stop();
       pointer.current = { x: event.clientX, y: event.clientY };
       press.current = { zone, row, pointerId: event.pointerId };
-      hold.current = holdStep(idleHold, { type: "down", x: event.clientX, y: event.clientY, at: event.timeStamp });
+      hold.current = holdStep(idleHold, { type: "down", x: event.clientX, y: event.clientY, at: event.timeStamp, pointerType: event.pointerType });
       holdTimer.current = window.setTimeout(() => {
+        holdTimer.current = null;
         hold.current = holdStep(hold.current, { type: "tick", at: hold.current.at + HOLD_MS });
         if (hold.current.phase === "lifted") liftPressed();
       }, HOLD_MS);
@@ -245,21 +268,21 @@ export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: 
       if (holdStep(hold.current, { type: event.type === "pointercancel" ? "cancel" : "up" }).suppressClick) swallowNextClick();
       stop();
     };
+    // Gated by the phase of the hold, not by the lift timer: the timer is cleared at the lift, and the drag must go on after it.
     const onTrack = (event: PointerEvent) => {
-      if (!event.isPrimary || holdTimer.current === null) return;
+      if (!event.isPrimary || hold.current.phase === "idle") return;
       pointer.current = { x: event.clientX, y: event.clientY };
-      if (hold.current.phase === "pressing") {
-        hold.current = holdStep(hold.current, { type: "move", x: event.clientX, y: event.clientY, at: event.timeStamp });
-        // Drifted too far before the time was up: it was a scroll or a swipe, not a hold.
-        if (hold.current.phase === "cancelled") { stop(); return; }
-        if (hold.current.phase === "lifted") liftPressed();
-      }
+      hold.current = holdStep(hold.current, { type: "move", x: event.clientX, y: event.clientY, at: event.timeStamp, pressed: event.buttons !== 0 });
+      // The button was let go outside the page and no release was heard: end the press rather than drag with no button down.
+      if (hold.current.phase === "idle") { stop(); return; }
+      // A finger that drifted too far before the time was up was scrolling, not holding.
+      if (hold.current.phase === "cancelled") { stop(); return; }
+      if (hold.current.phase === "lifted") liftPressed();
       if (active.current) moveTo(event.clientX, event.clientY);
     };
     // Not cleared here: Strict Mode runs this effect twice; a release or blur clears it.
     if (dragHandoff && dragHandoff.itemId === itemIdRef.current && button.current) {
-      holdTimer.current = 0;
-      hold.current = { phase: "lifted", x: dragHandoff.x, y: dragHandoff.y, at: 0, suppressClick: false };
+      hold.current = { phase: "lifted", x: dragHandoff.x, y: dragHandoff.y, at: 0, pointerType: "mouse", suppressClick: false };
       pointer.current = { x: dragHandoff.x, y: dragHandoff.y };
       beginLift(row, dragHandoff.dragId);
     }
@@ -567,6 +590,9 @@ export function ColumnSwapHandle({ label, onSwap }: { label: string; onSwap: () 
     };
     const lift = () => {
       if (!button.current || cell.dataset.lifted) return;
+      // A lift by a move must not leave the 400 ms timer behind.
+      if (timer !== null) window.clearTimeout(timer);
+      timer = null;
       cell.dataset.lifted = "true";
       // "column", not "true": editKeyFor folds only row drags into one step, and a column swap is a single change on drop.
       button.current.dataset.dragging = "column";
@@ -588,19 +614,19 @@ export function ColumnSwapHandle({ label, onSwap }: { label: string; onSwap: () 
       if (!event.isPrimary || event.button !== 0 || !holdTargetAllowed(holdTargetOf(event.target, owner))) return;
       clear();
       pressedId = event.pointerId;
-      state = holdStep(idleHold, { type: "down", x: event.clientX, y: event.clientY, at: event.timeStamp });
+      state = holdStep(idleHold, { type: "down", x: event.clientX, y: event.clientY, at: event.timeStamp, pointerType: event.pointerType });
       timer = window.setTimeout(() => {
+        timer = null;
         state = holdStep(state, { type: "tick", at: state.at + HOLD_MS });
         if (state.phase === "lifted") lift();
       }, HOLD_MS);
     };
+    // Gated by the phase of the hold, not by the lift timer: the timer is cleared at the lift, and the drag must go on after it.
     const onTrack = (event: PointerEvent) => {
-      if (!event.isPrimary || timer === null) return;
-      if (state.phase === "pressing") {
-        state = holdStep(state, { type: "move", x: event.clientX, y: event.clientY, at: event.timeStamp });
-        if (state.phase === "cancelled") { clear(); return; }
-        if (state.phase === "lifted") lift();
-      }
+      if (!event.isPrimary || state.phase === "idle") return;
+      state = holdStep(state, { type: "move", x: event.clientX, y: event.clientY, at: event.timeStamp, pressed: event.buttons !== 0 });
+      if (state.phase === "idle" || state.phase === "cancelled") { clear(); return; }
+      if (state.phase === "lifted") lift();
       if (state.phase !== "lifted") return;
       const over = otherCell(event.clientX, event.clientY);
       head.querySelectorAll("[data-column]").forEach((item) => item.toggleAttribute("data-drop-target", item === over));
