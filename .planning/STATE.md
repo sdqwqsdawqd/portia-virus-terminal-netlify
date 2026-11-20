@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: "26.1"
 current_phase_name: Правки владельца
 status: executing
-stopped_at: Completed 26.1-12-PLAN.md
-last_updated: "2026-11-20T21:54:31.955Z"
+stopped_at: Completed-26.1-13-PLAN.md
+last_updated: "2026-11-20T22:08:57.363Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 26.1 execution started
-state_head: a46cee656c0db5c521182b5680f91898500544a8
+state_head: 379becdd5fa63b39be6d563e834982a7e9e3f5a1
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 85
-  completed_plans: 83
+  completed_plans: 84
 ---
 
 Total Phases: 6
@@ -124,6 +124,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase 26.1 P10 | 2h | 3 tasks | 12 files |
 | Phase 26.1 P11 | 2h | 3 tasks | 8 files |
 | Phase 26.1 P12 | 2h | 3 tasks | 15 files |
+| Phase 26.1 P13 | 80min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -388,6 +389,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 26.1]: 26.1-11: живая «Сводка» - лента участника по датам с неопубликованными записями (пометка «Черновик»), порядок не меняется; даты квеста проверяются до записи в черновик
 - [Phase 26.1]: 26.1-11: вид «Информации» и карточки «Сводки» живут в шве portia-desktop-info.tsx; защищённый редактор не менялся
 - [Phase 26.1]: 26.1-12: the live card of a virus is one component for the archive, the recycle bin and the template; a virus of the bin asks the tools of both apps (useLiveVirus), the template has no provider
+- [Phase 26.1]: 26.1-13: live mode is exactly six apps (guide, info, broadcasts, viruses, recycle, assistant); LIVE_EXCLUDED names the reason of the other five; last phrase of obida/idle/activity cannot be removed
 
 ### Pending Todos
 
@@ -446,8 +448,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-20T21:54:30.839Z
-Stopped at: Completed 26.1-12-PLAN.md
+Last session: 2026-11-20T22:08:49.591Z
+Stopped at: Completed-26.1-13-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
