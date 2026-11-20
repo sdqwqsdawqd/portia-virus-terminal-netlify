@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { MAX_BLOCKS, MAX_SUBSECTIONS } from "./content-limits.ts";
-import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveRemovedKeys } from "./live-edit.ts";
-import type { PortiaContent } from "./portia-content.ts";
+import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveRemovedKeys, liveTextKey } from "./live-edit.ts";
+import { portiaTextKey, type PortiaContent } from "./portia-content.ts";
 
 // LIVE-01..05 (26.1-10): the pure model of the live editing mode. The draft is the editor's draft; every function edits it in place, as the editor's updaters do.
 
@@ -20,7 +20,8 @@ function draftWithGuide(): PortiaContent {
 }
 
 test("LIVE-01: the live mode knows its tabs; search and employees are not among them", () => {
-  assert.deepEqual([...LIVE_TABS], ["guide"]);
+  assert.deepEqual([...LIVE_TABS], ["guide", "info"]);
+  assert.equal(liveAppForTab("info"), "info", "26.1-11: «Информация» has its live mode");
   assert.equal(liveAppForTab("guide"), "guide");
   assert.equal(liveAppForTab("users"), null);
   assert.equal(liveAppForTab("search"), null, "owner 2026-11-20: no live search");
@@ -105,7 +106,7 @@ test("LIVE-05: the live text at rest is the visitor's FormattedText with its GIF
   assert.match(seam, /<FormattedText\b/);
   assert.match(seam, /<EmbeddedMediaStrip\b/);
   assert.match(seam, /<FormattedTextarea\b[\s\S]*area="info"/);
-  assert.match(seam, /portiaTextKey\.guideBlock\(blockId\)/);
+  assert.match(seam, /const key = liveTextKey\(target\);/);
   assert.match(seam, /onActivate=\{bridge\.activateFormatter\}/);
   const card = read("components/portia-virus-card.tsx");
   const strip = card.slice(card.indexOf("export function EmbeddedMediaStrip"), card.indexOf("export function DossierSection"));
@@ -323,4 +324,44 @@ test("LIVE-04: the live mode covers guide, info, broadcasts, viruses, recycle an
   const model = read("lib/live-edit.ts");
   assert.ok(model.includes('export type LiveApp = "guide" | "info" | "broadcasts" | "viruses" | "recycle" | "assistant";'));
   assert.ok(!/LiveApp = [^;]*"(search|employees)"/.test(model));
+});
+
+// ---- 26.1-11: «Информация» и «Сводка» ----
+
+function draftWithInfo(): PortiaContent {
+  return {
+    infoSections: [
+      { id: "i1", title: "Первый", body: "Тело", subsections: [{ id: "u1", title: "Под", blocks: [] }] },
+      { id: "i2", title: "Второй", body: "", subsections: [] },
+    ],
+    formattedText: {},
+  } as unknown as PortiaContent;
+}
+
+test("LIVE-02 (26.1-11): the title and the body of an info section change in place; the body is kept whole", () => {
+  const draft = draftWithInfo();
+  assert.equal(applyLiveText(draft, { kind: "info-section-title", sectionId: "i1" }, "Правила"), true);
+  assert.equal(draft.infoSections[0].title, "Правила");
+  assert.equal(draft.infoSections[1].title, "Второй");
+  const long = "б".repeat(TEXT_LIMIT + 50);
+  assert.equal(applyLiveText(draft, { kind: "info-section-body", sectionId: "i1" }, long), true);
+  assert.equal(draft.infoSections[0].body.length, TEXT_LIMIT + 50, "a formatted text is not cut like a line");
+  assert.equal(applyLiveText(draft, { kind: "info-section-title", sectionId: "nope" }, "x"), false);
+  assert.equal(applyLiveText(draft, { kind: "info-section-body", sectionId: "nope" }, "x"), false);
+});
+
+test("LIVE-02 (26.1-11): the formatting key of a live text is the editor's own key for that place", () => {
+  assert.equal(liveTextKey({ kind: "info-section-body", sectionId: "i1" }), portiaTextKey.info("i1"));
+  assert.equal(liveTextKey({ kind: "guide-block-text", cardId: "c", blockId: "b" }), portiaTextKey.guideBlock("b"));
+});
+
+test("LIVE-01/04 (26.1-11): the desktop draws the info article through InfoArticle of its seam; the seam asks for the live API and the surface carries data-live-app=info", () => {
+  const info = read("components/portia-desktop-info.tsx");
+  assert.match(info, /export function InfoArticle\(/);
+  assert.match(info, /useLiveEdit\("info"\)/);
+  assert.match(read("components/portia-desktop.tsx"), /<InfoArticle\b/);
+  assert.match(read("components/portia-editor-live.tsx"), /data-live-app="info"/);
+  assert.match(info, /live\.text\(\{ kind: "info-section-title"/);
+  assert.match(info, /live\.rich\(\{ kind: "info-section-body"/);
+  assert.doesNotMatch(info, /LiveEditContext\.Provider|portia-editor-live/);
 });

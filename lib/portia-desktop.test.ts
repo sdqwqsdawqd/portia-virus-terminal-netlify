@@ -128,7 +128,8 @@ test("component families import only their own seams and the known shared compon
     // portia-live-edit: LIVE-04, the shared context the editor seam provides.
     // portia-desktop-documents: LIVE-02, the editor draws the visitor's view of the app in live mode (the «Справочник» page on the draft).
     // portia-virus-card: LIVE-05, the live text shows the visitor's FormattedText with its GIFs, and the strip of GIFs under the field being edited.
-    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states", "portia-image-framing", "portia-users-tab", "portia-level-picker", "portia-image-rewrite", "portia-icons", "portia-live-edit", "portia-desktop-documents", "portia-virus-card"],
+    // portia-desktop-info: LIVE-02 (26.1-11), the live mode draws the visitor's article of «Информация» and card of «Сводки» on the draft.
+    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states", "portia-image-framing", "portia-users-tab", "portia-level-picker", "portia-image-rewrite", "portia-icons", "portia-live-edit", "portia-desktop-documents", "portia-desktop-info", "portia-virus-card"],
   } as const;
   for (const [main, family] of [["portia-desktop", desktopFamily], ["portia-editor", editorFamily]] as const) {
     const members = family.map((part) => part.file.replace(/\.tsx$/, ""));
@@ -466,7 +467,9 @@ test("every record picture goes through PortiaImage with its record id and the r
   // Collections stay lazy.
   const lazyOf = (file: string) => all.filter((entry) => entry.file === file).map((entry) => entry.tag);
   assert.ok(lazyOf("portia-desktop-documents.tsx").length >= 3 && lazyOf("portia-desktop-documents.tsx").every((tag) => tag.includes('priority="lazy"')));
-  assert.ok(lazyOf("portia-desktop.tsx").filter((tag) => tag.includes('priority="lazy"')).length >= 2, "information photo and trash image");
+  // 26.1-11: the information photo moved with the article into the seam portia-desktop-info.tsx.
+  assert.ok([...lazyOf("portia-desktop.tsx"), ...lazyOf("portia-desktop-info.tsx")].filter((tag) => tag.includes('priority="lazy"')).length >= 2, "information photo and trash image");
+  assert.ok(lazyOf("portia-desktop-info.tsx").length >= 1 && lazyOf("portia-desktop-info.tsx").every((tag) => tag.includes('priority="lazy"')));
   assert.ok(card.includes('recordId: `${virus.id}:mutation:${index}`, priority: "lazy"'));
   // No loading policy outside PortiaImage; the one fetchPriority left is the PORTIA mark of the boot screen.
   assert.ok(!source.includes('loading="eager"'));
@@ -1223,8 +1226,9 @@ test("UI-08 D-14: on a phone a sections bar stands above the article; the two-sc
   assert.ok(info.includes('<span aria-hidden="true">{infoSectionsLabel.glyph}</span>'));
   assert.ok(info.includes('<span className="info-sections-current">{infoSectionsTitle}</span>'));
   assert.ok(source.includes("infoCurrentTitle(content.infoSections, selectedSubsection?.id ?? selectedInfo.id)"));
-  // «Далее» stays in the article.
-  assert.ok(info.includes('<div className="info-next">'));
+  // «Далее» stays in the article (26.1-11: the article is InfoArticle of the seam portia-desktop-info.tsx; the window hands it next and onNext).
+  assert.ok(info.includes("next={infoNext} onNext={goInfoNext}"));
+  assert.ok(source.includes('<div className="info-next">'));
 });
 
 test("UI-08 D-14: the bar exists only on a phone, in the flow; the desktop .info-index rules are unchanged", () => {

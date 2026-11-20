@@ -13,10 +13,10 @@ export type LiveApp = "guide" | "info" | "broadcasts" | "viruses" | "recycle" | 
 export const LIVE_EXCLUDED = ["search", "employees"] as const;
 
 /** The editor tabs that have a live mode so far, and the app each one shows. */
-export const LIVE_TABS = ["guide"] as const;
+export const LIVE_TABS = ["guide", "info"] as const;
 export type LiveTab = (typeof LIVE_TABS)[number];
 
-const liveAppOfTab: Record<LiveTab, LiveApp> = { guide: "guide" };
+const liveAppOfTab: Record<LiveTab, LiveApp> = { guide: "guide", info: "info" };
 
 /** The app the live mode of an editor tab shows; null where the tab has none. */
 export function liveAppForTab(tab: string): LiveApp | null {
@@ -36,7 +36,17 @@ export type LiveTarget =
   | { kind: "guide-table-key" | "guide-table-value"; cardId: string; blockId: string; rowId: string }
   | { kind: "guide-video-url"; cardId: string; blockId: string }
   /** The body of a text block or a callout: formatted text, stored with its document under portiaTextKey.guideBlock(blockId). */
-  | { kind: "guide-block-text"; cardId: string; blockId: string };
+  | { kind: "guide-block-text"; cardId: string; blockId: string }
+  /** «Информация» (26.1-11): the title of a section, and its body (formatted text, stored under portiaTextKey.info(sectionId)). */
+  | { kind: "info-section-title"; sectionId: string }
+  | { kind: "info-section-body"; sectionId: string };
+
+/** The key of the stored formatting (draft.formattedText) of a formatted text place; "" for a plain one. */
+export function liveTextKey(target: LiveTarget): string {
+  if (target.kind === "guide-block-text") return portiaTextKey.guideBlock(target.blockId);
+  if (target.kind === "info-section-body") return portiaTextKey.info(target.sectionId);
+  return "";
+}
 
 /** A picture place of the «Справочник»: the photo of a section, the cover of a card, the picture of a photo block. */
 export type LiveImageTarget =
@@ -57,6 +67,13 @@ export function applyLiveText(draft: PortiaContent, target: LiveTarget, value: s
       const section = draft.guideSections.find((item) => item.id === target.sectionId);
       if (!section) return false;
       section.title = line;
+      return true;
+    }
+    case "info-section-title":
+    case "info-section-body": {
+      const section = draft.infoSections.find((item) => item.id === target.sectionId);
+      if (!section) return false;
+      if (target.kind === "info-section-title") section.title = line; else section.body = value;
       return true;
     }
     case "guide-card-title": {

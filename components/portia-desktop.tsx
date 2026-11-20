@@ -30,7 +30,8 @@ import { CompanionItemsSettings } from "@/components/portia-companion-editor";
 import { AppDeniedPanel, AppFatalPanel, AppSkeleton, AppStaleBanner } from "@/components/portia-desktop-states";
 import { accessCheckFailedText, appViewState, contentSyncFailed, contentSyncSucceeded, emptyCopy, failureFromResponse, type AppFailure, type ContentSync } from "@/lib/app-state";
 import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
-import { EmbeddedDocument, GuideApp, YoutubeFigure } from "@/components/portia-desktop-documents";
+import { EmbeddedDocument, GuideApp } from "@/components/portia-desktop-documents";
+import { InfoArticle } from "@/components/portia-desktop-info";
 import { FormattedText, LoadingState, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
 import { PortiaImage } from "@/components/portia-desktop-media";
 import { newRecommendationSeed, pickSearchRecommendations, seededRandom } from "@/lib/search-recommendations";
@@ -2160,19 +2161,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
                   </div>
                 );
               })}</nav>
-              <article className="info-document">{infoView === "stale" && contentStaleBanner}{infoLostShown ? <RedactedPlaceholder variant="block" level={infoLostShown.level} /> : infoNoOpen ? <div className="empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{levelCopy.sectionsNoOpen.heading}</strong><span>{levelCopy.sectionsNoOpen.body}</span></div> : selectedInfo ? (selectedSubsection
-                ? <div className="content-fade" key={selectedSubsection.id}><span className="eyebrow">{selectedInfo.title}</span><h1 tabIndex={infoPhone ? -1 : undefined}>{selectedSubsection.title || "БЕЗ НАЗВАНИЯ"}</h1><div className="info-blocks">{selectedSubsection.blocks.map((block) => block.type === "text"
-                  ? <FormattedText key={block.id} className="info-document-copy" text={block.text} document={content.formattedText[portiaTextKey.infoBlock(block.id)]} />
-                  : block.type === "table"
-                    ? <dl key={block.id} className="info-ledger info-classification">{block.rows.filter((row) => row.key || row.value).map((row, rowIndex) => <div key={rowIndex}><dt>{row.key}</dt><dd>{row.value}</dd></div>)}</dl>
-                    : block.type === "video" && block.videoId
-                      // nocookie embed, id validated by normalizePortiaContent (D-09); default referrer policy, YouTube refuses embeds without a Referer.
-                      ? <YoutubeFigure key={block.id} videoId={block.videoId} title={selectedSubsection.title} />
-                      : block.type === "photo" && block.url
-                        ? <figure key={block.id} className="info-block-photo"><PortiaImage src={block.url} alt={`Иллюстрация: ${selectedSubsection.title}`} recordId={block.id} priority="lazy" icon="info" framing={block.framing} /></figure>
-                        : null)}</div>{infoNext && <div className="info-next"><button type="button" onClick={() => goInfoNext(infoNext)}>Далее: {infoNext.title}</button></div>}</div>
-                : <div className="content-fade" key={selectedInfo.id}><h1 tabIndex={infoPhone ? -1 : undefined}>{selectedInfo.title}</h1><FormattedText className="info-document-copy" text={selectedInfo.body} document={content.formattedText[portiaTextKey.info(selectedInfo.id)]} />{infoNext && <div className="info-next"><button type="button" onClick={() => goInfoNext(infoNext)}>Далее: {infoNext.title}</button></div>}</div>
-              ) : null}</article>
+              <article className="info-document">{infoView === "stale" && contentStaleBanner}{infoLostShown ? <RedactedPlaceholder variant="block" level={infoLostShown.level} /> : infoNoOpen ? <div className="empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{levelCopy.sectionsNoOpen.heading}</strong><span>{levelCopy.sectionsNoOpen.body}</span></div> : selectedInfo ? <InfoArticle key={selectedSubsection?.id ?? selectedInfo.id} section={selectedInfo} subsection={selectedSubsection} formattedText={content.formattedText} phone={infoPhone} next={infoNext} onNext={goInfoNext} /> : null}</article>
             </div>}
           </AppWindow>
 

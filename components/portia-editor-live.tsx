@@ -2,6 +2,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { GuideApp } from "@/components/portia-desktop-documents";
+import { InfoArticle } from "@/components/portia-desktop-info";
 import { ConfirmDialog, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
 import { FormattedTextarea, findFormatField, type FormatTarget } from "@/components/portia-editor-rich-text";
 import { LiveEditContext, type LiveEditApi } from "@/components/portia-live-edit";
@@ -9,11 +10,11 @@ import { EmbeddedMediaStrip, FormattedText } from "@/components/portia-virus-car
 import type { BroadcastTab } from "@/lib/broadcasts";
 import type { ImageFraming } from "@/lib/image-framing";
 import {
-  applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveContainerFull, liveRemovedKeys,
+  applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveContainerFull, liveRemovedKeys, liveTextKey,
   type LiveAddKind, type LiveApp, type LiveCardsTarget, type LiveContainer, type LiveImageTarget, type LiveList, type LiveRemovable, type LiveTarget,
 } from "@/lib/live-edit";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
-import { findGuide, portiaTextKey, type PortiaContent, type RichTextDocument } from "@/lib/portia-content";
+import { findGuide, findInfo, type PortiaContent, type RichTextDocument } from "@/lib/portia-content";
 
 // LIVE-01..05 (26.1-10): the seam of the live editing mode. The editor shows the visitor's own app on the draft; here lives everything that edits it.
 // The visitor's components ask components/portia-live-edit.tsx for these tools; they exist only inside the provider that LiveSurface sets.
@@ -40,6 +41,8 @@ export const liveCopy = {
     "guide-table-value": "Значение строки",
     "guide-video-url": "Ссылка на видео",
     "guide-block-text": "Текст",
+    "info-section-title": "Название раздела",
+    "info-section-body": "Текст раздела",
   } satisfies Record<LiveTarget["kind"], string>,
   placeholders: {
     "guide-section-title": "Название раздела",
@@ -51,7 +54,12 @@ export const liveCopy = {
     "guide-table-value": "Значение",
     "guide-video-url": "Ссылка на видео",
     "guide-block-text": "Нажмите, чтобы написать",
+    "info-section-title": "Название раздела",
+    "info-section-body": "Нажмите, чтобы написать",
   } satisfies Record<LiveTarget["kind"], string>,
+  infoIndex: "Разделы информации",
+  infoSubsections: (count: number) => `Подразделов: ${count}`,
+  infoEmpty: "Разделов пока нет",
   richEmpty: "Нажмите, чтобы написать",
   lists: { "guide-sections": "раздел", "guide-cards": "карточка", "guide-blocks": "блок" } satisfies Record<LiveList["kind"], string>,
   removeLabel: "Удалить",
@@ -117,12 +125,52 @@ export function LiveModeToggle({ on, onToggle }: { on: boolean; onToggle: () => 
 
 /** LIVE-02: the visitor's own view of the tab's app on the draft, inside the provider of the live tools. */
 export function LiveSurface({ tab, bridge }: { tab: string; bridge: LiveEditorBridge }) {
-  const [openCardId, setOpenCardId] = useState("");
   const app = liveAppForTab(tab);
-  if (app !== "guide") return null;
-  return <div className="live-surface" data-live-app={app}>
-    <LiveEditContext.Provider value={createLiveApi(app, bridge)}>
+  if (app === "guide") return <GuideSurface bridge={bridge} />;
+  if (app === "info") return <InfoSurface bridge={bridge} />;
+  return null;
+}
+
+function GuideSurface({ bridge }: { bridge: LiveEditorBridge }) {
+  const [openCardId, setOpenCardId] = useState("");
+  return <div className="live-surface" data-live-app="guide">
+    <LiveEditContext.Provider value={createLiveApi("guide", bridge)}>
       <GuideApp sections={bridge.draft.guideSections} formattedText={bridge.draft.formattedText} openCardId={openCardId} onOpenCard={setOpenCardId} />
+    </LiveEditContext.Provider>
+  </div>;
+}
+
+const noNext = () => undefined;
+const indexNumber = (index: number) => String(index + 1).padStart(2, "0");
+
+/** «Информация» as the visitor sees it: the table of contents on the left, the article on the right (InfoArticle, the visitor's own component, inside the provider). */
+function InfoSurface({ bridge }: { bridge: LiveEditorBridge }) {
+  const [picked, setPicked] = useState(bridge.infoSection);
+  const sections = bridge.draft.infoSections;
+  // What is shown: the picked article, else the section the editor has open, else the first section; a vanished id (a removed section) falls through.
+  const entry = findInfo(sections, picked) ?? findInfo(sections, bridge.infoSection) ?? (sections[0] ? { section: sections[0], subsection: null } : null);
+  const select = (id: string, sectionId: string) => { setPicked(id); bridge.setInfoSection(sectionId); };
+  return <div className="live-surface" data-live-app="info">
+    <LiveEditContext.Provider value={createLiveApi("info", bridge)}>
+      <div className="info-library">
+        <nav className="info-index" aria-label={liveCopy.infoIndex} id="info-sections-list">
+          {sections.map((section, index) => {
+            const open = section.id === entry?.section.id;
+            const count = section.subsections.length;
+            return <div key={section.id}>
+              <button type="button" className={`${open && !entry?.subsection ? "active" : ""}${count ? " has-subsections" : ""}`} data-info-id={section.id} aria-expanded={count ? open : undefined} onClick={() => select(section.id, section.id)}>
+                <small>{indexNumber(index)}</small><span>{section.title || liveCopy.untitled}</span>{count ? <em className="info-sub-marker" aria-label={liveCopy.infoSubsections(count)}>{open ? "▾" : "▸"} {count}</em> : null}
+              </button>
+              {open && count ? <div className="info-subsections">{section.subsections.map((sub, subIndex) => <button key={sub.id} type="button" className={sub.id === entry?.subsection?.id ? "active" : ""} data-info-id={sub.id} title={sub.title || liveCopy.untitled} onClick={() => select(sub.id, section.id)}>
+                <small>{indexNumber(index)}.{subIndex + 1}</small><span>{sub.title || liveCopy.untitled}</span>
+              </button>)}</div> : null}
+            </div>;
+          })}
+        </nav>
+        <article className="info-document">
+          {entry ? <InfoArticle key={entry.subsection?.id ?? entry.section.id} section={entry.section} subsection={entry.subsection} formattedText={bridge.draft.formattedText} phone={false} next={null} onNext={noNext} /> : <p className="guide-section-empty">{liveCopy.infoEmpty}</p>}
+        </article>
+      </div>
     </LiveEditContext.Provider>
   </div>;
 }
@@ -212,15 +260,14 @@ export function LiveText({ bridge, target, value, className }: { bridge: LiveEdi
  */
 export function LiveRich({ bridge, target, text, document, className }: { bridge: LiveEditorBridge; target: LiveTarget; text: string; document?: RichTextDocument; className?: string }) {
   const [editing, setEditing] = useState(false);
-  const blockId = "blockId" in target ? target.blockId : "";
-  const key = portiaTextKey.guideBlock(blockId);
+  const key = liveTextKey(target);
   useEffect(() => { if (editing) findFormatField(key)?.focus(); }, [editing, key]);
   if (!editing) {
     return <div
       className="live-rich live-editable"
       role="button"
       tabIndex={0}
-      aria-label={liveCopy.targets["guide-block-text"]}
+      aria-label={liveCopy.targets[target.kind]}
       onClick={() => setEditing(true)}
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setEditing(true); } }}
       onFocus={(event) => { if (event.currentTarget.matches(":focus-visible")) setEditing(true); }}
@@ -237,7 +284,7 @@ export function LiveRich({ bridge, target, text, document, className }: { bridge
   >
     <FormattedTextarea
       area="info"
-      label={liveCopy.targets["guide-block-text"]}
+      label={liveCopy.targets[target.kind]}
       tall
       value={text}
       document={document}
