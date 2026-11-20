@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: "26.1"
 current_phase_name: Правки владельца
 status: executing
-stopped_at: Completed 26.1-01-PLAN.md
-last_updated: "2026-11-20T12:22:30.305Z"
+stopped_at: Completed 26.1-02-PLAN.md
+last_updated: "2026-11-20T12:40:14.505Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 26.1 execution started
-state_head: 49eb1fea0528351b30125de09471523d557bdcf2
+state_head: 86ca4f3945037a0c30db47ee677eb0d96216d67c
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 84
-  completed_plans: 71
+  completed_plans: 72
 ---
 
 Total Phases: 6
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: 26.1 (Правки владельца) — EXECUTING
-Plan: 2 of 14
+Plan: 3 of 14
 Status: Ready to execute
 Last activity: 2026-11-20 — Phase 26.1 execution started
 
@@ -112,6 +112,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-26 P19 | 25 min | 2 tasks | 6 files |
 | Phase PORTIA-26 P20 | 25 min | 2 tasks | 3 files |
 | Phase 26.1 P01 | 25min | 3 tasks | 8 files |
+| Phase 26.1 P02 | 90min | 2 tasks | 12 files |
 
 ## Accumulated Context
 
@@ -362,6 +363,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-26]: 26-19: выбор допуска — кнопка-сводка с раскрываемыми пластинами 32px (44px на телефоне); панель .etab-bar не сжимается (flex-shrink: 0) в колоночном flex «Повышения»
 - [Phase PORTIA-26]: [26-20] Названия классов в карточке вируса — целые слова: clamp шрифта 12-15px по ширине ячейки, слово под знак, сетка 3/2/1 колонка по ширине панели (380px/254px); правило шаблона D-65 не менялось
 - [Phase 26.1]: 26.1-01: Справочник — плитки до 5 в ряд (min 132px), кегль названия по длине через guideTileTitleFit, обложка 16:10, карточка и вложенные карточки на всю ширину; видео в карточке оставлено 820px (вопрос владельцу)
+- [Phase 26.1]: 26.1-02: employee drafts live per id in a store made by PortiaEditor; the question 'Save changes?' is asked once at window close, save-all runs one PATCH after another
 
 ### Pending Todos
 
@@ -420,8 +422,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-20T12:22:29.044Z
-Stopped at: Completed 26.1-01-PLAN.md
+Last session: 2026-11-20T12:40:13.279Z
+Stopped at: Completed 26.1-02-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
