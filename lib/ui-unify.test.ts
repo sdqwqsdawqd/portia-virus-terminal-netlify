@@ -832,12 +832,13 @@ const MAXIMIZED_WINDOWS: { app: string; outcome: "fixed" | "already conformant";
     assertFillsWindow(".info-library");
   } },
   { app: "guide", outcome: "fixed", check: () => {
-    // Owner 2026-11-18 (round 2) replaced the UAT 2026-11-16 stretched grid and full-pane article with compact fixed tiles that do not grow and
-    // the open card in an 820px reading column; round 3 drops the sections column again: the whole window holds the sections.
+    // Owner 2026-11-20 supersedes 2026-11-18 round 2 (176px tiles, 820px card): up to 5 tiles a row over the whole width, no empty tail on the right.
+    // Round 3 (2026-11-18) dropped the sections column: the whole window holds the sections.
     assert.doesNotMatch(portiaCss, /\.guide-index|\.guide-layout/, "no sections column");
     assert.equal(lastDeclaration(portiaCss, ".guide-app", "height"), "calc(100% - 46px)");
-    assert.equal(lastDeclaration(portiaCss, at(".guide-grid"), "grid-template-columns", DESKTOP), undefined, "the tiles keep their 176px");
-    assert.equal(lastDeclaration(portiaCss, ".guide-grid", "grid-template-columns", DESKTOP), "repeat(auto-fill, minmax(min(100%, 176px), 176px))");
+    assert.equal(lastDeclaration(portiaCss, at(".guide-grid"), "grid-template-columns", DESKTOP), undefined, "no maximized rule changes the tiles");
+    assert.equal(lastDeclaration(portiaCss, ".guide-grid", "grid-template-columns", DESKTOP), "repeat(auto-fill, minmax(max(132px, calc((100% - 4 * 12px) / 5)), 1fr))");
+    assert.equal(lastDeclaration(portiaCss, ".guide-grid", "gap", DESKTOP), "12px");
     assert.equal(lastDeclaration(portiaCss, ".guide-page", "max-width"), "820px");
     assert.equal(lastDeclaration(portiaCss, at(".guide-page"), "max-width", DESKTOP), undefined, "the card keeps the 820px column");
     assertFillsWindow(".guide-app");

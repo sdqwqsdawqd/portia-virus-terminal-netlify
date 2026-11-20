@@ -339,13 +339,15 @@ test("window tiles keep their own size and the search shows the picked recommend
   assert.match(styles, /\.broadcast-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*340px\),\s*340px\)\)/);
   assert.match(styles, /\.broadcast-grid\s*\{[^}]*align-items:\s*start/);
   assert.match(styles, /\.broadcast-grid > \.broadcast-empty\s*\{[^}]*grid-column:\s*1 \/ -1/);
-  assert.match(styles, /\.guide-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*176px\),\s*176px\)\)/);
+  // Owner 2026-11-20 (OWN-01) supersedes the 176px tiles of 2026-11-18 round 2: up to 5 a row over the whole width, 132px at least.
+  assert.match(styles, /\.guide-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(max\(132px,\s*calc\(\(100% - 4 \* 12px\) \/ 5\)\),\s*1fr\)\)/);
+  assert.match(styles, /\.guide-grid\s*\{[^}]*gap:\s*12px/);
   // Phase 26 (UI-06, D-01): a maximized window turns the broadcast tiles into a card grid, but only under the maximized hook; the
   // normal window keeps the fixed 340px tiles above. No rule outside the hook gives them a stretched track.
-  // Owner 2026-11-18 (round 2): the guide tiles stay 176px in a maximized window too (compact tiles, like «Информация»): no maximized rule touches their columns.
+  // Owner 2026-11-20 supersedes 2026-11-18 round 2: the guide tiles fill the row (up to 5) in any window; still no maximized rule touches their columns.
   assert.ok(!/\.app-window\.is-maximized[^{}]*\.guide-grid[^{}]*\{/.test(styles), "guide-grid: no maximized rule changes the tiles");
   for (const tiles of ["broadcast-grid", "guide-grid"]) {
-    const rules = [...styles.matchAll(new RegExp(String.raw`([^{}]*\.${tiles}\s*)\{([^}]*)\}`, "g"))];
+    const rules = [...styles.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(new RegExp(String.raw`([^{}]*\.${tiles}\s*)\{([^}]*)\}`, "g"))];
     const stretched = rules.filter(([, selector, body]) => /grid-template-columns:[^;]*1fr/.test(body) && !selector.includes(".app-window.is-maximized"));
     assert.deepEqual(stretched.map(([, selector]) => selector.trim()).filter((selector) => !(tiles === "guide-grid" && selector === ".guide-grid")), [], `${tiles}: only the maximized rule may stretch`);
     if (tiles === "broadcast-grid") assert.ok(rules.some(([, selector]) => selector.includes(".app-window.is-maximized")), `${tiles}: a maximized rule exists`);
@@ -1252,7 +1254,25 @@ test("owner 2026-11-18: «Справочник» draws every tile through GuideT
   assert.equal((documents.match(/<GuideTile /g) ?? []).length, 2, "the section grid and the block «Карточки» use it");
   assert.doesNotMatch(documents, /guide-index|guide-layout|Разделы справочника/);
   assert.ok(documents.includes('return <div className="guide-app" ref={scroller} tabIndex={-1}>'));
-  // A tile is always 4:3: the cover never gets the free ratio of an old frame.
+  // A tile has one fixed cover ratio (16:10 since owner 2026-11-20): the cover never gets the free ratio of an old frame.
   assert.ok(documents.includes("tileFraming(item.coverFraming)") && /ratio !== undefined \? \{ x: framing\.x, y: framing\.y, zoom: framing\.zoom \}/.test(documents));
   assert.match(styles, /\.guide-tile-cover img \{[^}]*object-position: 50% 50%/);
+});
+
+test("owner 2026-11-20 (OWN-01): a tile title gets a size from lib/guide-tile.ts and is never cut with an ellipsis", () => {
+  const documents = lf(readFileSync(new URL("../components/portia-desktop-documents.tsx", import.meta.url), "utf8"));
+  assert.match(documents, /import \{ guideTileTitleFit \} from "@\/lib\/guide-tile"/);
+  assert.match(documents, /data-title-fit=\{guideTileTitleFit\(/, "GuideTile sets data-title-fit; both renderings go through GuideTile");
+  const title = styles.match(/\.guide-tile-title\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.ok(title.length > 0, "the title rule exists");
+  assert.doesNotMatch(title, /line-clamp|text-overflow|nowrap|min-height/, "the title wraps whole");
+  assert.match(title, /font:\s*700 13px/);
+  assert.match(title, /overflow-wrap:\s*anywhere/);
+  assert.match(styles, /\.guide-tile\[data-title-fit="small"\] \.guide-tile-title\s*\{[^}]*font-size:\s*12px/);
+  assert.match(styles, /\.guide-tile\[data-title-fit="smaller"\] \.guide-tile-title\s*\{[^}]*font-size:\s*11px/);
+  const thin = styles.match(/\.guide-tile-thin \.guide-tile-title\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.ok(thin.length > 0, "the thin tile title rule exists");
+  assert.doesNotMatch(thin, /text-overflow|nowrap|ellipsis/, "the thin tile title wraps whole too");
+  assert.match(thin, /var\(--tap-target\)/, "the thin tile keeps the touch minimum");
+  assert.doesNotMatch(styles, /\.guide-tile[^{}]*\{[^}]*(?:-webkit-line-clamp|text-overflow:\s*ellipsis)/, "no guide tile rule cuts text");
 });

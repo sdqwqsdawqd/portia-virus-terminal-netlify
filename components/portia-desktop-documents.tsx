@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import { findGuide, portiaTextKey, type GuideBlock, type GuideSection, type PortiaContent, type RedactedSlot } from "@/lib/portia-content";
 import { mergePlaceholders } from "@/lib/level-placeholders";
 import { levelCopy } from "@/lib/level-copy";
+import { guideTileTitleFit } from "@/lib/guide-tile";
 import { RedactedPlaceholder } from "@/components/portia-redacted";
 import { PortiaIllustration } from "@/components/portia-icons";
 import { emptyCopy, iframeLoadTimeoutMs } from "@/lib/app-state";
@@ -221,7 +222,7 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
 const tileFraming = (framing: ImageFraming | undefined): ImageFraming | undefined => (framing && framing.ratio !== undefined ? { x: framing.x, y: framing.y, zoom: framing.zoom } : framing);
 
 function GuideTile({ item, hit, onOpen }: { item: GuideSection["cards"][number]; hit: boolean; onOpen: (id: string) => void }) {
-  return <button type="button" className={`guide-tile${item.cover ? "" : " guide-tile-thin"}${hit ? " search-hit" : ""}`} data-card-id={item.id} {...(hit ? { "data-search-hit": "true", "aria-current": "true" as const } : {})} onClick={() => onOpen(item.id)}>
+  return <button type="button" className={`guide-tile${item.cover ? "" : " guide-tile-thin"}${hit ? " search-hit" : ""}`} data-card-id={item.id} data-title-fit={guideTileTitleFit(item.title || "Без названия")} {...(hit ? { "data-search-hit": "true", "aria-current": "true" as const } : {})} onClick={() => onOpen(item.id)}>
     {item.cover && <span className="guide-tile-cover"><PortiaImage src={item.cover} alt="" recordId={`${item.id}:cover`} priority="lazy" icon="guide" className="is-fill is-compact" framing={tileFraming(item.coverFraming)} /></span>}
     <span className="guide-tile-title">{item.title || "Без названия"}</span>
   </button>;
