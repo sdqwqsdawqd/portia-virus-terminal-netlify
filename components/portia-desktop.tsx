@@ -2282,6 +2282,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
               preview.show(app, preview.shown ? 0 : PREVIEW_SHOW_MS);
             }} onPointerLeave={(event) => {
               if (event.pointerType === "touch") return;
+              // WR-06 (26.1 review): a preview that holds the keyboard focus (РАЗВЕРНУТЬ, ЗАКРЫТЬ) stays; the blur of the entry hides it when the focus leaves.
+              if (event.currentTarget.querySelector(".taskbar-preview")?.contains(document.activeElement)) return;
               preview.hide(PREVIEW_HIDE_MS);
             }} onFocus={(event) => {
               if (!previewFocusGuard.current && event.target.matches(":focus-visible")) preview.show(app);
@@ -2292,7 +2294,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
               event.stopPropagation();
               preview.hide();
               returnTaskbarFocus(app);
-            }}><button data-taskbar-app={app} data-unreachable={outOfReach(app) ? "true" : undefined} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}${bouncingApps[app] ? " is-bouncing" : ""}`} type="button" onKeyDown={onTaskbarKeyDown(app)} onPointerDown={beginTaskbarDrag(app)} onPointerMove={moveTaskbarDrag} onPointerUp={endTaskbarDrag} onPointerCancel={endTaskbarDrag} onLostPointerCapture={endTaskbarDrag} onClick={(event) => {
+            }}><button data-taskbar-app={app} data-unreachable={outOfReach(app) ? "true" : undefined} aria-describedby={outOfReach(app) ? `taskbar-unreachable-${app}` : undefined} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}${bouncingApps[app] ? " is-bouncing" : ""}`} type="button" onKeyDown={onTaskbarKeyDown(app)} onPointerDown={beginTaskbarDrag(app)} onPointerMove={moveTaskbarDrag} onPointerUp={endTaskbarDrag} onPointerCancel={endTaskbarDrag} onLostPointerCapture={endTaskbarDrag} onClick={(event) => {
               if (suppressTaskbarClick.current) { suppressTaskbarClick.current = false; return; }
               preview.hide();
               // A window on its way out comes back, like a minimised one.
@@ -2300,6 +2302,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
               else if (activeApp === app) minimizeApp(app);
               else focusApp(app);
             }}><span className="mini-app-icon"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].label}</span></button>
+              {outOfReach(app) && <span className="sr-only" id={`taskbar-unreachable-${app}`}>Окно за краем экрана</span>}
               {preview.shown === app && <TaskbarPreview app={app} label={appMeta[app].label} icon={appMeta[app].icon} geometry={windows[app].maximized ? undefined : windows[app].geometry} bounds={workspaceBounds()} minimized={windows[app].minimized} onMaximize={() => maximizeFromPreview(app)} onClose={() => closeFromPreview(app)} onDismiss={() => { preview.hide(); returnTaskbarFocus(app); }} />}
             </span>)}
           </div>

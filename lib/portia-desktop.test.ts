@@ -558,6 +558,18 @@ test("OWN-06: a taskbar button and its preview share one span.taskbar-entry; hov
   assert.ok(source.includes('button.closest(".taskbar-apps")'), "the drag finds the other buttons through the toolbar, not the entry");
 });
 
+test("26.1 WR-06: a window out of reach is told to a screen reader, and a preview that holds the keyboard focus is not closed by the pointer leaving", () => {
+  const entry = source.slice(source.indexOf('<span key={app} className="taskbar-entry"'), source.indexOf('<span className="sr-only" role="status" aria-live="polite">{layoutAnnouncement}'));
+  // The dashed mark is not the only signal: the button is described by a hidden text, present only while the window is out of reach.
+  assert.ok(entry.includes("aria-describedby={outOfReach(app) ? `taskbar-unreachable-${app}` : undefined}"));
+  assert.ok(entry.includes("{outOfReach(app) && <span className=\"sr-only\" id={`taskbar-unreachable-${app}`}>Окно за краем экрана</span>}"));
+  // pointerleave keeps the preview while the focus sits inside it; the blur of the entry still hides it when the focus leaves.
+  const leave = entry.slice(entry.indexOf("onPointerLeave="), entry.indexOf("onFocus="));
+  assert.ok(leave.includes('querySelector(".taskbar-preview")?.contains(document.activeElement)'));
+  assert.ok(leave.indexOf("contains(document.activeElement)") < leave.indexOf("preview.hide(PREVIEW_HIDE_MS)"));
+  assert.ok(entry.includes("onBlur=") && entry.includes("!event.currentTarget.contains(event.relatedTarget as Node | null)"));
+});
+
 test("OWN-06: РАЗВЕРНУТЬ opens a hidden window, maximizes an open one and only focuses a maximized one; ЗАКРЫТЬ is the ordinary close", () => {
   const body = source.slice(source.indexOf("const maximizeFromPreview = "), source.indexOf("const closeFromPreview = "));
   assert.ok(body.includes('openApp(app, originOf(button, "taskbar"))'));
