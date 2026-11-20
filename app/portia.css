@@ -2923,6 +2923,21 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 .live-surface .record-view { max-height: none; }
 .live-surface .record-header .live-editable { display: inline-block; min-width: 3ch; }
 .live-surface .record-status .live-editable { min-width: 6ch; }
+/* 26.1-12: классификация, фото, мутации и записи учёных. Выпадающее окно стоит на тёмной панели, поэтому цвет текста задан, а не унаследован от бумаги карточки. */
+.live-choice { display: inline-block; max-width: 100%; }
+.live-surface .live-choice-button { max-width: 100%; min-height: 24px; padding: 0 6px; border: 1px dashed var(--line-bright); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.live-surface .live-choice-button:hover, .live-surface .live-choice-button:focus-visible { border-color: var(--teal); }
+.live-surface .classification-panel, .live-surface .classification-grid, .live-surface .class-cell { overflow: visible; }
+.live-surface .live-popover { color: oklch(.926 calc(.011 * var(--accent-chroma)) var(--accent-hue)); text-align: left; }
+.live-surface .record-hero .live-image, .live-surface .mutation-card .live-image { min-width: 0; }
+.live-surface .mutation-card .live-image { border-right: 1px solid #c4beb0; }
+.live-surface .record-document .live-add-bar { margin: 18px 0 8px; }
+.live-log-row { position: relative; }
+.live-log-row .live-remove-wrap { top: 50%; right: 8px; transform: translateY(-50%); }
+.live-surface .archive-document-view .live-editable { display: inline-block; min-width: 4ch; }
+@media (max-width: 900px) {
+  .live-surface .mutation-card .live-image { border-right: 0; border-bottom: 1px solid #c4beb0; }
+}
 @media (max-width: 900px) {
   .live-surface .archive-grid { height: auto; }
   .live-surface .virus-list .live-index-row { flex: 0 0 auto; min-width: 210px; }

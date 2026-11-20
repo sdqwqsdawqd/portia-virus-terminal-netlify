@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import type { LiveApp, LiveCardsTarget, LiveContainer, LiveDateTarget, LiveFlagTarget, LiveImageTarget, LiveList, LiveRemovable, LiveTarget } from "@/lib/live-edit";
+import type { LiveApp, LiveCardsTarget, LiveChoiceTarget, LiveContainer, LiveDateTarget, LiveFlagTarget, LiveImageTarget, LiveList, LiveRemovable, LiveTarget } from "@/lib/live-edit";
 
 export type { LiveVirusField } from "@/lib/live-edit";
 import type { ImageFraming } from "@/lib/image-framing";
@@ -36,6 +36,8 @@ export type LiveEditApi = {
   date: (target: LiveDateTarget, value: string) => ReactNode;
   /** A switch of an entry of «Сводки»: shown to visitors, important. */
   flag: (target: LiveFlagTarget, checked: boolean) => ReactNode;
+  /** A value chosen from a list, in place: one axis of the classification of a virus, the level of a scientist record. `options.label` names the place; the seam draws the choice. */
+  choice: (target: LiveChoiceTarget, value: string, options: { label: string; options?: readonly { value: string; label: string }[] }) => ReactNode;
   /** The small remove button with its question. */
   remove: (item: LiveRemovable, title: string) => ReactNode;
 };

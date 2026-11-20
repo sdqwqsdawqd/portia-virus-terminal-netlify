@@ -99,7 +99,7 @@ test("OWN-03 the card draws a button per route with its icon, an «Не указ
   assert.match(cell, /<em className="formatted-empty">Не указан<\/em>/);
   assert.match(card, /<TransmissionCell value=\{value\} \/>/, "the transmission cell of VirusCardBody is the new component");
   for (const match of card.matchAll(/from "(@\/[^"]+)"/g)) {
-    assert.ok(["@/lib/portia-content", "@/components/portia-icons", "@/lib/rich-text-media", "@/lib/transmission-routes"].includes(match[1]), `the card imports ${match[1]}`);
+    assert.ok(["@/lib/portia-content", "@/components/portia-icons", "@/components/portia-live-edit", "@/lib/rich-text-media", "@/lib/transmission-routes"].includes(match[1]), `the card imports ${match[1]}`);
   }
   assert.doesNotMatch(card, /fetch\(|localStorage|sessionStorage/);
 });

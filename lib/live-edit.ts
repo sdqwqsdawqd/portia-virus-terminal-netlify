@@ -1,9 +1,10 @@
 import type { ImageFraming } from "./image-framing.ts";
 import { broadcastFeed, questDateError, type BroadcastTab } from "./broadcasts.ts";
-import { MAX_BLOCKS, MAX_CONDITIONS, MAX_SUBSECTIONS, MAX_TABLE_ROWS } from "./content-limits.ts";
-import { addBroadcast, makeId, removeBroadcast, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection } from "./editor-items.ts";
-import { findGuide, findInfo, portiaTextKey, type Broadcast, type GuideBlock, type GuideCard, type InfoBlock, type InfoSubsection, type PortiaContent, type Virus } from "./portia-content.ts";
+import { MAX_BLOCKS, MAX_CONDITIONS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS, MAX_TABLE_ROWS } from "./content-limits.ts";
+import { addBroadcast, makeId, removeBroadcast, removeGuideBlock, removeGuideCard, removeGuideSection, removeInfoBlock, removeInfoSection, removeInfoSubsection, removeMutation } from "./editor-items.ts";
+import { classificationOptions, findGuide, findInfo, portiaTextKey, type Broadcast, type GuideBlock, type GuideCard, type InfoBlock, type InfoSubsection, type PortiaContent, type RichTextDocument, type ScientistLog, type Virus } from "./portia-content.ts";
 import { parseYoutubeId } from "./portia-content-normalize.ts";
+import { ACCESS_LEVELS } from "./access-levels.ts";
 import { splitEmbeddedMedia } from "./rich-text-media.ts";
 
 // LIVE-01..05 (26.1-10): the pure model of the live editing mode. The editor shows the visitor's own view of an app on the draft and edits it in place;
@@ -51,7 +52,12 @@ export type LiveTarget =
   /** «База вирусов» (26.1-12): the name, the code and the status of a virus (plain lines, cut to the lengths of the template: 120, 40, 80). */
   | { kind: "virus-name" | "virus-code" | "virus-status"; virusId: string }
   /** One of the five texts of a virus: formatted text, stored under portiaTextKey.virus(virusId, field). */
-  | { kind: "virus-text"; virusId: string; field: LiveVirusField };
+  | { kind: "virus-text"; virusId: string; field: LiveVirusField }
+  /** A mutation has no id: it is found by its position, and its description is formatted text under portiaTextKey.mutation(virusId, index). */
+  | { kind: "mutation-name" | "mutation-description"; virusId: string; index: number }
+  /** A scientist record: the title and the pseudonym are plain lines, the text is formatted text kept in the record itself (richContent), under the format key "scientist:<logId>". */
+  | { kind: "log-title" | "log-scientist"; virusId: string; logId: string }
+  | { kind: "log-text"; virusId: string; logId: string };
 
 /** The five formatted texts of a virus card: section 02, section 04 and the three PPU metrics. */
 export type LiveVirusField = "external" | "physiology" | "ppu-health" | "ppu-speed" | "ppu-abilities";
@@ -59,6 +65,41 @@ export type LiveVirusField = "external" | "physiology" | "ppu-health" | "ppu-spe
 /** The virus of the list or of the recycle bin with this id (the formatting keys are keyed by the id alone, so one lookup serves both). */
 export function findLiveVirus(draft: PortiaContent, virusId: string): Virus | undefined {
   return draft.viruses.find((item) => item.id === virusId) ?? (draft.recycledViruses ?? []).find((item) => item.id === virusId);
+}
+
+const findLiveLog = (draft: PortiaContent, virusId: string, logId: string): ScientistLog | undefined => findLiveVirus(draft, virusId)?.scientistLogs.find((item) => item.id === logId);
+
+/** The text of a scientist record with its formatting document, written as the editor's own field writes it: paragraphs in `content`, the document in `richContent`. False when the record is gone. */
+export function applyLiveLogText(draft: PortiaContent, target: Extract<LiveTarget, { kind: "log-text" }>, value: string, document: RichTextDocument): boolean {
+  const log = findLiveLog(draft, target.virusId, target.logId);
+  if (!log) return false;
+  log.content = value.split(/\n\s*\n/);
+  log.richContent = document;
+  return true;
+}
+
+/** A choice in place: one axis of the classification of a virus, or the level a scientist record needs. */
+export type LiveChoiceTarget =
+  | { kind: "virus-class"; virusId: string; axis: keyof Virus["classification"] }
+  | { kind: "log-level"; virusId: string; logId: string };
+
+/**
+ * Sets a choice; false, and nothing written, when the place is gone or the value is not one of its choices: an axis takes a value of its list (the routes of transmission
+ * take the canonical string of lib/transmission-routes.ts, which the field builds), the level of a record takes 1 to 5.
+ */
+export function applyLiveChoice(draft: PortiaContent, target: LiveChoiceTarget, value: string): boolean {
+  if (target.kind === "log-level") {
+    const log = findLiveLog(draft, target.virusId, target.logId);
+    const level = Number(value);
+    if (!log || !(ACCESS_LEVELS as readonly number[]).includes(level)) return false;
+    log.lockedLevel = level;
+    return true;
+  }
+  const virus = findLiveVirus(draft, target.virusId);
+  if (!virus) return false;
+  if (target.axis !== "transmission" && !(classificationOptions[target.axis] as readonly { value: string }[]).some((option) => option.value === value)) return false;
+  virus.classification[target.axis] = value;
+  return true;
 }
 
 /** The cuts of the plain lines of a virus, the same as the template's. */
@@ -71,6 +112,8 @@ export function liveTextKey(target: LiveTarget): string {
   if (target.kind === "info-block-text") return portiaTextKey.infoBlock(target.blockId);
   if (target.kind === "broadcast-body") return portiaTextKey.broadcast(target.broadcastId);
   if (target.kind === "virus-text") return portiaTextKey.virus(target.virusId, target.field);
+  if (target.kind === "mutation-description") return portiaTextKey.mutation(target.virusId, target.index);
+  if (target.kind === "log-text") return `scientist:${target.logId}`;
   return "";
 }
 
@@ -129,7 +172,10 @@ export type LiveImageTarget =
   | { kind: "guide-section-photo"; sectionId: string }
   | { kind: "guide-card-cover"; cardId: string }
   | { kind: "guide-photo-url"; cardId: string; blockId: string }
-  | { kind: "info-photo-url"; subsectionId: string; blockId: string };
+  | { kind: "info-photo-url"; subsectionId: string; blockId: string }
+  /** «База вирусов» (26.1-12): the photo after infection and the picture of a mutation (by position). */
+  | { kind: "virus-infected"; virusId: string }
+  | { kind: "mutation-image"; virusId: string; index: number };
 
 /** The block «Карточки»: the ids of the cards it shows. */
 export type LiveCardsTarget = { kind: "guide-cards-block"; cardId: string; blockId: string };
@@ -200,6 +246,23 @@ export function applyLiveText(draft: PortiaContent, target: LiveTarget, value: s
       if (target.kind === "virus-name") virus.name = text; else if (target.kind === "virus-code") virus.code = text; else virus.status = text;
       return true;
     }
+    case "mutation-name":
+    case "mutation-description": {
+      const mutation = findLiveVirus(draft, target.virusId)?.mutations[target.index];
+      if (!mutation) return false;
+      if (target.kind === "mutation-name") mutation.name = line; else mutation.description = value;
+      return true;
+    }
+    case "log-title":
+    case "log-scientist":
+    case "log-text": {
+      const log = findLiveLog(draft, target.virusId, target.logId);
+      if (!log) return false;
+      if (target.kind === "log-title") log.title = line;
+      else if (target.kind === "log-scientist") log.scientist = line;
+      else { log.content = value.split(/\n\s*\n/); log.richContent = { runs: [{ text: value }] }; }
+      return true;
+    }
     case "virus-text": {
       const virus = findLiveVirus(draft, target.virusId);
       if (!virus) return false;
@@ -252,6 +315,16 @@ function pictureOf(draft: PortiaContent, target: LiveImageTarget): { address: st
     if (infoBlock?.type !== "photo") return null;
     return { address: infoBlock.url, set: (url) => { infoBlock.url = url; }, frame: (frame) => { if (frame) infoBlock.framing = frame; else delete infoBlock.framing; } };
   }
+  if (target.kind === "virus-infected") {
+    const virus = findLiveVirus(draft, target.virusId);
+    if (!virus) return null;
+    return { address: virus.infectedImage, set: (url) => { virus.infectedImage = url; }, frame: (frame) => { if (frame) virus.infectedImageFraming = frame; else delete virus.infectedImageFraming; } };
+  }
+  if (target.kind === "mutation-image") {
+    const mutation = findLiveVirus(draft, target.virusId)?.mutations[target.index];
+    if (!mutation) return null;
+    return { address: mutation.image, set: (url) => { mutation.image = url; }, frame: (frame) => { if (frame) mutation.imageFraming = frame; else delete mutation.imageFraming; } };
+  }
   const block = findBlock(draft, target.cardId, target.blockId);
   if (block?.type !== "photo") return null;
   return { address: block.url, set: (url) => { block.url = url; }, frame: (frame) => { if (frame) block.framing = frame; else delete block.framing; } };
@@ -283,7 +356,7 @@ export function applyLiveCards(draft: PortiaContent, target: LiveCardsTarget, ca
 }
 
 /** What the bar «Добавить: …» can add (`row` is a row of a table block). The cover is not here: it is a picture place, not a new element. */
-export type LiveAddKind = "section" | "subsection" | "card" | "heading" | "text" | "table" | "photo" | "video" | "callout" | "cards" | "row" | "news" | "quest";
+export type LiveAddKind = "section" | "subsection" | "card" | "heading" | "text" | "table" | "photo" | "video" | "callout" | "cards" | "row" | "news" | "quest" | "mutation" | "log";
 
 /** A place that takes new elements: the list of sections, one section (cards), one card (blocks), one table block (rows); in «Информации» the table of contents (sections and subsections), one subsection (blocks), one table block (rows). */
 export type LiveContainer =
@@ -296,7 +369,9 @@ export type LiveContainer =
   | { kind: "info-subsection"; subsectionId: string }
   | { kind: "info-table"; subsectionId: string; blockId: string }
   /** The feed of «Сводки»: a news or a quest, put at the top like the editor's own button does. */
-  | { kind: "broadcasts" };
+  | { kind: "broadcasts" }
+  /** The end of a virus card: a mutation, a scientist record (the photo after infection is a picture place, drawn beside the bar). */
+  | { kind: "virus"; virusId: string };
 
 /** An ordered list the live mode can reorder. */
 export type LiveList =
@@ -319,7 +394,9 @@ export type LiveRemovable =
   | { kind: "info-subsection"; sectionId: string; subsectionId: string }
   | { kind: "info-block"; subsectionId: string; blockId: string }
   | { kind: "info-table-row"; subsectionId: string; blockId: string; rowId: string }
-  | { kind: "broadcast"; broadcastId: string };
+  | { kind: "broadcast"; broadcastId: string }
+  | { kind: "mutation"; virusId: string; index: number }
+  | { kind: "log"; virusId: string; logId: string };
 
 type GuideBlockKind = "heading" | "text" | "table" | "photo" | "video" | "callout" | "cards";
 type InfoBlockKind = "text" | "table" | "photo" | "video";
@@ -349,6 +426,7 @@ export function liveAddKinds(container: LiveContainer): LiveAddKind[] {
   if (container.kind === "info-index") return ["section", "subsection"];
   if (container.kind === "info-subsection") return ["text", "table", "photo", "video"];
   if (container.kind === "broadcasts") return ["news", "quest"];
+  if (container.kind === "virus") return ["mutation", "log"];
   return ["heading", "text", "table", "photo", "video", "callout", "cards"];
 }
 
@@ -359,6 +437,8 @@ export function liveNewId(container: LiveContainer, kind: LiveAddKind): string {
   if (kind === "card") return makeId("card");
   if (kind === "row") return makeId("row");
   if (kind === "news" || kind === "quest") return makeId("broadcast");
+  if (kind === "log") return makeId("log");
+  if (kind === "mutation") return makeId("mutation");
   return makeId("block");
 }
 
@@ -389,6 +469,14 @@ export function applyLiveAdd(draft: PortiaContent, container: LiveContainer, kin
   }
   if (container.kind === "broadcasts") {
     addBroadcast(draft, id, kind === "news" ? "news" : "quest");
+    return id;
+  }
+  if (container.kind === "virus") {
+    const virus = findLiveVirus(draft, container.virusId);
+    if (!virus) return null;
+    if (kind === "mutation") { virus.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }); return String(virus.mutations.length - 1); }
+    if (virus.scientistLogs.length >= MAX_SCIENTIST_LOGS) return null;
+    virus.scientistLogs.push({ id, title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 1, content: [""], richContent: { runs: [{ text: "" }] } });
     return id;
   }
   if (container.kind === "info-index") {
@@ -452,6 +540,9 @@ export function liveRemovedKeys(draft: PortiaContent, item: LiveRemovable): stri
   if (item.kind === "info-subsection") return infoKeys(infoSectionOf(draft, item.sectionId)?.subsections.filter((sub) => sub.id === item.subsectionId) ?? []);
   if (item.kind === "info-block") return [portiaTextKey.infoBlock(item.blockId)];
   if (item.kind === "broadcast") return [portiaTextKey.broadcast(item.broadcastId)];
+  // Mutations have no id and their formatting is keyed by position: the removed one and every later one change their key.
+  if (item.kind === "mutation") return Array.from({ length: Math.max(0, (findLiveVirus(draft, item.virusId)?.mutations.length ?? 0) - item.index) }, (_, step) => portiaTextKey.mutation(item.virusId, item.index + step));
+  if (item.kind === "log") return [`scientist:${item.logId}`];
   return [];
 }
 
@@ -492,6 +583,19 @@ export function applyLiveRemove(draft: PortiaContent, item: LiveRemovable): bool
     removeBroadcast(draft, item.broadcastId);
     return true;
   }
+  if (item.kind === "mutation") {
+    const virus = findLiveVirus(draft, item.virusId);
+    if (!virus || !Number.isInteger(item.index) || item.index < 0 || item.index >= virus.mutations.length) return false;
+    removeMutation(draft, virus, item.index);
+    return true;
+  }
+  if (item.kind === "log") {
+    const virus = findLiveVirus(draft, item.virusId);
+    const at = virus?.scientistLogs.findIndex((log) => log.id === item.logId) ?? -1;
+    if (!virus || at < 0) return false;
+    virus.scientistLogs.splice(at, 1);
+    return true;
+  }
   const block = item.kind === "info-table-row" ? findInfoBlock(draft, item.subsectionId, item.blockId) : findBlock(draft, item.cardId, item.blockId);
   if (block?.type !== "table" || !block.rows.some((row) => row.id === item.rowId)) return false;
   block.rows = block.rows.filter((row) => row.id !== item.rowId);
@@ -506,6 +610,7 @@ export function liveMediaUrls(text: string): string[] {
 /** True when the container takes no more of `kind` (the bar then disables that button instead of recording an edit that changes nothing). */
 export function liveAddBlocked(draft: PortiaContent, container: LiveContainer, kind: LiveAddKind): boolean {
   if (container.kind === "guide-root" || container.kind === "broadcasts") return false;
+  if (container.kind === "virus") return kind === "log" && (findLiveVirus(draft, container.virusId)?.scientistLogs.length ?? 0) >= MAX_SCIENTIST_LOGS;
   if (container.kind === "guide-section") return (draft.guideSections.find((item) => item.id === container.sectionId)?.cards.length ?? 0) >= MAX_SUBSECTIONS;
   if (container.kind === "guide-card") return (findGuide(draft.guideSections, container.cardId)?.card?.blocks.length ?? 0) >= MAX_BLOCKS;
   if (container.kind === "info-index") {

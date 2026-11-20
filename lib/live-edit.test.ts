@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { MAX_BLOCKS, MAX_SUBSECTIONS } from "./content-limits.ts";
-import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError } from "./live-edit.ts";
+import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS } from "./content-limits.ts";
+import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText } from "./live-edit.ts";
 import { broadcastFeed } from "./broadcasts.ts";
 import { portiaTextKey, type PortiaContent } from "./portia-content.ts";
 
@@ -738,4 +738,142 @@ test("LIVE-02 (26.1-12): the live «База вирусов» draws the visitor'
   assert.ok(seam.includes('live.order({ kind: "viruses" }'));
   assert.match(seam, /className=\{`virus-row/);
   assert.match(seam, /liveCopy\.virusesEmpty/);
+});
+
+// ---- 26.1-12, task 2: the classification, the photo, the mutations and the records of scientists ----
+
+function draftWithCard(): PortiaContent {
+  const draft = draftWithViruses();
+  draft.viruses[0].mutations = [
+    { name: "М1", description: "Первая", image: "https://x/1.gif", imageFraming: { x: 10, y: 20, zoom: 1.5 } },
+    { name: "М2", description: "Вторая", image: "" },
+    { name: "М3", description: "Третья", image: "" },
+  ];
+  draft.viruses[0].scientistLogs = [
+    { id: "l1", title: "Запись 1", scientist: "Доктор", lockedLevel: 1, content: ["один", "два"], richContent: { runs: [{ text: "один\n\nдва" }] } },
+    { id: "l2", title: "Запись 2", scientist: "Иной", lockedLevel: 2, content: [""], richContent: { runs: [{ text: "" }] } },
+  ];
+  draft.formattedText = {
+    [portiaTextKey.mutation("a", 0)]: { runs: [{ text: "Первая" }] },
+    [portiaTextKey.mutation("a", 1)]: { runs: [{ text: "Вторая" }] },
+    [portiaTextKey.mutation("a", 2)]: { runs: [{ text: "Третья" }] },
+  };
+  return draft;
+}
+
+test("LIVE-02 (26.1-12): the name and the text of a mutation change in place, found by position", () => {
+  const draft = draftWithCard();
+  assert.equal(applyLiveText(draft, { kind: "mutation-name", virusId: "a", index: 1 }, "Новая"), true);
+  assert.equal(draft.viruses[0].mutations[1].name, "Новая");
+  assert.equal(applyLiveText(draft, { kind: "mutation-description", virusId: "a", index: 2 }, "Текст".repeat(80)), true);
+  assert.equal(draft.viruses[0].mutations[2].description.length, 400, "a formatted text is kept whole");
+  assert.equal(liveTextKey({ kind: "mutation-description", virusId: "a", index: 2 }), portiaTextKey.mutation("a", 2));
+  assert.equal(applyLiveText(draft, { kind: "mutation-name", virusId: "a", index: 9 }, "x"), false, "no mutation there");
+});
+
+test("LIVE-02 (26.1-12): the title, the pseudonym and the text of a scientist record change in place; the text keeps its formatting document", () => {
+  const draft = draftWithCard();
+  assert.equal(applyLiveText(draft, { kind: "log-title", virusId: "a", logId: "l2" }, "Новое"), true);
+  assert.equal(applyLiveText(draft, { kind: "log-scientist", virusId: "a", logId: "l2" }, "Псевдо"), true);
+  assert.deepEqual([draft.viruses[0].scientistLogs[1].title, draft.viruses[0].scientistLogs[1].scientist], ["Новое", "Псевдо"]);
+  const target = { kind: "log-text", virusId: "a", logId: "l1" } as const;
+  assert.equal(liveTextKey(target), "scientist:l1", "the format key the editor's own field uses");
+  const document = { runs: [{ text: "новый " }, { text: "жирный", style: { fontWeight: 700 } }] };
+  assert.equal(applyLiveLogText(draft, target, "новый жирный", document), true);
+  assert.deepEqual(draft.viruses[0].scientistLogs[0].content, ["новый жирный"]);
+  assert.deepEqual(draft.viruses[0].scientistLogs[0].richContent, document);
+  applyLiveLogText(draft, target, "а\n\nб", { runs: [{ text: "а\n\nб" }] });
+  assert.deepEqual(draft.viruses[0].scientistLogs[0].content, ["а", "б"], "paragraphs are split as the editor splits them");
+  assert.equal(applyLiveLogText(draft, { kind: "log-text", virusId: "a", logId: "nope" }, "x", document), false);
+});
+
+test("LIVE-02 (26.1-12): a classification axis takes only a value of its list; the routes take the canonical string; the level of a record takes 1 to 5", () => {
+  const draft = draftWithCard();
+  assert.equal(applyLiveChoice(draft, { kind: "virus-class", virusId: "a", axis: "danger" }, "Протей"), true);
+  assert.equal(draft.viruses[0].classification.danger, "Протей");
+  assert.equal(applyLiveChoice(draft, { kind: "virus-class", virusId: "a", axis: "danger" }, "Выдумка"), false, "not a choice of the list");
+  assert.equal(draft.viruses[0].classification.danger, "Протей");
+  assert.equal(applyLiveChoice(draft, { kind: "virus-class", virusId: "a", axis: "transmission" }, "Аэрозольный, Половой путь"), true);
+  assert.equal(draft.viruses[0].classification.transmission, "Аэрозольный, Половой путь");
+  assert.equal(applyLiveChoice(draft, { kind: "log-level", virusId: "a", logId: "l1" }, "4"), true);
+  assert.equal(draft.viruses[0].scientistLogs[0].lockedLevel, 4);
+  assert.equal(applyLiveChoice(draft, { kind: "log-level", virusId: "a", logId: "l1" }, "9"), false);
+  assert.equal(applyLiveChoice(draft, { kind: "log-level", virusId: "a", logId: "l1" }, "abc"), false);
+  assert.equal(draft.viruses[0].scientistLogs[0].lockedLevel, 4);
+});
+
+test("LIVE-02 (26.1-12): the photo after infection and the picture of a mutation replace the address and drop the frame; the frame can be set and cleared", () => {
+  const draft = draftWithCard();
+  const photo = { kind: "virus-infected", virusId: "a" } as const;
+  assert.equal(applyLiveImage(draft, photo, "https://x/photo.gif"), true);
+  assert.equal(draft.viruses[0].infectedImage, "https://x/photo.gif");
+  assert.equal(applyLiveFraming(draft, photo, { x: 5, y: 6, zoom: 2 }), true);
+  assert.deepEqual(draft.viruses[0].infectedImageFraming, { x: 5, y: 6, zoom: 2 });
+  applyLiveImage(draft, photo, "https://x/other.gif");
+  assert.equal(draft.viruses[0].infectedImageFraming, undefined, "the frame belonged to the old picture");
+  const mutation = { kind: "mutation-image", virusId: "a", index: 0 } as const;
+  applyLiveImage(draft, mutation, "https://x/1.gif");
+  assert.deepEqual(draft.viruses[0].mutations[0].imageFraming, { x: 10, y: 20, zoom: 1.5 }, "the same address keeps its frame");
+  applyLiveImage(draft, mutation, "https://x/2.gif");
+  assert.equal(draft.viruses[0].mutations[0].image, "https://x/2.gif");
+  assert.equal(draft.viruses[0].mutations[0].imageFraming, undefined);
+  assert.equal(applyLiveImage(draft, { kind: "mutation-image", virusId: "a", index: 7 }, "x"), false);
+});
+
+test("LIVE-02 (26.1-12): the bar of a virus adds a mutation and a scientist record with the shape of the editor's own buttons", () => {
+  const draft = draftWithCard();
+  assert.deepEqual(liveAddKinds({ kind: "virus", virusId: "a" }), ["mutation", "log"]);
+  assert.ok(applyLiveAdd(draft, { kind: "virus", virusId: "a" }, "mutation") !== null);
+  assert.deepEqual(draft.viruses[0].mutations[3], { name: "НОВАЯ МУТАЦИЯ", description: "", image: "" });
+  const id = liveNewId({ kind: "virus", virusId: "a" }, "log");
+  assert.equal(applyLiveAdd(draft, { kind: "virus", virusId: "a" }, "log", id), id);
+  assert.deepEqual(draft.viruses[0].scientistLogs[2], { id, title: "ЗАПИСЬ 03", scientist: "ИМЯ УЧЁНОГО", lockedLevel: 1, content: [""], richContent: { runs: [{ text: "" }] } });
+  assert.equal(applyLiveAdd(draft, { kind: "virus", virusId: "nope" }, "mutation"), null);
+  assert.equal(applyLiveAdd(draft, { kind: "virus", virusId: "a" }, "text"), null, "a virus takes no other kind");
+});
+
+test("LIVE-02 (26.1-12): the records of scientists stop at the limit of the editor and the bar disables the button", () => {
+  const draft = draftWithCard();
+  const container = { kind: "virus", virusId: "a" } as const;
+  while (draft.viruses[0].scientistLogs.length < MAX_SCIENTIST_LOGS) assert.ok(applyLiveAdd(draft, container, "log"));
+  assert.equal(applyLiveAdd(draft, container, "log"), null);
+  assert.equal(liveAddBlocked(draft, container, "log"), true);
+  assert.equal(liveAddBlocked(draft, container, "mutation"), false);
+  assert.equal(draft.viruses[0].scientistLogs.length, MAX_SCIENTIST_LOGS);
+});
+
+test("LIVE-02 (26.1-12): removing a mutation moves the later formatting keys down by one, like the editor; the format panel is told which keys go", () => {
+  const draft = draftWithCard();
+  assert.deepEqual(liveRemovedKeys(draft, { kind: "mutation", virusId: "a", index: 1 }), [portiaTextKey.mutation("a", 1), portiaTextKey.mutation("a", 2)]);
+  assert.equal(applyLiveRemove(draft, { kind: "mutation", virusId: "a", index: 1 }), true);
+  assert.deepEqual(draft.viruses[0].mutations.map((item) => item.name), ["М1", "М3"]);
+  assert.equal(draft.formattedText[portiaTextKey.mutation("a", 1)]?.runs[0].text, "Третья", "the third one is the second now");
+  assert.equal(draft.formattedText[portiaTextKey.mutation("a", 2)], undefined);
+  assert.equal(draft.formattedText[portiaTextKey.mutation("a", 0)]?.runs[0].text, "Первая");
+  assert.equal(applyLiveRemove(draft, { kind: "mutation", virusId: "a", index: 5 }), false);
+});
+
+test("LIVE-02 (26.1-12): removing a scientist record takes it out and names its format key", () => {
+  const draft = draftWithCard();
+  assert.deepEqual(liveRemovedKeys(draft, { kind: "log", virusId: "a", logId: "l1" }), ["scientist:l1"]);
+  assert.equal(applyLiveRemove(draft, { kind: "log", virusId: "a", logId: "l1" }), true);
+  assert.deepEqual(draft.viruses[0].scientistLogs.map((item) => item.id), ["l2"]);
+  assert.equal(applyLiveRemove(draft, { kind: "log", virusId: "a", logId: "l1" }), false);
+});
+
+test("LIVE-02/04 (26.1-12): the live card puts the choice, the picture, the mutations and the bar behind the live API, and the seam draws them", () => {
+  const card = read("components/portia-virus-card.tsx");
+  for (const part of ['live.choice({ kind: "virus-class"', 'live.image({ kind: "virus-infected"', 'live.image({ kind: "mutation-image"', 'live.text({ kind: "mutation-name"', 'kind: "mutation-description"', 'live.remove({ kind: "mutation"', 'live.addBar({ kind: "virus"']) assert.ok(card.includes(part), part);
+  assert.match(card, /key=\{live \? index : `\$\{mutation\.name\}-\$\{index\}`\}/, "a name typed in place does not remount the card");
+  const dossier = read("components/portia-desktop-dossier.tsx");
+  for (const part of ['kind: "log-title"', 'kind: "log-scientist"', 'live.choice({ kind: "log-level"', 'kind: "log-text"', 'live.remove({ kind: "log"']) assert.ok(dossier.includes(part), part);
+  const shared = read("components/portia-live-edit.tsx");
+  assert.match(shared, /choice: \(target: LiveChoiceTarget/);
+  const seam = read("components/portia-editor-live.tsx");
+  assert.match(seam, /export function LiveChoice\(/);
+  assert.match(seam, /<ClassificationField\b/);
+  assert.match(seam, /<LevelPicker\b/);
+  assert.match(seam, /applyLiveChoice\(/);
+  assert.match(seam, /applyLiveLogText\(/);
+  assert.match(seam, /choice: \(target, value, options\) =>/);
 });

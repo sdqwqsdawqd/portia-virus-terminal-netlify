@@ -4,16 +4,16 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } f
 import { GuideApp } from "@/components/portia-desktop-documents";
 import { RowBadges, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
 import { BroadcastCard, BroadcastsHeader, InfoArticle, broadcastTabs } from "@/components/portia-desktop-info";
-import { ConfirmDialog, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
+import { ClassificationField, ConfirmDialog, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
 import { FormattedTextarea, findFormatField, type FormatTarget } from "@/components/portia-editor-rich-text";
+import { LevelPicker } from "@/components/portia-level-picker";
 import { LiveEditContext, type LiveEditApi } from "@/components/portia-live-edit";
 import { EmbeddedMediaStrip, FormattedText } from "@/components/portia-virus-card";
-import { ACCESS_LEVELS } from "@/lib/access-levels";
 import { localDateKey, type BroadcastTab } from "@/lib/broadcasts";
 import type { ImageFraming } from "@/lib/image-framing";
 import {
-  applyLiveAdd, applyLiveCards, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveNewId, liveRemovedKeys, liveTextKey,
-  type LiveAddKind, type LiveApp, type LiveCardsTarget, type LiveContainer, type LiveDateTarget, type LiveFlagTarget, type LiveImageTarget, type LiveList, type LiveRemovable, type LiveTarget,
+  applyLiveAdd, applyLiveCards, applyLiveChoice, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveLogText, applyLiveMove, applyLiveRemove, applyLiveText, findLiveVirus, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveNewId, liveRemovedKeys, liveTextKey,
+  type LiveAddKind, type LiveApp, type LiveCardsTarget, type LiveChoiceTarget, type LiveContainer, type LiveDateTarget, type LiveFlagTarget, type LiveImageTarget, type LiveList, type LiveRemovable, type LiveTarget,
 } from "@/lib/live-edit";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
 import { findGuide, findInfo, type PortiaContent, type RichTextDocument } from "@/lib/portia-content";
@@ -29,7 +29,7 @@ export const liveCopy = {
   untitled: "Без названия",
   addLabel: "Добавить:",
   addGroup: "Добавить элемент",
-  kinds: { section: "Раздел", card: "Карточку", heading: "Заголовок", text: "Текст", table: "Таблицу", photo: "Фото", video: "Видео", callout: "Врезку", cards: "Карточки", row: "Строку", subsection: "Подраздел", news: "Новость", quest: "Квест" } satisfies Record<LiveAddKind, string>,
+  kinds: { section: "Раздел", card: "Карточку", heading: "Заголовок", text: "Текст", table: "Таблицу", photo: "Фото", video: "Видео", callout: "Врезку", cards: "Карточки", row: "Строку", subsection: "Подраздел", news: "Новость", quest: "Квест", mutation: "Мутацию", log: "Запись учёного" } satisfies Record<LiveAddKind, string>,
   cover: "Обложку",
   coverLabel: "Обложка",
   full: "Больше нельзя",
@@ -57,6 +57,11 @@ export const liveCopy = {
     "virus-code": "Код вируса",
     "virus-status": "Статус вируса",
     "virus-text": "Текст",
+    "mutation-name": "Название мутации",
+    "mutation-description": "Описание мутации",
+    "log-title": "Название записи",
+    "log-scientist": "Псевдоним учёного",
+    "log-text": "Текст записи",
   } satisfies Record<LiveTarget["kind"], string>,
   placeholders: {
     "guide-section-title": "Название раздела",
@@ -82,6 +87,11 @@ export const liveCopy = {
     "virus-code": "Код",
     "virus-status": "Статус",
     "virus-text": "Нажмите, чтобы написать",
+    "mutation-name": "Название мутации",
+    "mutation-description": "Нажмите, чтобы написать",
+    "log-title": "Название записи",
+    "log-scientist": "Псевдоним",
+    "log-text": "Нажмите, чтобы написать",
   } satisfies Record<LiveTarget["kind"], string>,
   dateStart: "Начало",
   dateEnd: "Окончание",
@@ -99,6 +109,9 @@ export const liveCopy = {
   virusesRecords: "Записи вирусов",
   virusesEmpty: "Вирусов пока нет",
   virusPick: "Выберите вирус в списке",
+  infectedAdd: "Изображение",
+  infectedLabel: "Фото после заражения",
+  choiceEmpty: "Не указан",
   richEmpty: "Нажмите, чтобы написать",
   lists: { "guide-sections": "раздел", "guide-cards": "карточка", "guide-blocks": "блок", "info-sections": "раздел", "info-subsections": "подраздел", "info-blocks": "блок", viruses: "вирус" } satisfies Record<LiveList["kind"], string>,
   removeLabel: "Удалить",
@@ -106,7 +119,7 @@ export const liveCopy = {
   removeText: (label: string) => `Удалить вместе с содержимым: ${label}.`,
   removeConfirm: "УДАЛИТЬ",
   removeCancel: "ОТМЕНА",
-  removeNames: { "guide-section": "раздел", "guide-card": "карточку", "guide-block": "блок", "guide-table-row": "строку", "info-section": "раздел", "info-subsection": "подраздел", "info-block": "блок", "info-table-row": "строку", broadcast: "запись" } satisfies Record<LiveRemovable["kind"], string>,
+  removeNames: { "guide-section": "раздел", "guide-card": "карточку", "guide-block": "блок", "guide-table-row": "строку", "info-section": "раздел", "info-subsection": "подраздел", "info-block": "блок", "info-table-row": "строку", broadcast: "запись", mutation: "мутацию", log: "запись" } satisfies Record<LiveRemovable["kind"], string>,
   imageAdd: "Добавить фото",
   sectionPhoto: "Фото раздела",
   imageReplace: "Заменить",
@@ -257,7 +270,8 @@ function BroadcastsSurface({ bridge }: { bridge: LiveEditorBridge }) {
   </div>;
 }
 
-const editorLevel = Math.max(...ACCESS_LEVELS);
+// The editor sees every level (shownViewerLevel gives 5 to the editor); a record is closed only by the server mark, which a draft never carries.
+const editorLevel = 5;
 
 /**
  * «База вирусов» as the visitor sees it: the list of the archive on the left (the visitor's rows, held to reorder), the card of the chosen virus on the right
@@ -323,6 +337,7 @@ export function createLiveApi(app: LiveApp, bridge: LiveEditorBridge, hooks: Liv
     }),
     date: (target, value) => <LiveDate bridge={bridge} target={target} value={value} />,
     flag: (target, checked) => <LiveFlag bridge={bridge} target={target} checked={checked} />,
+    choice: (target, value, options) => <LiveChoice bridge={bridge} target={target} value={value} label={options.label} options={options.options} />,
     remove: (item, title) => <LiveRemove bridge={bridge} item={item} title={title} />,
   };
 }
@@ -435,9 +450,11 @@ export function LiveFlag({ bridge, target, checked }: { bridge: LiveEditorBridge
 }
 
 /** The display area of the editor's field for a place: it names the look (light paper or dark) the text has for the visitor. */
-function richAreaOf(target: LiveTarget): "lead" | "metric" | "broadcast" | "info" {
+function richAreaOf(target: LiveTarget): "lead" | "metric" | "mutation" | "scientist" | "broadcast" | "info" {
   if (target.kind === "broadcast-body") return "broadcast";
   if (target.kind === "virus-text") return target.field.startsWith("ppu-") ? "metric" : "lead";
+  if (target.kind === "mutation-description") return "mutation";
+  if (target.kind === "log-text") return "scientist";
   return "info";
 }
 
@@ -477,7 +494,10 @@ export function LiveRich({ bridge, target, text, document, className }: { bridge
       document={document}
       formatKey={key}
       onActivate={bridge.activateFormatter}
-      onChange={(value, nextDocument) => bridge.changeFormattedText(key, value, nextDocument, (next, written) => { applyLiveText(next, target, written); })}
+      // The text of a scientist record lives in the record (content and richContent), the other formatted texts in draft.formattedText under their key.
+      onChange={(value, nextDocument) => target.kind === "log-text"
+        ? bridge.changeDraft((next) => { applyLiveLogText(next, target, value, nextDocument); })
+        : bridge.changeFormattedText(key, value, nextDocument, (next, written) => { applyLiveText(next, target, written); })}
     />
     <EmbeddedMediaStrip text={text} eager />
   </div>;
@@ -497,7 +517,8 @@ function LivePopover({ onClose, children }: { onClose: () => void; children: Rea
   </div>;
 }
 
-const frameBoxOf = { "guide-section-photo": "band", "guide-card-cover": "tile", "guide-photo-url": "free", "info-photo-url": "natural" } as const;
+const frameBoxOf = { "guide-section-photo": "band", "guide-card-cover": "tile", "guide-photo-url": "free", "info-photo-url": "natural", "virus-infected": "natural", "mutation-image": "natural" } as const;
+const placementOf = { "guide-section-photo": "guide", "guide-card-cover": "guide", "guide-photo-url": "guide", "info-photo-url": "guide", "virus-infected": "dossier", "mutation-image": "mutation" } as const;
 
 /** The picture place of the visitor's page (`children`, drawn by the visitor's own PortiaImage, GIFs play) and the way to change its address and visible part. */
 export function LiveImage({ bridge, target, value, framing, children, label, fieldLabel, compact = false }: { bridge: LiveEditorBridge; target: LiveImageTarget; value: string; framing?: ImageFraming; children?: ReactNode; label?: string; fieldLabel?: string; compact?: boolean }) {
@@ -509,7 +530,7 @@ export function LiveImage({ bridge, target, value, framing, children, label, fie
       <ImageEditorField
         label={fieldLabel ?? (value ? liveCopy.imageReplace : liveCopy.imageAdd)}
         value={value}
-        placement="guide"
+        placement={placementOf[target.kind]}
         maxHint={liveCopy.imageHint}
         removeLabel={liveCopy.imageRemove}
         uploadState={bridge.uploadState}
@@ -524,6 +545,24 @@ export function LiveImage({ bridge, target, value, framing, children, label, fie
   </div>;
   if (children === undefined) return tools;
   return <div className="live-image">{children}{tools}</div>;
+}
+
+/**
+ * A value chosen from a list, in place: a compact button with the chosen value; a press opens the editor's own field for it in a popover
+ * (the classification field with its levels, the drop-down of the routes of transmission, the level picker of a scientist record).
+ */
+export function LiveChoice({ bridge, target, value, label, options }: { bridge: LiveEditorBridge; target: LiveChoiceTarget; value: string; label: string; options?: readonly { value: string; label: string }[] }) {
+  const [open, setOpen] = useState(false);
+  const write = (next: string) => bridge.changeDraft((draft) => { applyLiveChoice(draft, target, next); });
+  const shown = options?.find((option) => option.value === value)?.label ?? (value || liveCopy.choiceEmpty);
+  return <span className="live-tools live-choice">
+    <button type="button" className="live-choice-button" aria-haspopup="true" aria-expanded={open} aria-label={`${label}: ${shown}`} onClick={() => setOpen((current) => !current)}>{shown}</button>
+    {open && <LivePopover onClose={() => setOpen(false)}>
+      {target.kind === "virus-class"
+        ? <ClassificationField label={label} classificationKey={target.axis} value={value} onChange={write} />
+        : <LevelPicker name={`level-log-${target.logId}`} value={Number(value)} onChange={(level) => write(String(level))} />}
+    </LivePopover>}
+  </span>;
 }
 
 /** The YouTube link of a video block: what is typed stays visible while it is not a link yet. */
@@ -569,6 +608,7 @@ export function LiveCardsPicker({ bridge, target, cardIds }: { bridge: LiveEdito
 /** The compact bar «Добавить: …» of a place; a card page also holds the way to its cover. */
 export function LiveAddBar({ bridge, container, onAdded }: { bridge: LiveEditorBridge; container: LiveContainer; onAdded?: LiveHooks["onAdded"] }) {
   const card = container.kind === "guide-card" ? findGuide(bridge.draft.guideSections, container.cardId)?.card : null;
+  const virus = container.kind === "virus" ? findLiveVirus(bridge.draft, container.virusId) : null;
   return <div className="live-add-bar live-tools" role="toolbar" aria-label={liveCopy.addGroup}>
     <span className="live-add-label">{liveCopy.addLabel}</span>
     {liveAddKinds(container).map((kind) => {
@@ -580,6 +620,7 @@ export function LiveAddBar({ bridge, container, onAdded }: { bridge: LiveEditorB
         onAdded?.(kind, id, container);
       }}>{liveCopy.kinds[kind]}</button>;
     })}
+    {container.kind === "virus" && virus && <LiveImage bridge={bridge} target={{ kind: "virus-infected", virusId: virus.id }} value={virus.infectedImage} framing={virus.infectedImageFraming} label={liveCopy.infectedAdd} fieldLabel={liveCopy.infectedLabel} compact />}
     {container.kind === "guide-card" && card && <LiveImage bridge={bridge} target={{ kind: "guide-card-cover", cardId: card.id }} value={card.cover} framing={card.coverFraming} label={liveCopy.cover} fieldLabel={liveCopy.coverLabel} compact />}
   </div>;
 }
