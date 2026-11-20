@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { noStoreHeaders } from "@/lib/portia-cdn";
 import { promotionDeviceSecret } from "@/lib/portia-device-binding";
 import {
@@ -37,21 +38,45 @@ const setProblemResponse = (problem: "empty" | "too-large") => {
   return Response.json({ error: message.text, code: message.code }, { status: 422, headers: noStoreHeaders });
 };
 
+// CR-01 (26.1 review): the sync below moves the bank version on the server. Every answer that follows a sync carries the authoritative bank state,
+// so the client never keeps the old version and hides the next preview without a word.
+async function stateField(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>): Promise<{ state?: BankState }> {
+  const reloaded = await bankState(supabase);
+  return reloaded ? { state: reloaded } : {};
+}
+
+// WR-01 (26.1 review, mitigation without SQL): the stored counts are written before portia_promo_confirm_test looks at the request, so the request
+// is checked first through the reviewer state: it must be a qualification request of this transition, claimed by the caller.
+// The full fix (counts written inside the confirm transaction) needs a migration and stays owner-run on the isolated test branch.
+async function qualificationRequestOwnership(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, requestId: string, transitionId: string | undefined): Promise<"owned" | "not-owned" | "unavailable"> {
+  const { data, error } = await supabase.rpc("portia_promo_reviewer_state");
+  if (error || !data || typeof data !== "object" || Array.isArray(data)) return "unavailable";
+  const rows = (data as Record<string, unknown>).qualification;
+  if (!Array.isArray(rows)) return "unavailable";
+  const row = rows.find((item) => item && typeof item === "object" && (item as Record<string, unknown>).requestId === requestId) as Record<string, unknown> | undefined;
+  return row && row.assignedToMe === true && row.status === "claimed" && transitionId !== undefined && row.targetTitleId === transitionId ? "owned" : "not-owned";
+}
+
+type SyncFailure = "stale" | "changed" | "program" | "pending-database";
+
 // OWN-08 (owner 2026-11-20): quotas are gone from the editor; the stored counts only satisfy portia_promo_confirm_test (the set must be as long as their sum),
-// so they follow the set being confirmed. Called only after the token, the activity of every id and the size of the set (1..100) were checked.
-async function syncQualificationCounts(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, bank: Bank, ids: readonly string[]): Promise<{ bank: Bank } | { failure: "stale" | "program" }> {
+// so they follow the set being confirmed. Called only after the token, the activity of every id, the size of the set (1..100) and the ownership of the request were checked.
+async function syncQualificationCounts(supabase: Awaited<ReturnType<typeof createServerSupabaseClient>>, bank: Bank, ids: readonly string[]): Promise<{ bank: Bank } | { failure: SyncFailure }> {
   const wanted = qualificationTestQuotas(bank.items as QualificationPreviewItem[], ids);
   const stored = bank.quotas;
   if (stored && stored.single === wanted.single && stored.multiple === wanted.multiple && stored.freeText === wanted.freeText) return { bank };
   const command = parsePromotionBankCommand({ action: "save-qualification-bank", transitionId: bank.transitionId, quotas: wanted });
   if (!command) return { failure: "program" };
   const { error } = await supabase.rpc("portia_promo_bank_command", { p_action: command.action, p_payload: command });
-  if (error) return { failure: "stale" };
+  if (error) return { failure: error.code === "42883" ? "pending-database" : "stale" };
   const reloaded = await bankState(supabase);
   const fresh = reloaded?.qualificationBanks.find((item) => item.id === bank.id);
   // The version moved with the counts: the confirmation below uses the reloaded bank, and every id must still be an active question of it.
   if (!fresh || !ids.every((id) => fresh.items.some((item) => item.id === id && item.active))) return { failure: "stale" };
-  return { bank: fresh };
+  // WR-02 (26.1 review): the token was verified against the bank read before the sync. The reloaded bank carries a new version, so the token cannot vouch for it:
+  // a question edited by someone else in between would be frozen into the test unseen. The chosen questions must be exactly what the preview showed.
+  const unchanged = ids.every((id) => isDeepStrictEqual(bank.items.find((item) => item.id === id), fresh.items.find((item) => item.id === id)));
+  return unchanged ? { bank: fresh } : { failure: "changed" };
 }
 
 export async function GET() {
@@ -116,11 +141,18 @@ export async function POST(request: Request) {
     if (kind === "qualification") {
       const problem = qualificationSetProblem(ids.length);
       if (problem) return setProblemResponse(problem);
+      const ownership = await qualificationRequestOwnership(supabase, requestId, bank.transitionId);
+      if (ownership === "unavailable") return Response.json({ error: "База повышения ещё не обновлена.", code: "pending-database" }, { status: 503, headers: noStoreHeaders });
+      if (ownership === "not-owned") return Response.json({ error: "Не удалось подтвердить набор.", code: "confirm-conflict" }, { status: 409, headers: noStoreHeaders });
       const synced = await syncQualificationCounts(supabase, bank, ids);
       if ("failure" in synced) {
-        return synced.failure === "program"
-          ? Response.json({ error: "Не удалось подтвердить набор.", code: "confirm-failed" }, { status: 500, headers: noStoreHeaders })
-          : Response.json({ error: "Банк изменился. Соберите набор заново.", code: "stale-preview" }, { status: 409, headers: noStoreHeaders });
+        if (synced.failure === "program") return Response.json({ error: "Не удалось подтвердить набор.", code: "confirm-failed" }, { status: 500, headers: noStoreHeaders });
+        // The counts may already be written: the answer carries the bank as the server has it now.
+        const fresh = await stateField(supabase);
+        if (synced.failure === "pending-database") return Response.json({ error: "Не удалось подтвердить набор.", code: "pending-database", ...fresh }, { status: 503, headers: noStoreHeaders });
+        return synced.failure === "changed"
+          ? Response.json({ error: "Вопросы набора изменились после предпросмотра. Соберите набор заново.", code: "stale-preview", ...fresh }, { status: 409, headers: noStoreHeaders })
+          : Response.json({ error: "Банк изменился. Соберите набор заново.", code: "stale-preview", ...fresh }, { status: 409, headers: noStoreHeaders });
       }
       confirmBank = synced.bank;
     }
@@ -128,9 +160,11 @@ export async function POST(request: Request) {
       ? ["portia_promo_confirm_assignment", { p_request_id: requestId, p_bank_id: bankId, p_bank_version: bank.version, p_items: selected.map((item, sortOrder) => ({ source_item_id: item!.id, sort_order: sortOrder })) }]
       : ["portia_promo_confirm_test", { p_request_id: requestId, p_bank_id: bankId, p_bank_version: confirmBank.version, p_questions: selected.map((item, sortOrder) => ({ source_question_id: item!.id, sort_order: sortOrder })) }];
     const { data, error } = await supabase.rpc(rpc[0] as string, rpc[1] as Record<string, unknown>);
+    // CR-01: a qualification confirm may have moved the bank version (the counts sync), success or not, so the authoritative state goes back with the answer.
+    const afterConfirm = kind === "qualification" ? await stateField(supabase) : {};
     return error || !data
-      ? Response.json({ error: "Не удалось подтвердить набор.", code: error?.code === "42883" ? "pending-database" : "confirm-conflict" }, { status: error?.code === "42883" ? 503 : 409, headers: noStoreHeaders })
-      : Response.json({ id: data }, { status: 201, headers: noStoreHeaders });
+      ? Response.json({ error: "Не удалось подтвердить набор.", code: error?.code === "42883" ? "pending-database" : "confirm-conflict", ...afterConfirm }, { status: error?.code === "42883" ? 503 : 409, headers: noStoreHeaders })
+      : Response.json({ id: data, ...afterConfirm }, { status: 201, headers: noStoreHeaders });
   }
 
   if (JSON.stringify(body).length > 64 * 1024) return Response.json({ error: "Данные слишком велики." }, { status: 413, headers: noStoreHeaders });

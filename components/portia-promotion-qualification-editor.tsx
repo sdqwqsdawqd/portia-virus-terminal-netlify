@@ -131,7 +131,10 @@ export function PortiaPromotionQualificationEditor({ banks, requests, busy, post
   const confirmPreview = async () => {
     if (!bank || !currentPreview || !selectedRequestId) return;
     const result = await post({ action: "confirm", kind: "qualification", bankId: bank.id, requestId: selectedRequestId, preview: currentPreview.preview });
-    if (result) { setPreview(null); setManualIds([]); setManualTried(false); await refreshQueue(); }
+    // CR-01 (26.1 review): the server moves the bank version while it confirms and answers with the bank state, success or not; postBank applies it.
+    // A failed confirm leaves the old preview behind the new version, and the line «Набор изменился» says so instead of a silent empty pane.
+    if (!result) { setPreviewStale(true); return; }
+    setPreview(null); setManualIds([]); setManualTried(false); await refreshQueue();
   };
   const previewPoolError = bank && activeCount < 1 ? qualificationTestSummary(activePools) : null;
   const disabledReason = !bank ? "Сначала добавьте вопрос." : previewPoolError ? previewPoolError : !matchingRequests.length ? "Нет взятого вами квалификационного запроса для этого перехода." : "";

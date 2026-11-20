@@ -350,7 +350,7 @@ test("owner 2026-11-20, OWN-08: confirm brings the stored counts to the confirme
   assert.ok(sync.includes("fresh.items.some((item) => item.id === id && item.active)"), "activity is checked again after the reload");
   // An unparsable command is a program error (500), never the version conflict.
   const branch = confirm.slice(confirm.indexOf('if (kind === "qualification")'), confirm.indexOf("const rpc = kind"));
-  assert.match(branch, /"program"\s*\?\s*Response\.json\(\{ error: "Не удалось подтвердить набор\.", code: "confirm-failed" \}, \{ status: 500/);
+  assert.match(branch, /"program"\) return Response\.json\(\{ error: "Не удалось подтвердить набор\.", code: "confirm-failed" \}, \{ status: 500/);
   // «Банк изменился» appears in the qualification branch only after the sync call; the empty/too-large answers come before it and are 422.
   assert.ok(branch.indexOf("Банк изменился") > branch.indexOf("syncQualificationCounts("));
   assert.ok(branch.indexOf("setProblemResponse(problem)") !== -1 && branch.indexOf("setProblemResponse(problem)") < branch.indexOf("syncQualificationCounts("));
@@ -359,4 +359,50 @@ test("owner 2026-11-20, OWN-08: confirm brings the stored counts to the confirme
   // Ordinary assignments keep their path; the route still starts with the reviewer check and the SQL is not part of this change.
   assert.ok(confirm.includes('"portia_promo_confirm_assignment", { p_request_id: requestId, p_bank_id: bankId, p_bank_version: bank.version'));
   assert.ok(route.slice(route.indexOf("export async function POST")).indexOf("requirePromotionReviewer(supabase)") < route.slice(route.indexOf("export async function POST")).indexOf("parseJsonObject"));
+});
+
+test("26.1 CR-01: a qualification confirm answers with the bank state, success or failure, and the client applies it so the next preview is shown", () => {
+  const route = bankRouteSource();
+  const main = readFileSync(new URL("../components/portia-promotion-editor-main.tsx", import.meta.url), "utf8");
+  const qualificationEditor = readFileSync(new URL("../components/portia-promotion-qualification-editor.tsx", import.meta.url), "utf8");
+  const confirm = route.slice(route.indexOf("const token = typeof body.preview"));
+  // Success and the failure of the confirm RPC after the sync both carry the authoritative state.
+  assert.match(confirm, /const afterConfirm = kind === "qualification" \? await stateField\(supabase\) : \{\};/);
+  assert.match(confirm, /code: error\?\.code === "42883" \? "pending-database" : "confirm-conflict", \.\.\.afterConfirm \}/);
+  assert.match(confirm, /\{ id: data, \.\.\.afterConfirm \}, \{ status: 201/);
+  // A failure of the sync itself (the counts may be written already) carries it too; only the program error, where nothing was written, does not.
+  const branch = confirm.slice(confirm.indexOf('if (kind === "qualification")'), confirm.indexOf("const rpc = kind"));
+  assert.ok(branch.includes("const fresh = await stateField(supabase)") && branch.match(/\.\.\.fresh \}/g)!.length === 3);
+  assert.ok(branch.indexOf('"program") return') < branch.indexOf("stateField(supabase)"));
+  // The client: postBank applies body.state before it judges the status, and a failed confirm says that the set changed.
+  const postBank = main.slice(main.indexOf("const postBank"), main.indexOf("const irreversible"));
+  assert.ok(postBank.indexOf("setBanks(body.state") !== -1 && postBank.indexOf("setBanks(body.state") < postBank.indexOf("if (!response.ok)"));
+  const confirmPreview = qualificationEditor.slice(qualificationEditor.indexOf("const confirmPreview"), qualificationEditor.indexOf("const previewPoolError"));
+  assert.ok(confirmPreview.includes("if (!result) { setPreviewStale(true); return; }"));
+  // The preview the server builds after the confirm is shown once the client holds the bank of the same version.
+  assert.ok(qualificationEditor.includes("preview?.version === bank?.version ? preview : null"));
+});
+
+test("26.1 WR-01: the request is verified as claimed by this reviewer for this transition before the counts are written, 42883 stays 503", () => {
+  const route = bankRouteSource();
+  const confirm = route.slice(route.indexOf("const token = typeof body.preview"));
+  assert.ok(confirm.indexOf("qualificationRequestOwnership(supabase, requestId, bank.transitionId)") !== -1);
+  assert.ok(confirm.indexOf("qualificationRequestOwnership(") < confirm.indexOf("syncQualificationCounts(supabase, bank, ids)"));
+  const ownership = route.slice(route.indexOf("async function qualificationRequestOwnership"), route.indexOf("type SyncFailure"));
+  assert.ok(ownership.includes('"portia_promo_reviewer_state"') && ownership.includes("row.assignedToMe === true") && ownership.includes('row.status === "claimed"') && ownership.includes("row.targetTitleId === transitionId"));
+  // An unreadable reviewer state is «not updated yet» (503), a request that is not mine is a 409 before any write.
+  assert.match(confirm, /ownership === "unavailable"\) return Response\.json\([^\n]*code: "pending-database" \}, \{ status: 503/);
+  assert.match(confirm, /ownership === "not-owned"\) return Response\.json\([^\n]*code: "confirm-conflict" \}, \{ status: 409/);
+  // A missing function in the sync is the 503 of the database that is not updated, not the «bank changed» conflict.
+  assert.ok(route.includes('failure: error.code === "42883" ? "pending-database" : "stale"'));
+  assert.match(confirm, /synced\.failure === "pending-database"\) return Response\.json\([^\n]*code: "pending-database"[^\n]*\{ status: 503/);
+});
+
+test("26.1 WR-02: the chosen questions are compared with what the preview showed after the reload, and a change is its own answer", () => {
+  const route = bankRouteSource();
+  const sync = route.slice(route.indexOf("async function syncQualificationCounts"), route.indexOf("export async function GET"));
+  assert.ok(sync.includes("isDeepStrictEqual(bank.items.find((item) => item.id === id), fresh.items.find((item) => item.id === id))"));
+  assert.ok(sync.includes('{ failure: "changed" }') && sync.indexOf("isDeepStrictEqual") > sync.indexOf("bankState(supabase)"));
+  const confirm = route.slice(route.indexOf("const token = typeof body.preview"));
+  assert.match(confirm, /synced\.failure === "changed"\s*\? Response\.json\(\{ error: "Вопросы набора изменились после предпросмотра\./);
 });
