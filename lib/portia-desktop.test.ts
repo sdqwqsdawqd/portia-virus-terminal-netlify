@@ -515,6 +515,66 @@ test("OWN-06: the taskbar marks a window whose title bar is out of reach, and a 
   assert.ok(mark.includes("border-bottom: 2px dashed var(--teal)"), "a dashed accent mark, no new colour");
 });
 
+test("OWN-06: the taskbar preview is its own seam with a map, РАЗВЕРНУТЬ and ЗАКРЫТЬ", () => {
+  const seam = desktopFamily.find((part) => part.file === "portia-desktop-taskbar.tsx")?.text ?? "";
+  assert.ok(seam.includes("export function TaskbarPreview"));
+  assert.ok(seam.includes("export function useTaskbarPreview"));
+  assert.ok(seam.includes('role="group" aria-label={`${label}: окно`}'));
+  assert.ok(seam.includes("previewRect(geometry, bounds)"));
+  assert.ok(seam.includes("titlebarReachable("));
+  assert.ok(seam.includes("За краем экрана"));
+  assert.ok(seam.includes('<button type="button" onClick={onMaximize}>РАЗВЕРНУТЬ</button>'));
+  assert.ok(seam.includes('<button type="button" onClick={onClose}>ЗАКРЫТЬ</button>'));
+  assert.ok(seam.includes('event.key !== "Escape"'));
+  assert.ok(seam.includes("PREVIEW_SHOW_MS = 300") && seam.includes("PREVIEW_HIDE_MS = 200"));
+  assert.ok(!seam.includes("localStorage") && !seam.includes("sessionStorage"), "the preview stores nothing (STAB-DESK-07)");
+});
+
+test("OWN-06: a taskbar button and its preview share one span.taskbar-entry; hover, focus and Escape drive the preview", () => {
+  assert.ok(source.includes("<TaskbarPreview"));
+  const entry = source.slice(source.indexOf('<span key={app} className="taskbar-entry"'), source.indexOf('<span className="sr-only" role="status" aria-live="polite">{layoutAnnouncement}'));
+  assert.ok(entry.length > 200, "the entry wrapper exists");
+  assert.ok(entry.includes("onPointerEnter=") && entry.includes("onPointerLeave="));
+  assert.ok(entry.includes("preview.show(app, preview.shown ? 0 : PREVIEW_SHOW_MS)"));
+  assert.ok(entry.includes("preview.hide(PREVIEW_HIDE_MS)"));
+  assert.ok(entry.includes(":focus-visible"), "keyboard focus shows the preview at once");
+  assert.ok(entry.includes('event.pointerType === "touch"'), "touch never hovers");
+  assert.ok(entry.includes("onDismiss={() =>"), "Escape hides the preview");
+  assert.ok(entry.includes("onMaximize={() => maximizeFromPreview(app)}") && entry.includes("onClose={() => closeFromPreview(app)}"));
+  assert.ok(entry.includes("geometry={windows[app].maximized ? undefined : windows[app].geometry}"), "a maximized window fills the map");
+  const canShow = source.slice(source.indexOf("useTaskbarPreview<AppId>("), source.indexOf("useTaskbarPreview<AppId>(") + 260);
+  assert.ok(canShow.includes('window.matchMedia("(max-width: 900px)").matches') && canShow.includes("taskbarDrag.current"), "no preview on the phone or during a taskbar drag");
+  assert.ok(source.includes('button.closest(".taskbar-apps")'), "the drag finds the other buttons through the toolbar, not the entry");
+});
+
+test("OWN-06: РАЗВЕРНУТЬ opens a hidden window, maximizes an open one and only focuses a maximized one; ЗАКРЫТЬ is the ordinary close", () => {
+  const body = source.slice(source.indexOf("const maximizeFromPreview = "), source.indexOf("const closeFromPreview = "));
+  assert.ok(body.includes('openApp(app, originOf(button, "taskbar"))'));
+  assert.ok(body.includes("state.minimized || state.exiting"));
+  assert.ok(body.includes("toggleMaximize(app)"));
+  assert.ok(body.includes("focusApp(app)"));
+  assert.ok(body.includes("qualificationLocked && app === \"promotion\""));
+  const close = source.slice(source.indexOf("const closeFromPreview = "), source.indexOf("const closeFromPreview = ") + 160);
+  assert.ok(close.includes("closeApp(app)"), "the same close as the cross of the window: the editor still asks to save");
+});
+
+test("OWN-06: the preview CSS: above the taskbar, 220px, panel colours, accent frame for the window, no preview on the phone", () => {
+  const rule = (selector: string) => {
+    const start = styles.indexOf(selector + " {");
+    return start < 0 ? "" : styles.slice(start, styles.indexOf("}", start));
+  };
+  assert.ok(rule(".taskbar-entry").includes("position: relative"));
+  const preview = rule(".taskbar-preview");
+  assert.ok(preview.includes("bottom: calc(100% + 6px)") && preview.includes("width: 220px"));
+  assert.ok(preview.includes("background: var(--panel)") && preview.includes("border: 1px solid var(--line)") && preview.includes("box-shadow: 0 22px 60px rgba(0,0,0,.55)"));
+  assert.ok(rule(".taskbar-preview-map").includes("overflow: hidden") && rule(".taskbar-preview-map").includes("padding: 12px"));
+  assert.ok(rule(".taskbar-preview-screen").includes("overflow: visible"));
+  assert.ok(rule(".taskbar-preview-window").includes("var(--teal)"));
+  assert.ok(rule(".taskbar-preview-actions button").includes("height: 28px"));
+  assert.ok(styles.includes('html[data-motion="full"] .taskbar-preview {'), "the fade is only for full motion");
+  assert.ok(styles.includes("  .taskbar-preview { display: none; }"), "phone: no preview");
+});
+
 test("shared shortcut hover feedback never translates the icon container", () => {
   const hover = /\.desktop-icon:hover \.desktop-icon-symbol[^\{]*\{([^}]*)\}/.exec(styles)?.[1] ?? "";
   assert.ok(hover);

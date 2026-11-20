@@ -21,6 +21,7 @@ import { RedactedPlaceholder } from "@/components/portia-redacted";
 import { splitEmbeddedMedia } from "@/lib/rich-text-media";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
 import { AppWindow, appMeta, minimumWindowSize, nodWindow, type AppId } from "@/components/portia-desktop-window";
+import { PREVIEW_HIDE_MS, PREVIEW_SHOW_MS, TaskbarPreview, useTaskbarPreview } from "@/components/portia-desktop-taskbar";
 import { DesktopIcon, StartPanelButton, desktopShortcutOrder, placedShortcut, useShortcutPlacement, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
 import { PortiaPromotion } from "@/components/portia-promotion";
 import { PortiaTemplateBuilder } from "@/components/portia-template-builder";
@@ -477,6 +478,10 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
   const bounceTimers = useRef<Partial<Record<AppId, number>>>({});
   const taskbarDrag = useRef<null | { app: AppId; pointerId: number; startX: number; moved: boolean }>(null);
   const suppressTaskbarClick = useRef(false);
+  // OWN-06: one preview for the taskbar; never on the phone and never while an entry is being dragged.
+  const preview = useTaskbarPreview<AppId>(() => !window.matchMedia("(max-width: 900px)").matches && !taskbarDrag.current);
+  // Giving the focus back to a taskbar button must not show its preview again.
+  const previewFocusGuard = useRef(false);
   const [settingsSavedVisible, setSettingsSavedVisible] = useState(false);
   const [wallpaperSaveFailed, setWallpaperSaveFailed] = useState(false);
   const [accentPickerOpen, setAccentPickerOpen] = useState(false);
@@ -1279,6 +1284,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     if (event.pointerType === "touch" || event.button !== 0) return;
     // Capture at once: the release always comes back here, even if the pointer left the button.
     event.currentTarget.setPointerCapture(event.pointerId);
+    preview.hide();
     taskbarDrag.current = { app, pointerId: event.pointerId, startX: event.clientX, moved: false };
   };
 
@@ -1319,7 +1325,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     suppressTaskbarClick.current = true;
     window.setTimeout(() => { suppressTaskbarClick.current = false; }, 0);
     if (!drag.moved) return;
-    const others = [...(button.parentElement?.querySelectorAll<HTMLElement>("[data-taskbar-app]") ?? [])].filter((element) => element !== button);
+    const others = [...(button.closest(".taskbar-apps")?.querySelectorAll<HTMLElement>("[data-taskbar-app]") ?? [])].filter((element) => element !== button);
     const before = others.find((element) => { const rect = element.getBoundingClientRect(); return event.clientX < rect.left + rect.width / 2; })?.dataset.taskbarApp as AppId | undefined;
     setTaskbarOrder((order) => {
       const without = order.filter((id) => id !== drag.app);
@@ -1421,6 +1427,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     // «Уменьшены» keeps a short fade so the window visibly leaves; «Выключены» removes it at once (the timer keeps one exit path).
     const motion = document.documentElement.dataset.motion;
     const duration = motion === "off" ? 0 : motion === "reduced" ? WINDOW_FADE_OUT_MS : kind === "close" ? WINDOW_CLOSE_MS : WINDOW_MINIMIZE_MS;
+    preview.hide();
     setWindows((state) => ({ ...state, [appId]: { ...state[appId], exiting: kind } }));
     // A timer, not animationend: in a hidden tab the animation event may never fire.
     exitTimers.current[appId] = window.setTimeout(() => {
@@ -1452,6 +1459,35 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     setWindows((state) => ({ ...state, [appId]: { ...state[appId], maximized: !state[appId].maximized } }));
     focusApp(appId);
   };
+
+  // OWN-06: the actions of the taskbar preview. The window that is out of reach is brought back before it is maximized,
+  // so that leaving the maximized state does not drop it behind the edge again.
+  const returnTaskbarFocus = (app: AppId) => {
+    previewFocusGuard.current = true;
+    document.querySelector<HTMLElement>(`[data-taskbar-app="${app}"]`)?.focus();
+    previewFocusGuard.current = false;
+  };
+
+  const maximizeFromPreview = (app: AppId) => {
+    preview.hide();
+    const state = windows[app];
+    const button = document.querySelector<HTMLElement>(`[data-taskbar-app="${app}"]`);
+    if (qualificationLocked && app === "promotion") { focusApp(app); return; }
+    const bounds = workspaceBounds();
+    setWindows((current) => {
+      const geometry = current[app].geometry;
+      if (!geometry || titlebarReachable(geometry, bounds)) return current;
+      return { ...current, [app]: { ...current[app], geometry: fitGeometry(geometry, bounds, minimumWindowSize(app)) } };
+    });
+    if (state.minimized || state.exiting) {
+      if (button) openApp(app, originOf(button, "taskbar")); else openApp(app);
+      setWindows((current) => ({ ...current, [app]: { ...current[app], maximized: true } }));
+    } else if (!state.maximized) toggleMaximize(app);
+    else { focusApp(app); }
+    returnTaskbarFocus(app);
+  };
+
+  const closeFromPreview = (app: AppId) => { preview.hide(); closeApp(app); };
 
   const updateWindowGeometry = (appId: AppId, geometry: WindowGeometry) => {
     setWindows((state) => ({ ...state, [appId]: { ...state[appId], geometry } }));
@@ -2269,13 +2305,31 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
             if (opening && event.detail === 0) window.requestAnimationFrame(() => startPanelRef.current?.querySelector("button")?.focus());
           }} aria-expanded={startOpen}><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA</span></button>
           <div className="taskbar-apps" role="toolbar" aria-label="Открытые программы">
-            {taskbarOrder.filter((app) => windows[app].open).map((app) => <button key={app} data-taskbar-app={app} data-unreachable={outOfReach(app) ? "true" : undefined} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}${bouncingApps[app] ? " is-bouncing" : ""}`} type="button" onKeyDown={onTaskbarKeyDown(app)} onPointerDown={beginTaskbarDrag(app)} onPointerMove={moveTaskbarDrag} onPointerUp={endTaskbarDrag} onPointerCancel={endTaskbarDrag} onLostPointerCapture={endTaskbarDrag} onClick={(event) => {
+            {taskbarOrder.filter((app) => windows[app].open).map((app) => <span key={app} className="taskbar-entry" onPointerEnter={(event) => {
+              if (event.pointerType === "touch") return;
+              preview.show(app, preview.shown ? 0 : PREVIEW_SHOW_MS);
+            }} onPointerLeave={(event) => {
+              if (event.pointerType === "touch") return;
+              preview.hide(PREVIEW_HIDE_MS);
+            }} onFocus={(event) => {
+              if (!previewFocusGuard.current && event.target.matches(":focus-visible")) preview.show(app);
+            }} onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) preview.hide();
+            }} onKeyDown={(event) => {
+              if (event.key !== "Escape" || preview.shown !== app) return;
+              event.stopPropagation();
+              preview.hide();
+              returnTaskbarFocus(app);
+            }}><button data-taskbar-app={app} data-unreachable={outOfReach(app) ? "true" : undefined} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}${bouncingApps[app] ? " is-bouncing" : ""}`} type="button" onKeyDown={onTaskbarKeyDown(app)} onPointerDown={beginTaskbarDrag(app)} onPointerMove={moveTaskbarDrag} onPointerUp={endTaskbarDrag} onPointerCancel={endTaskbarDrag} onLostPointerCapture={endTaskbarDrag} onClick={(event) => {
               if (suppressTaskbarClick.current) { suppressTaskbarClick.current = false; return; }
+              preview.hide();
               // A window on its way out comes back, like a minimised one.
               if (windows[app].minimized || windows[app].exiting) openApp(app, originOf(event.currentTarget, "taskbar"));
               else if (activeApp === app) minimizeApp(app);
               else focusApp(app);
-            }}><span className="mini-app-icon"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].label}</span></button>)}
+            }}><span className="mini-app-icon"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].label}</span></button>
+              {preview.shown === app && <TaskbarPreview app={app} label={appMeta[app].label} icon={appMeta[app].icon} geometry={windows[app].maximized ? undefined : windows[app].geometry} bounds={workspaceBounds()} minimized={windows[app].minimized} onMaximize={() => maximizeFromPreview(app)} onClose={() => closeFromPreview(app)} onDismiss={() => { preview.hide(); returnTaskbarFocus(app); }} />}
+            </span>)}
           </div>
           <span className="sr-only" role="status" aria-live="polite">{layoutAnnouncement}</span>
         </footer>
