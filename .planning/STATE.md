@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: "26.1"
 current_phase_name: Правки владельца
 status: executing
-stopped_at: Completed 26.1-08-PLAN.md
-last_updated: "2026-11-20T17:08:23.345Z"
+stopped_at: Completed 26.1-09-PLAN.md
+last_updated: "2026-11-20T17:23:21.696Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 26.1 execution started
-state_head: ecc761a7e2164cc0c74d4972d5d8f1a25d12dede
+state_head: ede9a3e2f6499be9d5458a7cb20f965b76eaaa13
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 84
-  completed_plans: 78
+  completed_plans: 79
 ---
 
 Total Phases: 6
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (updated 2026-11-09)
 ## Current Position
 
 Phase: 26.1 (Правки владельца) — EXECUTING
-Plan: 9 of 14
+Plan: 10 of 14
 Status: Ready to execute
 Last activity: 2026-11-20 — Phase 26.1 execution started
 
@@ -119,6 +119,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase 26.1 P06 | n/a | 3 tasks | 7 files |
 | Phase 26.1 P07 | n/a | 3 tasks | 9 files |
 | Phase 26.1 P08 | n/a | 3 tasks | 8 files |
+| Phase 26.1 P09 | n/a | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -377,6 +378,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 26.1]: 26.1-07: окно доступно при >=48px заголовка по горизонтали и не ниже нижнего края; refit уменьшает только окно больше области, унесённое остаётся
 - [Phase 26.1]: 26.1-07: РАЗВЕРНУТЬ из превью возвращает недоступное окно внутрь экрана перед разворачиванием
 - [Phase 26.1]: 26.1-08: ручки порядка скрыты (position absolute, clip-path), перенос удержанием 400 мс/6px на зоне строки; ColumnSwapHandle перенесён в шов вставкой PORTIA-26.1-HOLD
+- [Phase 26.1]: 26.1-09: card tabs choose by the pure rule resolveCardTab (new id selected at once, deleted selected -> neighbour); mutation tabs are numbers and have no order; non-selected cards are not rendered, the format panel closes on a tab switch
 
 ### Pending Todos
 
@@ -435,8 +437,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-20T17:08:22.078Z
-Stopped at: Completed 26.1-08-PLAN.md
+Last session: 2026-11-20T17:23:20.507Z
+Stopped at: Completed 26.1-09-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
