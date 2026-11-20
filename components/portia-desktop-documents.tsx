@@ -12,7 +12,7 @@ import type { ImageFraming } from "@/lib/image-framing";
 import { FormattedText } from "@/components/portia-desktop-dossier";
 import { PortiaImage, useVisibleTimeout } from "@/components/portia-desktop-media";
 import { AppFatalPanel, AppSkeleton } from "@/components/portia-desktop-states";
-import { useLiveEdit } from "@/components/portia-live-edit";
+import { useLiveEdit, type LiveOrder } from "@/components/portia-live-edit";
 
 // D-19: one permission set for every third-party frame. Scripts and same-origin let the viewers run, popups escape the sandbox so links open as normal tabs;
 // no top-navigation flag, so a frame can never move the PORTIA tab. If a device needs more, add only that one flag.
@@ -188,15 +188,21 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
         {/* The title carries the mark: a long page centred as a whole would hide its top. */}
         <h1 className={hitId === card.id ? "search-hit" : undefined} {...(hitId === card.id ? { "data-search-hit": "true", "aria-current": "true" as const } : {})}>{live ? live.text({ kind: "guide-card-title", cardId: card.id }, card.title) : card.title || "Без названия"}</h1>
         {!card.blocks.length && <p className="guide-section-empty">В карточке пока нет содержимого</p>}
-        <div className="guide-blocks">{card.blocks.map((block) => <GuideBlockView key={block.id} block={block} formattedText={formattedText} cardTitle={card.title} sections={sections} onOpenCard={openNested} />)}</div>
+        <div className="guide-blocks">{card.blocks.map((block, blockIndex) => {
+          const view = <GuideBlockView key={block.id} block={block} cardId={card.id} formattedText={formattedText} cardTitle={card.title} sections={sections} onOpenCard={openNested} />;
+          if (!live) return view;
+          const order = live.order({ kind: "guide-blocks", cardId: card.id }, blockIndex, blockName(block));
+          return <div className="live-block" key={block.id} {...order.rowProps}>{order.handle}{view}{live.remove({ kind: "guide-block", cardId: card.id, blockId: block.id }, blockName(block))}</div>;
+        })}</div>
+        {live && live.addBar({ kind: "guide-card", cardId: card.id })}
       </article>
     </> : lostLevel !== null ? <>
       <div className="guide-back-bar"><button type="button" aria-label="Назад к списку карточек" onClick={() => { backIntent.current = true; onOpenCard(""); }}><span aria-hidden="true">←</span><span className="guide-back-label">Назад</span></button></div>
       <RedactedPlaceholder variant="block" level={lostLevel} />
-    </> : !sectionRows.length ? <div className="guide-empty empty-state"><PortiaIllustration name="microscopeGuide" /><strong>{emptyCopy.guide.heading}</strong><span>{emptyCopy.guide.body}</span></div>
+    </> : !sectionRows.length ? <><div className="guide-empty empty-state"><PortiaIllustration name="microscopeGuide" /><strong>{emptyCopy.guide.heading}</strong><span>{emptyCopy.guide.body}</span></div>{live && live.addBar({ kind: "guide-root" })}</>
     : <>
     {!sections.length && <div className="guide-empty empty-state"><PortiaIllustration name="microscopeGuide" /><strong>{levelCopy.sectionsNoOpen.heading}</strong><span>{levelCopy.sectionsNoOpen.body}</span></div>}
-    {sectionRows.map((row) => {
+    {sectionRows.map((row, rowIndex) => {
       // D-10: a closed section is one bar in its place: no button, no photo, no chevron, no grid.
       if (row.kind === "redacted") return <section className="guide-section" key={row.slot}><RedactedPlaceholder variant="bar" level={row.requiredLevel} /></section>;
       const section = row.item;
@@ -204,25 +210,33 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
       const shut = live ? liveFolded.includes(section.id) : folded;
       const gridId = `guide-grid-${section.id}`;
       const cardRows = mergePlaceholders(section.cards, placeholders?.cards[section.id]);
-      return <section className="guide-section" key={section.id}>
+      // LIVE-02: a section is a row of the order list; its keyboard button stands inside it.
+      const order = live ? live.order({ kind: "guide-sections" }, rowIndex, section.title) : null;
+      return <section className="guide-section" key={section.id} {...order?.rowProps}>
+        {order?.handle}
         {live ? <div className={`guide-section-head${section.photo ? " has-photo" : ""}`}>
           {section.photo && <PortiaImage src={section.photo} alt="" recordId={`${section.id}:band`} priority="lazy" icon="guide" className="guide-section-band is-fill is-quiet" framing={section.photoFraming} />}
           <span className="guide-section-title" id={`${gridId}-title`}>{live.text({ kind: "guide-section-title", sectionId: section.id }, section.title)}</span>
           <button type="button" className="live-fold" aria-expanded={!shut} aria-controls={gridId} aria-labelledby={`${gridId}-title`} onClick={() => setLiveFolded((current) => current.includes(section.id) ? current.filter((id) => id !== section.id) : [...current, section.id])}><span className="guide-section-chevron" aria-hidden="true" /></button>
+          {live.remove({ kind: "guide-section", sectionId: section.id }, section.title)}
         </div> : <button type="button" className={`guide-section-head${section.photo ? " has-photo" : ""}`} aria-expanded={!folded} aria-controls={gridId} onClick={() => setExpanded((current) => current.includes(section.id) ? current.filter((id) => id !== section.id) : [...current, section.id])}>
           {section.photo && <PortiaImage src={section.photo} alt="" recordId={`${section.id}:band`} priority="lazy" icon="guide" className="guide-section-band is-fill is-quiet" framing={section.photoFraming} />}
           <span className="guide-section-title">{section.title || "Без названия"}</span>
           <span className="guide-section-chevron" aria-hidden="true" />
         </button>}
+        {live && <div className="live-section-tools">{live.image({ kind: "guide-section-photo", sectionId: section.id }, { value: section.photo, framing: section.photoFraming })}</div>}
         <div className="guide-grid" id={gridId} hidden={shut}>
           {!cardRows.length && <p className="guide-section-empty">В разделе пока нет карточек</p>}
-          {cardRows.map((cardRow) => {
+          {cardRows.map((cardRow, cardIndex) => {
             if (cardRow.kind === "redacted") return <RedactedPlaceholder key={cardRow.slot} variant="tile" level={cardRow.requiredLevel} />;
-            return <GuideTile key={cardRow.item.id} item={cardRow.item} hit={hitId === cardRow.item.id} onOpen={openTile} />;
+            const tileOrder = live ? live.order({ kind: "guide-cards", sectionId: section.id }, cardIndex, cardRow.item.title) : null;
+            return <GuideTile key={cardRow.item.id} item={cardRow.item} hit={hitId === cardRow.item.id} onOpen={openTile} live={live && tileOrder ? { order: tileOrder, remove: live.remove({ kind: "guide-card", cardId: cardRow.item.id }, cardRow.item.title) } : undefined} />;
           })}
         </div>
+        {live && live.addBar({ kind: "guide-section", sectionId: section.id })}
       </section>;
     })}
+    {live && live.addBar({ kind: "guide-root" })}
     </>}
   </div>;
 }
@@ -231,40 +245,55 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
 // the editor saved but never the free proportions of its frame (an old frame with its own ratio cropped some covers differently from the rest).
 const tileFraming = (framing: ImageFraming | undefined): ImageFraming | undefined => (framing && framing.ratio !== undefined ? { x: framing.x, y: framing.y, zoom: framing.zoom } : framing);
 
-function GuideTile({ item, hit, onOpen }: { item: GuideSection["cards"][number]; hit: boolean; onOpen: (id: string) => void }) {
-  return <button type="button" className={`guide-tile${item.cover ? "" : " guide-tile-thin"}${hit ? " search-hit" : ""}`} data-card-id={item.id} data-title-fit={guideTileTitleFit(item.title || "Без названия")} {...(hit ? { "data-search-hit": "true", "aria-current": "true" as const } : {})} onClick={() => onOpen(item.id)}>
+function GuideTile({ item, hit, onOpen, live }: { item: GuideSection["cards"][number]; hit: boolean; onOpen: (id: string) => void; /** LIVE-02: the tile is a row of the order list and has a remove button; absent for a visitor. */ live?: { order: LiveOrder; remove: ReactNode } }) {
+  const tile = <button type="button" className={`guide-tile${item.cover ? "" : " guide-tile-thin"}${hit ? " search-hit" : ""}`} data-card-id={item.id} data-title-fit={guideTileTitleFit(item.title || "Без названия")} {...(hit ? { "data-search-hit": "true", "aria-current": "true" as const } : {})} onClick={() => onOpen(item.id)}>
     {item.cover && <span className="guide-tile-cover"><PortiaImage src={item.cover} alt="" recordId={`${item.id}:cover`} priority="lazy" icon="guide" className="is-fill is-compact" framing={tileFraming(item.coverFraming)} /></span>}
     <span className="guide-tile-title">{item.title || "Без названия"}</span>
   </button>;
+  return live ? <div className="live-tile" {...live.order.rowProps}>{live.order.handle}{tile}{live.remove}</div> : tile;
 }
 
-function GuideBlockView({ block, formattedText, cardTitle, sections, onOpenCard }: { block: GuideBlock; formattedText: PortiaContent["formattedText"]; cardTitle: string; sections: GuideSection[]; onOpenCard: (id: string) => void }) {
+// A short name of a block for the live mode's labels: the text the visitor would see first, if the block has one; never a Russian word.
+const blockName = (block: GuideBlock) => (block.type === "heading" ? block.text : block.type === "callout" ? block.label : "").slice(0, 40);
+
+function GuideBlockView({ block, cardId, formattedText, cardTitle, sections, onOpenCard }: { block: GuideBlock; cardId: string; formattedText: PortiaContent["formattedText"]; cardTitle: string; sections: GuideSection[]; onOpenCard: (id: string) => void }) {
+  const live = useLiveEdit("guide");
+  const richKey = { kind: "guide-block-text", cardId, blockId: block.id } as const;
   if (block.type === "cards") {
     // Only cards this visitor has: a closed or deleted card is left out, and an empty block draws nothing.
     const cards = block.cardIds.map((id) => findGuide(sections, id)?.card).filter((item): item is NonNullable<typeof item> => !!item);
-    return cards.length ? <div className="guide-grid guide-nested-cards">{cards.map((item) => <GuideTile key={item.id} item={item} hit={false} onOpen={onOpenCard} />)}</div> : null;
+    const grid = cards.length ? <div className="guide-grid guide-nested-cards">{cards.map((item) => <GuideTile key={item.id} item={item} hit={false} onOpen={onOpenCard} />)}</div> : null;
+    return live ? <>{grid}{live.cards({ kind: "guide-cards-block", cardId, blockId: block.id }, block.cardIds)}</> : grid;
   }
-  if (block.type === "heading") return block.text.trim() ? <h2 className="guide-heading">{block.text}</h2> : null;
-  if (block.type === "text") return <FormattedText className="info-document-copy" text={block.text} document={formattedText[portiaTextKey.guideBlock(block.id)]} />;
-  if (block.type === "table") return <div className="guide-table"><dl className="info-ledger info-classification">{block.rows.filter((row) => row.key || row.value).map((row) => <div key={row.id}><dt>{row.key}</dt><dd>{row.value}</dd></div>)}</dl></div>;
-  if (block.type === "photo") return block.url ? <GuidePhoto block={block} /> : null;
-  if (block.type === "video") return block.videoId ? <YoutubeFigure videoId={block.videoId} title={cardTitle || "Без названия"} /> : null;
+  if (block.type === "heading") return live ? <h2 className="guide-heading">{live.text({ kind: "guide-heading", cardId, blockId: block.id }, block.text)}</h2> : block.text.trim() ? <h2 className="guide-heading">{block.text}</h2> : null;
+  if (block.type === "text") return live ? live.rich(richKey, { text: block.text, document: formattedText[portiaTextKey.guideBlock(block.id)], className: "info-document-copy" }) : <FormattedText className="info-document-copy" text={block.text} document={formattedText[portiaTextKey.guideBlock(block.id)]} />;
+  if (block.type === "table") {
+    if (live) return <div className="guide-table"><dl className="info-ledger info-classification">{block.rows.map((row) => <div key={row.id}>
+      <dt>{live.text({ kind: "guide-table-key", cardId, blockId: block.id, rowId: row.id }, row.key)}</dt>
+      <dd>{live.text({ kind: "guide-table-value", cardId, blockId: block.id, rowId: row.id }, row.value)}{live.remove({ kind: "guide-table-row", cardId, blockId: block.id, rowId: row.id }, row.key)}</dd>
+    </div>)}</dl>{live.addBar({ kind: "guide-table", cardId, blockId: block.id })}</div>;
+    return <div className="guide-table"><dl className="info-ledger info-classification">{block.rows.filter((row) => row.key || row.value).map((row) => <div key={row.id}><dt>{row.key}</dt><dd>{row.value}</dd></div>)}</dl></div>;
+  }
+  if (block.type === "photo") return block.url || live ? <GuidePhoto block={block} cardId={cardId} /> : null;
+  if (block.type === "video") return live ? <>{live.video({ kind: "guide-video-url", cardId, blockId: block.id }, block.videoId)}{block.videoId ? <YoutubeFigure videoId={block.videoId} title={cardTitle || "Без названия"} /> : null}</> : block.videoId ? <YoutubeFigure videoId={block.videoId} title={cardTitle || "Без названия"} /> : null;
   return <aside className="guide-callout">
-    {block.label.trim() && <span className="guide-callout-label">{block.label}</span>}
-    <FormattedText className="info-document-copy" text={block.text} document={formattedText[portiaTextKey.guideBlock(block.id)]} />
+    {live ? <span className="guide-callout-label">{live.text({ kind: "guide-callout-label", cardId, blockId: block.id }, block.label)}</span> : block.label.trim() && <span className="guide-callout-label">{block.label}</span>}
+    {live ? live.rich(richKey, { text: block.text, document: formattedText[portiaTextKey.guideBlock(block.id)], className: "info-document-copy" }) : <FormattedText className="info-document-copy" text={block.text} document={formattedText[portiaTextKey.guideBlock(block.id)]} />}
   </aside>;
 }
 
 // A page photo is full width, not a link and has no zoom; a failed image is said so in words by the placeholder, never a broken icon (A11Y-03).
 // Owner 2026-11-18: a photo without a chosen position stands on the left (it used to centre itself), and its height is capped in the style sheet (min(45svh, 400px), owner 2026-11-20), so a maximized
 // window no longer blows it up. A block framed in «Видимая часть» shows exactly that frame; an older block keeps its height and focus numbers.
-function GuidePhoto({ block }: { block: Extract<GuideBlock, { type: "photo" }> }) {
+function GuidePhoto({ block, cardId }: { block: Extract<GuideBlock, { type: "photo" }>; cardId: string }) {
+  const live = useLiveEdit("guide");
   const alignment = block.align ?? "left";
   const framed = !!block.framing;
+  const picture = framed ? <PortiaImage src={block.url} alt={block.caption} recordId={block.id} priority="lazy" icon="guide" framing={block.framing} />
+    : <PortiaImage src={block.url} alt={block.caption} recordId={block.id} priority="lazy" icon="guide" style={{ height: block.height ? `${block.height}px` : undefined, objectFit: block.height ? "cover" : "contain", objectPosition: `${block.focusX ?? 50}% ${block.focusY ?? 50}%` }} />;
   return <figure className={`info-block-photo guide-photo guide-photo-${alignment}${framed ? " is-framed" : ""}`} style={{ width: `${block.width ?? 100}%`, ...(block.framing?.ratio ? { maxWidth: `min(100%, calc(min(45svh, 400px) * ${block.framing.ratio / 1000}))` } : {}) }}>
-    {framed ? <PortiaImage src={block.url} alt={block.caption} recordId={block.id} priority="lazy" icon="guide" framing={block.framing} />
-      : <PortiaImage src={block.url} alt={block.caption} recordId={block.id} priority="lazy" icon="guide" style={{ height: block.height ? `${block.height}px` : undefined, objectFit: block.height ? "cover" : "contain", objectPosition: `${block.focusX ?? 50}% ${block.focusY ?? 50}%` }} />}
-    {block.caption.trim() && <figcaption>{block.caption}</figcaption>}
+    {live ? live.image({ kind: "guide-photo-url", cardId, blockId: block.id }, { value: block.url, framing: block.framing, children: block.url ? picture : null }) : picture}
+    {live ? <figcaption>{live.text({ kind: "guide-photo-caption", cardId, blockId: block.id }, block.caption)}</figcaption> : block.caption.trim() && <figcaption>{block.caption}</figcaption>}
   </figure>;
 }
 

@@ -73,14 +73,68 @@ test("LIVE-04: only the editor seam provides the context; the desktop never does
   }
 });
 
-test("LIVE-04: GuideApp asks for the live API and draws every live place under it", () => {
+test("LIVE-04: GuideApp asks for the live API and every live class stands in a branch of live, so a visitor's page carries none", () => {
   const guide = read("components/portia-desktop-documents.tsx");
   assert.match(guide, /useLiveEdit\("guide"\)/);
-  // Every use of the live API or a live-* class stands in a branch of live (?, &&, ?.) so a visitor's page carries none.
-  for (const line of guide.split("\n")) {
-    if (!/live-[a-z]|live\.[a-zA-Z]+\(/.test(line)) continue;
-    assert.match(line, /live( \?|\s*&&|\.\w+\(|\)? \?|\?\.)|\blive\b/, `a live place outside a live branch: ${line.trim().slice(0, 100)}`);
+  const lines = guide.split("\n");
+  const classed = lines.flatMap((line, index) => (/["`]live-[a-z]/.test(line) ? [{ line, before: lines.slice(Math.max(0, index - 4), index).join(" ") }] : []));
+  assert.equal(classed.length, 4, "the live classes of GuideApp: block row, fold button, section tools, tile row");
+  for (const { line, before } of classed) {
+    // The compiler already keeps `live.x(` out of a visitor's render (live may be null); a bare class needs its guard on the line or within the four above.
+    assert.ok(/\blive\.\w+|\blive &&|\blive \?/.test(line) || /\{live \?/.test(before), `a live class outside a live branch: ${line.trim().slice(0, 100)}`);
   }
+  // Without a provider GuideApp draws the old markup: the section head is the old button, the tile the old button, the block the bare view.
+  assert.match(guide, /<\/div> : <button type="button" className=\{`guide-section-head/);
+  assert.match(guide, /if \(!live\) return view;/);
+  assert.match(guide, /return live \? <div className="live-tile"[^\n]*: tile;/);
+});
+
+test("LIVE-02: GuideApp offers the bar in its four places and the order, remove and text places of its rows", () => {
+  const guide = read("components/portia-desktop-documents.tsx");
+  for (const container of ["guide-root", "guide-section", "guide-card", "guide-table"]) assert.ok(guide.includes(`live.addBar({ kind: "${container}"`), container);
+  for (const list of ["guide-sections", "guide-cards", "guide-blocks"]) assert.ok(guide.includes(`live.order({ kind: "${list}"`), list);
+  for (const item of ["guide-section", "guide-card", "guide-block", "guide-table-row"]) assert.ok(guide.includes(`live.remove({ kind: "${item}"`), item);
+  for (const target of ["guide-section-title", "guide-card-title", "guide-heading", "guide-callout-label", "guide-photo-caption", "guide-table-key", "guide-table-value"]) assert.ok(guide.includes(`kind: "${target}"`), target);
+  for (const call of ["live.rich(", "live.video(", "live.cards(", "live.image("]) assert.ok(guide.includes(call), call);
+  assert.ok(read("app/portia.css").includes(".live-add-bar"));
+});
+
+test("LIVE-05: the live text at rest is the visitor's FormattedText with its GIFs, pressed it is the editor's field with the strip of the same GIFs", () => {
+  const seam = read("components/portia-editor-live.tsx");
+  assert.doesNotMatch(seam, /embedMedia=\{false\}/, "a link to a GIF is never turned back into text");
+  assert.match(seam, /<FormattedText\b/);
+  assert.match(seam, /<EmbeddedMediaStrip\b/);
+  assert.match(seam, /<FormattedTextarea\b[\s\S]*area="info"/);
+  assert.match(seam, /portiaTextKey\.guideBlock\(blockId\)/);
+  assert.match(seam, /onActivate=\{bridge\.activateFormatter\}/);
+  const card = read("components/portia-virus-card.tsx");
+  const strip = card.slice(card.indexOf("export function EmbeddedMediaStrip"), card.indexOf("export function DossierSection"));
+  assert.match(strip, /<EmbeddedImage\b/);
+  assert.doesNotMatch(strip, /<FormattedText|embedMedia/);
+  // Covers, section photos and photo blocks are the visitor's PortiaImage; the seam adds only the way to change them and draws no still frame, canvas or poster.
+  const guide = read("components/portia-desktop-documents.tsx");
+  assert.match(guide, /children: block\.url \? picture : null/);
+  assert.doesNotMatch(seam, /<canvas|poster=|<PortiaImage/);
+});
+
+test("LIVE-02: the seam makes rows with the held order and a confirmed remove, and closes the format panel for what is removed", () => {
+  const seam = read("components/portia-editor-live.tsx");
+  assert.match(seam, /rowProps: \{ "data-sort-index": index \}/);
+  assert.match(seam, /<OrderDragHandle\b/);
+  assert.match(seam, /<ConfirmDialog\b/);
+  assert.match(seam, /bridge\.closeFormatterFor\(\.\.\.liveRemovedKeys\(/);
+  assert.match(seam, /applyLiveMove\(next, list, from, to\)/);
+  for (const call of ["applyLiveAdd(", "applyLiveRemove(", "applyLiveImage(", "applyLiveFraming(", "applyLiveCards("]) assert.ok(seam.includes(call), call);
+});
+
+test("LIVE-03: leaving the live mode keeps the draft: the toggle holds no content and the surface draws the editor's draft", () => {
+  const seam = read("components/portia-editor-live.tsx");
+  assert.match(seam, /sections=\{bridge\.draft\.guideSections\} formattedText=\{bridge\.draft\.formattedText\}/);
+  const mode = seam.slice(seam.indexOf("export function useLiveMode"), seam.indexOf("export function LiveModeToggle"));
+  assert.doesNotMatch(mode, /changeDraft|draft/);
+  const editor = read("components/portia-editor.tsx");
+  assert.match(editor, /const live = useLiveMode\(tab,/);
+  assert.match(editor, /\{live\.on \? <LiveSurface tab=\{tab\} bridge=\{\{/);
 });
 
 test("LIVE-03: the seam keeps no content state of its own: every change goes through the editor bridge", () => {

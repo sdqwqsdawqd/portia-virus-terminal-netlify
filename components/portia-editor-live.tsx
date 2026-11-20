@@ -56,11 +56,12 @@ export const liveCopy = {
   lists: { "guide-sections": "раздел", "guide-cards": "карточка", "guide-blocks": "блок" } satisfies Record<LiveList["kind"], string>,
   removeLabel: "Удалить",
   removeTitle: "Удалить?",
-  removeText: (title: string) => `«${title}» будет удалено вместе с содержимым.`,
+  removeText: (label: string) => `Удалить вместе с содержимым: ${label}.`,
   removeConfirm: "УДАЛИТЬ",
   removeCancel: "ОТМЕНА",
   removeNames: { "guide-section": "раздел", "guide-card": "карточку", "guide-block": "блок", "guide-table-row": "строку" } satisfies Record<LiveRemovable["kind"], string>,
   imageAdd: "Добавить фото",
+  sectionPhoto: "Фото раздела",
   imageReplace: "Заменить",
   imageRemove: "Убрать фото",
   imageHint: "Видимая часть настраивается ниже",
@@ -258,7 +259,7 @@ export function LiveImage({ bridge, target, value, framing, children, label, fie
   const [open, setOpen] = useState(false);
   const write = (url: string) => bridge.changeDraft((next) => { applyLiveImage(next, target, url); });
   const tools = <div className={`live-tools live-image-tools${compact ? " is-compact" : ""}`}>
-    <button type="button" className="secondary-control live-button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>{label ?? (value ? liveCopy.imageReplace : liveCopy.imageAdd)}</button>
+    <button type="button" className="secondary-control live-button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>{label ?? (target.kind === "guide-section-photo" ? liveCopy.sectionPhoto : value ? liveCopy.imageReplace : liveCopy.imageAdd)}</button>
     {open && <LivePopover onClose={() => setOpen(false)}>
       <ImageEditorField
         label={fieldLabel ?? (value ? liveCopy.imageReplace : liveCopy.imageAdd)}
@@ -334,9 +335,9 @@ export function LiveAddBar({ bridge, container }: { bridge: LiveEditorBridge; co
 /** The small remove button; the question comes first, and the formatting panel lets go of what is removed. */
 export function LiveRemove({ bridge, item, title }: { bridge: LiveEditorBridge; item: LiveRemovable; title: string }) {
   const [asked, setAsked] = useState(false);
-  const name = title || liveCopy.untitled;
+  const name = title ? `${liveCopy.removeNames[item.kind]} «${title}»` : liveCopy.removeNames[item.kind];
   return <span className="live-tools live-remove-wrap">
-    <button type="button" className="live-remove" aria-label={`${liveCopy.removeLabel}: ${liveCopy.removeNames[item.kind]} «${name}»`} onClick={() => setAsked(true)}><span aria-hidden="true">×</span></button>
+    <button type="button" className="live-remove" aria-label={`${liveCopy.removeLabel}: ${name}`} onClick={() => setAsked(true)}><span aria-hidden="true">×</span></button>
     {asked && <ConfirmDialog
       title={liveCopy.removeTitle}
       text={liveCopy.removeText(name)}
