@@ -11,6 +11,7 @@ import type { ImageFraming } from "@/lib/image-framing";
 import { isLocalMediaPath } from "@/lib/media-url";
 import { MAX_SCIENTIST_LOGS } from "@/lib/content-limits";
 import { passesTarget, type Box } from "@/lib/sort-order";
+import { HOLD_MS, holdStep, holdTargetAllowed, idleHold, type HoldState, type HoldTarget } from "@/lib/hold-gesture";
 import { classificationIconFor, PortiaIcon } from "@/components/portia-icons";
 import { TRANSMISSION_CHOICES, formatTransmissionRoutes, parseTransmissionRoutes, toggleTransmissionRoute } from "@/lib/transmission-routes";
 
@@ -37,6 +38,34 @@ function mediaUrlFromText(value: string) {
 // A card moved to another section remounts its handle, and the new handle takes the drag over so one drag stays one gesture and one undo step.
 let dragHandoff: { itemId: string; dragId: string; x: number; y: number } | null = null;
 
+// After a lifted element is let go the browser still fires the click of the press: it is swallowed once, so a held tab or card head does not also open or fold.
+function swallowNextClick() {
+  const swallow = (event: Event) => { event.stopPropagation(); event.preventDefault(); done(); };
+  const timer = window.setTimeout(() => done(), 100);
+  function done() {
+    window.clearTimeout(timer);
+    window.removeEventListener("click", swallow, { capture: true });
+  }
+  window.addEventListener("click", swallow, { capture: true });
+}
+
+// What was pressed, as the hold model wants to know it: a field, a link, text being edited, an action button or a nested row never starts a hold.
+function holdTargetOf(target: EventTarget | null, row: HTMLElement): HoldTarget {
+  const element = target instanceof Element ? target : null;
+  if (!element) return { tag: "", editable: false, insideActions: false, nestedRow: false };
+  const nested = element.closest("[data-sort-index]");
+  return {
+    tag: element.closest("input, textarea, select, a")?.tagName ?? element.tagName,
+    editable: element instanceof HTMLElement && element.isContentEditable,
+    insideActions: element.closest(".nested-editor-actions, .info-table-row > button") !== null,
+    nestedRow: nested !== null && nested !== row,
+  };
+}
+
+// owner 2026-11-20 (OWN-09): the row itself is held to drag; the button is the keyboard and screen reader way.
+// The button is invisible until the keyboard focuses it. The press is heard on the zone of the row (a card's head, otherwise the whole row);
+// after HOLD_MS without a drift the row is lifted (data-lifted) and follows the pointer as before. The button still carries data-dragging and
+// data-drag-id for the whole drag, so editKeyFor folds one drag into one undo step.
 export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: { index: number; onMove: (from: number, to: number) => void; label: string; itemId?: string; onMoveAcross?: (groupId: string, toIndex: number) => void }) {
   const button = useRef<HTMLButtonElement>(null);
   const indexRef = useRef(index);
@@ -47,6 +76,10 @@ export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: 
   const frame = useRef<number | null>(null);
   const pointer = useRef({ x: 0, y: 0 });
   const active = useRef(false);
+  const hold = useRef<HoldState>(idleHold);
+  const press = useRef<{ zone: HTMLElement; row: HTMLElement; pointerId: number } | null>(null);
+  const captured = useRef<{ zone: HTMLElement; pointerId: number } | null>(null);
+  const endLift = useRef<(() => void) | null>(null);
   useEffect(() => { indexRef.current = index; onMoveRef.current = onMove; onMoveAcrossRef.current = onMoveAcross; itemIdRef.current = itemId; });
   const placed = useRef<{ index: number; left: number; top: number } | null>(null);
   // Per-handle FLIP: every row whose index changed slides itself (along both axes, rows can sit in columns), so the dragged row and its displaced neighbours all animate.
@@ -64,17 +97,56 @@ export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: 
     row.animate([{ transform: `translate(${previous.left - left}px, ${previous.top - top}px)` }, { transform: "none" }], { duration: 160, easing });
   });
 
-  const stop = (event?: React.PointerEvent<HTMLButtonElement>) => {
+  const stop = () => {
     if (holdTimer.current !== null) window.clearTimeout(holdTimer.current);
     if (frame.current !== null) cancelAnimationFrame(frame.current);
     holdTimer.current = null;
     frame.current = null;
     active.current = false;
+    hold.current = idleHold;
+    press.current = null;
     if (button.current) {
       delete button.current.dataset.dragging;
       delete button.current.dataset.dragId;
+      const row = button.current.closest<HTMLElement>("[data-sort-index]");
+      if (row) delete row.dataset.lifted;
     }
-    if (event?.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    endLift.current?.();
+    endLift.current = null;
+    const held = captured.current;
+    captured.current = null;
+    if (held?.zone.hasPointerCapture(held.pointerId)) held.zone.releasePointerCapture(held.pointerId);
+  };
+  // The element is up: marked lifted, the page neither scrolls nor selects text under the finger, and the list follows the pointer.
+  const beginLift = (row: HTMLElement | null, dragId: string) => {
+    active.current = true;
+    if (row) row.dataset.lifted = "true";
+    if (button.current) {
+      button.current.dataset.dragging = "true";
+      button.current.dataset.dragId = dragId;
+    }
+    const refuse = (event: Event) => { if (event.cancelable) event.preventDefault(); };
+    window.getSelection()?.removeAllRanges();
+    window.addEventListener("touchmove", refuse, { passive: false });
+    document.addEventListener("selectstart", refuse);
+    document.addEventListener("dragstart", refuse);
+    document.addEventListener("contextmenu", refuse);
+    endLift.current = () => {
+      window.removeEventListener("touchmove", refuse);
+      document.removeEventListener("selectstart", refuse);
+      document.removeEventListener("dragstart", refuse);
+      document.removeEventListener("contextmenu", refuse);
+    };
+    frame.current = requestAnimationFrame(autoscroll);
+  };
+  const liftPressed = () => {
+    const pressed = press.current;
+    if (!pressed || active.current) return;
+    beginLift(pressed.row, makeId("drag"));
+    try {
+      pressed.zone.setPointerCapture(pressed.pointerId);
+      captured.current = { zone: pressed.zone, pointerId: pressed.pointerId };
+    } catch {}
   };
   // Only lists of the same data-sort-group kind take a card (a card never becomes a block or a section, D-11); the new place is the row, the empty hint or the section head under the pointer.
   const moveAcross = (own: HTMLElement | null | undefined, hits: Element[], x: number, y: number) => {
@@ -150,27 +222,53 @@ export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: 
   // window focus, and on a release anywhere: once pointer capture is lost the handle may never see its pointerup.
   // Tracking lives on window too, because a downward swap re-inserts the dragged row and drops pointer capture (03-REVIEW IN-05).
   useEffect(() => {
+    const row = button.current?.closest<HTMLElement>("[data-sort-index]") ?? null;
+    const zone = row?.querySelector<HTMLElement>(":scope > .nested-editor-head") ?? row;
+    if (!row || !zone) return;
+    const onPress = (event: PointerEvent) => {
+      // A second finger or a right-click must not start a hold or orphan the first one's timer and frame loop.
+      if (!event.isPrimary || event.button !== 0 || !holdTargetAllowed(holdTargetOf(event.target, row))) return;
+      stop();
+      pointer.current = { x: event.clientX, y: event.clientY };
+      press.current = { zone, row, pointerId: event.pointerId };
+      hold.current = holdStep(idleHold, { type: "down", x: event.clientX, y: event.clientY, at: event.timeStamp });
+      holdTimer.current = window.setTimeout(() => {
+        hold.current = holdStep(hold.current, { type: "tick", at: hold.current.at + HOLD_MS });
+        if (hold.current.phase === "lifted") liftPressed();
+      }, HOLD_MS);
+    };
     const onBlur = () => { dragHandoff = null; stop(); };
-    const onRelease = (event: PointerEvent) => { if (event.isPrimary) { dragHandoff = null; stop(); } };
+    const onRelease = (event: PointerEvent) => {
+      if (!event.isPrimary) return;
+      dragHandoff = null;
+      if (holdStep(hold.current, { type: event.type === "pointercancel" ? "cancel" : "up" }).suppressClick) swallowNextClick();
+      stop();
+    };
     const onTrack = (event: PointerEvent) => {
       if (!event.isPrimary || holdTimer.current === null) return;
       pointer.current = { x: event.clientX, y: event.clientY };
+      if (hold.current.phase === "pressing") {
+        hold.current = holdStep(hold.current, { type: "move", x: event.clientX, y: event.clientY, at: event.timeStamp });
+        // Drifted too far before the time was up: it was a scroll or a swipe, not a hold.
+        if (hold.current.phase === "cancelled") { stop(); return; }
+        if (hold.current.phase === "lifted") liftPressed();
+      }
       if (active.current) moveTo(event.clientX, event.clientY);
     };
     // Not cleared here: Strict Mode runs this effect twice; a release or blur clears it.
     if (dragHandoff && dragHandoff.itemId === itemIdRef.current && button.current) {
       holdTimer.current = 0;
-      active.current = true;
+      hold.current = { phase: "lifted", x: dragHandoff.x, y: dragHandoff.y, at: 0, suppressClick: false };
       pointer.current = { x: dragHandoff.x, y: dragHandoff.y };
-      button.current.dataset.dragging = "true";
-      button.current.dataset.dragId = dragHandoff.dragId;
-      frame.current = requestAnimationFrame(autoscroll);
+      beginLift(row, dragHandoff.dragId);
     }
+    zone.addEventListener("pointerdown", onPress);
     window.addEventListener("blur", onBlur);
     window.addEventListener("pointermove", onTrack);
     window.addEventListener("pointerup", onRelease);
     window.addEventListener("pointercancel", onRelease);
     return () => {
+      zone.removeEventListener("pointerdown", onPress);
       window.removeEventListener("blur", onBlur);
       window.removeEventListener("pointermove", onTrack);
       window.removeEventListener("pointerup", onRelease);
@@ -185,22 +283,6 @@ export function OrderDragHandle({ index, onMove, label, itemId, onMoveAcross }: 
     type="button"
     aria-label={`Изменить порядок: ${label}`}
     aria-keyshortcuts="ArrowUp ArrowDown"
-    onPointerDown={(event) => {
-      // A second finger or a right-click must not start a drag or orphan the first one's timer and frame loop.
-      if (!event.isPrimary || event.button !== 0) return;
-      stop();
-      const target = event.currentTarget;
-      pointer.current = { x: event.clientX, y: event.clientY };
-      target.setPointerCapture(event.pointerId);
-      holdTimer.current = window.setTimeout(() => {
-        active.current = true;
-        target.dataset.dragging = "true";
-        target.dataset.dragId = makeId("drag");
-        frame.current = requestAnimationFrame(autoscroll);
-      }, 170);
-    }}
-    onPointerUp={stop}
-    onPointerCancel={stop}
     onKeyDown={(event) => {
       const step = event.key === "ArrowUp" ? -1 : event.key === "ArrowDown" ? 1 : 0;
       if (!step) return;

@@ -11,6 +11,8 @@ const shell = shellPart?.text ?? "";
 const editor = family[0].text;
 // 26.1-02 (OWN-07): «Сотрудники» moved out of the editor file into its own seam (D-21).
 const employeesSeam = family.find((part) => part.file === "portia-editor-employees.tsx")?.text ?? "";
+// 26.1-08 (OWN-09): the order button and the hold gesture live in the dossier seam.
+const dossierSeam = family.find((part) => part.file === "portia-editor-dossier.tsx")?.text ?? "";
 const styles = lf(readFileSync(new URL("../app/portia.css", import.meta.url), "utf8"));
 const PHONE = "max-width: 900px";
 
@@ -322,11 +324,16 @@ test("UAT 2026-11-16 gap 5: every section tab carries the drag handle of the sub
   assert.ok(tabs.includes("<nav aria-label={label} ref={navRef}>"), "the nav keeps its ref and the scroll effect");
   assert.equal(declared(".editor-section-tabs nav > .editor-section-tab", "display"), "inline-flex");
   assert.equal(declared(".editor-section-tabs nav > .editor-section-tab", "flex"), "none");
-  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "width"), "24px");
-  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "min-width"), "24px");
+  // owner 2026-11-20 (OWN-09): the 24px / tap-target handle is gone; the button of a tab is invisible until the keyboard focuses it.
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "position"), "absolute", "out of the tab's layout");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "width"), "1px");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "height"), "1px");
   assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "padding"), "0");
-  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "width", PHONE), "var(--tap-target)");
-  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "min-width", PHONE), "var(--tap-target)");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "min-height"), "0", "the tab button rules (36/40px, tap target) do not size it");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "clip-path"), "inset(50%)");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "width", PHONE), "1px", "no phone size (tap target) for a button nobody sees");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle:focus-visible", "clip-path"), "none", "keyboard focus shows it");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle:focus-visible", "width"), "24px");
   assert.doesNotMatch(styles, /editor-section-tab-order/, "the dead arrow group has no rule left");
 });
 
@@ -749,4 +756,70 @@ test("D-12: «Пользователи» styles — the bar lies on the top edge
   assert.equal(declared(".users-pick-row", "width"), "100%", "the row button fills its row");
   assert.equal(declared('.users-row:has(> .users-pick-row[aria-current="true"])', "background"), "var(--teal-soft)");
   assert.equal(declared('.users-row:has(> .users-pick-row[aria-current="true"])', "border-color"), "var(--teal-dim)");
+});
+
+// ---- 26.1-08 (OWN-09): hold to drag, no drawn handle ----
+
+const dossierCode = stripComments(dossierSeam);
+const handleSource = (() => {
+  const start = dossierCode.indexOf("let dragHandoff");
+  const end = dossierCode.indexOf("export function ArchivedVirusEditor(");
+  assert.ok(start >= 0 && end > start, "OrderDragHandle is found in the dossier seam");
+  return dossierCode.slice(start, end);
+})();
+
+test("OWN-09: the row itself is held to drag: the hold model, the zone of the row, a lifted marker, no timer of 170 ms on the button", () => {
+  assert.match(dossierSeam, /import \{[^}]*\bHOLD_MS\b[^}]*\bholdStep\b[^}]*\} from "@\/lib\/hold-gesture"/, "the seam uses the pure model");
+  assert.ok(handleSource.includes("holdStep("), "the gesture advances through holdStep");
+  assert.ok(handleSource.includes("holdTargetAllowed("), "a field, a link or an action button never starts a hold");
+  assert.ok(handleSource.includes('closest<HTMLElement>("[data-sort-index]")'), "the row is the element that is held");
+  assert.ok(handleSource.includes('querySelector<HTMLElement>(":scope > .nested-editor-head")'), "a card is held by its head");
+  assert.ok(handleSource.includes('zone.addEventListener("pointerdown"'), "the press is listened to on the zone of the row");
+  assert.ok(!/onPointerDown/.test(handleSource), "the button no longer starts the gesture");
+  assert.ok(!handleSource.includes(", 170)"), "the 170 ms wait on the handle is replaced by HOLD_MS");
+  assert.ok(handleSource.includes("HOLD_MS"), "the wait is HOLD_MS");
+  assert.ok(handleSource.includes('row.dataset.lifted = "true"') && handleSource.includes("delete row.dataset.lifted"), "the row is marked lifted while it is dragged");
+  assert.ok(handleSource.includes('button.current.dataset.dragging = "true"') && handleSource.includes("dataset.dragId"), "one drag is still one undo step: the button carries data-dragging and data-drag-id (editKeyFor)");
+});
+
+test("OWN-09: the click after a drag is swallowed once, the page does not scroll or select while the element is lifted", () => {
+  assert.ok(/addEventListener\("click", [a-zA-Z]+, \{ capture: true \}\)/.test(handleSource), "a one-shot click listener in the capture phase");
+  assert.ok(handleSource.includes("suppressClick"), "the model says when the click is swallowed");
+  assert.ok(handleSource.includes('"touchmove"') && handleSource.includes("passive: false"), "a non-passive touchmove stops the page scroll once lifted");
+  assert.ok(handleSource.includes('"selectstart"'), "no text selection while dragging");
+});
+
+test("OWN-09: the order button stays for the keyboard: label, arrows, the ≡ only inside the plaque", () => {
+  assert.ok(handleSource.includes("aria-label={`Изменить порядок: ${label}`}"));
+  assert.ok(handleSource.includes('className="order-drag-handle"'));
+  assert.ok(handleSource.includes('aria-keyshortcuts="ArrowUp ArrowDown"') || handleSource.includes('aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"'));
+  assert.ok(!handleSource.includes("title="), "no tooltip (D-18)");
+  assert.ok(dossierSeam.includes("owner 2026-11-20 (OWN-09): the row itself is held to drag; the button is the keyboard and screen reader way"), "the seam says why");
+});
+
+test("OWN-09: the handle is invisible, the lifted element is visible", () => {
+  assert.equal(declared("button.order-drag-handle", "position"), "absolute");
+  assert.equal(declared("button.order-drag-handle", "width"), "1px");
+  assert.equal(declared("button.order-drag-handle", "height"), "1px");
+  assert.equal(declared("button.order-drag-handle", "overflow"), "hidden");
+  assert.equal(declared("button.order-drag-handle", "clip-path"), "inset(50%)");
+  assert.equal(declared(".order-drag-handle:focus-visible", "clip-path"), "none", "a plaque when the keyboard is on it");
+  assert.equal(declared(".order-drag-handle:focus-visible", "width"), "24px");
+  assert.equal(declared(".order-drag-handle:focus-visible", "height"), "24px");
+  const lifted = '[data-sort-index][data-lifted="true"]';
+  assert.equal(declared(lifted, "z-index"), "5");
+  assert.equal(declared(lifted, "cursor"), "grabbing");
+  assert.match(declared(lifted, "box-shadow") ?? "", /^0 10px 24px/, "the shadow is always there");
+  assert.equal(declared(lifted, "translate"), undefined, "the rise is not in the plain rule: reduced and off keep only the shadow");
+  assert.equal(declared(`html[data-motion="full"] ${lifted}`, "translate"), "0 -2px");
+  assert.equal(declared(`html[data-motion="full"] ${lifted}`, "scale"), "1.015");
+  assert.equal(declared(lifted, "user-select"), "none");
+});
+
+test("OWN-09: the grids that kept a column for the handle give it up", () => {
+  assert.equal(declared(".editor-record-row", "grid-template-columns"), "minmax(0, 1fr)");
+  assert.equal(declared(".info-table-row", "grid-template-columns"), "minmax(0, 1fr) minmax(0, 1fr) auto");
+  assert.equal(declared(".info-table-head", "grid-template-columns"), "minmax(0, 1fr) minmax(0, 1fr) auto");
+  assert.equal(declared(".info-table-row", "grid-template-columns", PHONE), "minmax(0, 1fr)");
+  assert.equal(declared(".recommendation-order-row", "grid-template-columns", PHONE), "minmax(0, 1fr)");
 });
