@@ -36,3 +36,28 @@ export function parsePanelOffset(raw: string | null): PanelOffset | null {
     return null;
   }
 }
+
+/** A saved place, plus the size the user gave the panel by its corner (OWN-05). Size is optional: a panel never resized has none. */
+export type PanelPlacement = PanelOffset & { width?: number; height?: number };
+
+/** The panel never gets smaller than this (its controls stop fitting) nor larger than the screen minus a 16px margin. */
+export const minPanelSize = { width: 320, height: 220 };
+const screenMargin = 16;
+
+/** Keeps a saved or dragged size between the minimum and the screen minus 16px; on a screen smaller than the minimum the minimum wins. */
+export function clampPanelSize(size: Bounds, viewport: Bounds): Bounds {
+  const fit = (value: number, min: number, max: number) => Math.round(Math.min(Math.max(min, value), Math.max(min, max)));
+  return {
+    width: fit(size.width, minPanelSize.width, viewport.width - screenMargin),
+    height: fit(size.height, minPanelSize.height, viewport.height - screenMargin),
+  };
+}
+
+/** Reads a saved place with its optional size. A place needs two finite numbers; a size needs two finite positive ones, else it is dropped and the place stays. */
+export function parsePanelPlacement(raw: string | null): PanelPlacement | null {
+  const place = parsePanelOffset(raw);
+  if (!place) return null;
+  const { width, height } = JSON.parse(raw as string) as Record<string, unknown>;
+  const valid = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
+  return valid(width) && valid(height) ? { ...place, width, height } : place;
+}
