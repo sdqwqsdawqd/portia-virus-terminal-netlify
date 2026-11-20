@@ -39,7 +39,7 @@ const pictures: { name: string; image: Size }[] = [
 const aspectsOf = (image: Size) => [
   { name: "band PC", aspect: 754 / 63 },
   { name: "band phone", aspect: 362 / 63 },
-  { name: "tile", aspect: 4 / 3 },
+  { name: "tile", aspect: 16 / 10 },
   { name: "natural", aspect: image.width / image.height },
 ];
 const positions = [0, 20, 50, 80, 100];
@@ -207,9 +207,9 @@ test("D-67 results never leave imageFramingLimits and are whole numbers", () => 
   assert.equal(framingFromDrag({ x: 33, y: 66, zoom: 175 }, { dx: Number.NaN, dy: 5 }, layout).x, 33, "a pointer without a distance moves nothing");
 });
 
-test("D-67 frameAspectFor: tile 4:3, natural by the picture, band by the «Справочник» window of the device (PC 754:63 at 1440, phone 362:63 at 412)", () => {
+test("D-67 frameAspectFor: tile 16:10 (owner 2026-11-20), natural by the picture, band by the «Справочник» window of the device (PC 754:63 at 1440, phone 362:63 at 412)", () => {
   const image = { width: 1536, height: 1024 };
-  near(frameAspectFor("tile", { image, viewportWidth: 1440 }), 4 / 3, 1e-12, "tile");
+  near(frameAspectFor("tile", { image, viewportWidth: 1440 }), 1.6, 1e-12, "tile");
   near(frameAspectFor("natural", { image, viewportWidth: 1440 }), 1.5, 1e-12, "natural");
   assert.equal(frameAspectFor("natural", { image: undefined, viewportWidth: 1440 }), 4 / 3, "a picture not loaded yet: the 4:3 of the skeleton");
   near(frameAspectFor("band", { image, viewportWidth: 1440 }), 754 / 63, 1e-9, "band on PC");
@@ -232,7 +232,7 @@ test("D-67 guard: the band constants come from the sources (window «Справ�
   assert.match(css, /\.guide-section-head\.has-photo \{[^}]*min-height: 64px/, "the strip is 64 px high");
   assert.match(css, /\.guide-section-head \{[^}]*border-bottom: 1px solid/, "with a 1 px border under it, which the band (inset 0, padding box) does not cover");
   assert.match(css, /\.guide-section-band \{[^}]*inset: 0/, "the band fills the padding box of the strip");
-  assert.match(css, /\.guide-tile-cover \{[^}]*aspect-ratio: 4 \/ 3/, "the cover is 4:3");
+  assert.match(css, /\.guide-tile-cover \{[^}]*aspect-ratio: 16 \/ 10/, "the cover is 16:10 (owner 2026-11-20), the same as tileAspect");
   assert.equal(bandFrameHeight, 64 - 1);
   assert.deepEqual(defaultImageFraming, { x: 50, y: 50, zoom: 100 });
 });

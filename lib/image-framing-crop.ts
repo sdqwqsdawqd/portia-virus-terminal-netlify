@@ -11,7 +11,7 @@ export type Size = { width: number; height: number };
 export type Rect = { x: number; y: number; width: number; height: number };
 /** The part of the picture inside the frame, in fractions of the whole picture (0..1). */
 export type VisibleWindow = { left: number; top: number; width: number; height: number };
-/** The kind of place a picture is shown in (ImageFramingBox of the component): a band across a «Справочник» section, a 4:3 cover, or the picture as it lies. */
+/** The kind of place a picture is shown in (ImageFramingBox of the component): a band across a «Справочник» section, a 16:10 cover (owner 2026-11-20; was 4:3), or the picture as it lies. */
 export type FrameKind = "natural" | "band" | "tile" | "free";
 /** The share of the picture, per axis, that the frame sees at 100%. */
 export type Cover = { fw: number; fh: number };
@@ -39,7 +39,8 @@ const windowBandInset = 66;
 const phoneBandInset = 50;
 const phoneMaxWidth = 900;
 export const bandFrameHeight = 63;
-const tileAspect = 4 / 3;
+const tileAspect = 16 / 10; // owner 2026-11-20: the card cover is 16:10, the same as .guide-tile-cover
+const skeletonAspect = 4 / 3; // a natural picture not loaded yet
 
 const epsilon = 1e-6;
 const finite = (value: number, fallback: number) => (Number.isFinite(value) ? value : fallback);
@@ -54,13 +55,13 @@ export function bandFrameWidth(viewportWidth: number): number {
   return Math.min(guideWindowWidth, viewportWidth - workAreaMargin) - windowBandInset;
 }
 
-/** The proportions (width / height) of the place the picture of this kind is shown in. A natural picture not loaded yet gets the 4:3 of its skeleton. */
+/** The proportions (width / height) of the place the picture of this kind is shown in. A natural picture not loaded yet gets the 4:3 of its skeleton (skeletonAspect). */
 export function frameAspectFor(box: FrameKind, { image, viewportWidth, ratio }: { image: Size | undefined; viewportWidth: number; ratio?: number }): number {
   if (box === "tile") return tileAspect;
   // A free frame (owner 2026-11-18) has the proportions it was dragged to; before that, the picture's own.
   if (box === "free" && ratio && Number.isFinite(ratio) && ratio > 0) return ratio / 1000;
   if (box === "band") return bandFrameWidth(viewportWidth) / bandFrameHeight;
-  return image && image.width > 0 && image.height > 0 ? image.width / image.height : tileAspect;
+  return image && image.width > 0 && image.height > 0 ? image.width / image.height : skeletonAspect;
 }
 
 /** The share of the picture that a frame of the given proportions sees when the picture covers it (zoom 100%). */

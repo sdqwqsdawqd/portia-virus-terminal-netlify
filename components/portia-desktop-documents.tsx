@@ -173,7 +173,7 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
     onOpenCard(cardId);
   };
 
-  // Owner 2026-11-18 (round 3): no sections column, also in a maximized window; the sections, compact tiles and the 820px card fill the window.
+  // Owner 2026-11-18 (round 3): no sections column, also in a maximized window. Owner 2026-11-20: the open card and the nested cards fill the window.
   return <div className="guide-app" ref={scroller} tabIndex={-1}>
     {banner}
     {found && card ? <>
@@ -246,12 +246,12 @@ function GuideBlockView({ block, formattedText, cardTitle, sections, onOpenCard 
 }
 
 // A page photo is full width, not a link and has no zoom; a failed image is said so in words by the placeholder, never a broken icon (A11Y-03).
-// Owner 2026-11-18: a photo without a chosen position stands on the left (it used to centre itself), and its size is capped in the style sheet, so a maximized
-// window no longer blows it up to the whole width. A block framed in «Видимая часть» shows exactly that frame; an older block keeps its height and focus numbers.
+// Owner 2026-11-18: a photo without a chosen position stands on the left (it used to centre itself), and its height is capped in the style sheet (min(45svh, 400px), owner 2026-11-20), so a maximized
+// window no longer blows it up. A block framed in «Видимая часть» shows exactly that frame; an older block keeps its height and focus numbers.
 function GuidePhoto({ block }: { block: Extract<GuideBlock, { type: "photo" }> }) {
   const alignment = block.align ?? "left";
   const framed = !!block.framing;
-  return <figure className={`info-block-photo guide-photo guide-photo-${alignment}${framed ? " is-framed" : ""}`} style={{ width: `${block.width ?? 100}%`, ...(block.framing?.ratio ? { maxWidth: `min(100%, 820px, calc(min(70svh, 620px) * ${block.framing.ratio / 1000}))` } : {}) }}>
+  return <figure className={`info-block-photo guide-photo guide-photo-${alignment}${framed ? " is-framed" : ""}`} style={{ width: `${block.width ?? 100}%`, ...(block.framing?.ratio ? { maxWidth: `min(100%, calc(min(45svh, 400px) * ${block.framing.ratio / 1000}))` } : {}) }}>
     {framed ? <PortiaImage src={block.url} alt={block.caption} recordId={block.id} priority="lazy" icon="guide" framing={block.framing} />
       : <PortiaImage src={block.url} alt={block.caption} recordId={block.id} priority="lazy" icon="guide" style={{ height: block.height ? `${block.height}px` : undefined, objectFit: block.height ? "cover" : "contain", objectPosition: `${block.focusX ?? 50}% ${block.focusY ?? 50}%` }} />}
     {block.caption.trim() && <figcaption>{block.caption}</figcaption>}

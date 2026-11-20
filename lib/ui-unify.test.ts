@@ -839,8 +839,11 @@ const MAXIMIZED_WINDOWS: { app: string; outcome: "fixed" | "already conformant";
     assert.equal(lastDeclaration(portiaCss, at(".guide-grid"), "grid-template-columns", DESKTOP), undefined, "no maximized rule changes the tiles");
     assert.equal(lastDeclaration(portiaCss, ".guide-grid", "grid-template-columns", DESKTOP), "repeat(auto-fill, minmax(max(132px, calc((100% - 4 * 12px) / 5)), 1fr))");
     assert.equal(lastDeclaration(portiaCss, ".guide-grid", "gap", DESKTOP), "12px");
-    assert.equal(lastDeclaration(portiaCss, ".guide-page", "max-width"), "820px");
-    assert.equal(lastDeclaration(portiaCss, at(".guide-page"), "max-width", DESKTOP), undefined, "the card keeps the 820px column");
+    // The open card and the nested «Карточки» grid fill the window (OWN-02): no reading column, a lower photo (OWN-01).
+    assert.ok([undefined, "none"].includes(lastDeclaration(portiaCss, ".guide-page", "max-width")), "the open card has no column");
+    assert.equal(lastDeclaration(portiaCss, at(".guide-page"), "max-width", DESKTOP), undefined, "and no maximized rule adds one");
+    assert.equal(lastDeclaration(portiaCss, ".guide-photo", "max-width"), "100%");
+    assert.equal(lastDeclaration(portiaCss, ".guide-photo:not(.is-framed) img", "max-height"), "min(45svh, 400px)");
     assertFillsWindow(".guide-app");
   } },
   { app: "promotion", outcome: "fixed", check: () => {
