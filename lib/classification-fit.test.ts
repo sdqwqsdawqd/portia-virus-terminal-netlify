@@ -187,3 +187,64 @@ test("the template export is untouched: levels, transmission cell and the builde
   assert.match(last(".template-card-preview .class-cell strong", "font-size") ?? "", /^clamp\(12px,/u);
   assert.equal(last(".template-card-preview .class-cell", "container-type"), "inline-size");
 });
+
+// OWN-04 (owner 2026-11-20): when a class is chosen in the editor or the template, the label of a variant is read in full; the names of the
+// viruses in the editor's list wrap instead of ending in «…». The select's text is the site's monospace (--sans, 0.6em a glyph) at 13px,
+// so the longest label is a sum again: "N уровень — " and the value, the select's padding, the native arrow and the level plate beside it.
+const SELECT_FONT = 13;
+const SELECT_PADDING = 20; // 10px each side of `.editor-field select`; the select inside the wrap has no border of its own
+const SELECT_ARROW = 24; // the native arrow of a select, with its gap
+const WRAP_BORDER = 2;
+const PLATE_FONT = 11;
+const PLATE_LETTER_SPACING = 0.04; // em, `.classification-select-wrap > strong`
+const plateWords = ["УРОВЕНЬ 3", "МЕТОД"];
+
+const optionLabels = (Object.values(classificationOptions) as readonly (readonly { value: string; level?: number }[])[])
+  .flatMap((options) => options.map((option) => `${option.level ? `${option.level} уровень — ` : ""}${option.value}`));
+const longestLabel = Math.max(...optionLabels.map((label) => [...label].length));
+const plateText = Math.max(...plateWords.map((word) => [...word].length));
+
+function px(value: string | undefined, name: string) {
+  const match = /^(\d+(?:\.\d+)?)px$/u.exec(value ?? "");
+  assert.ok(match, `${name} is a px value, not "${value}"`);
+  return Number(match[1]);
+}
+
+test("OWN-04 the longest variant label is 26 glyphs: «1 уровень — Предупреждение»", () => {
+  assert.equal(longestLabel, 26);
+  assert.ok(optionLabels.includes("1 уровень — Предупреждение"));
+});
+
+test("OWN-04 the level plate beside the select takes what its text needs and no fixed 92px", () => {
+  assert.equal(last(".classification-select-wrap > strong", "min-width"), "auto");
+  const padding = /^0 (\d+)px$/u.exec(last(".classification-select-wrap > strong", "padding") ?? "");
+  assert.ok(padding, "the plate's padding is `0 Npx`");
+  assert.equal(padding[1], "8");
+});
+
+test("OWN-04 a classification field is at least as wide as its longest label, its arrow and its plate; the group is columns of that width", () => {
+  const plate = Math.ceil(plateText * 0.6 * PLATE_FONT + plateText * PLATE_LETTER_SPACING * PLATE_FONT) + 16;
+  const required = Math.ceil(longestLabel * 0.6 * SELECT_FONT) + SELECT_PADDING + SELECT_ARROW + plate + WRAP_BORDER;
+  const minWidth = /^min\(100%, (\d+)px\)$/u.exec(last(".classification-editor-field", "min-width") ?? "");
+  assert.ok(minWidth, "the field's min-width is `min(100%, Npx)`: it never outgrows a narrow column");
+  assert.ok(Number(minWidth[1]) >= required, `the field is ${minWidth[1]}px, the longest label needs ${required}px`);
+  const grid = last(".editor-field-grid:has(> .classification-editor-field)", "grid-template-columns");
+  assert.equal(grid, `repeat(auto-fill, minmax(min(100%, ${minWidth[1]}px), 1fr))`);
+  // The template builder has its own, later, narrower columns for every field grid; the classification group must win there too.
+  assert.equal(last(".template-builder .editor-field-grid:has(> .classification-editor-field)", "grid-template-columns"), grid);
+  px(`${minWidth[1]}px`, "min-width");
+});
+
+test("OWN-04 the names of viruses in the editor's lists wrap: no ellipsis, no nowrap, a long unbroken name breaks", () => {
+  const related = rules.filter((rule) => rule.selectors.some((selector) => /^\.editor-record-list (strong|small)$/u.test(selector)));
+  assert.ok(related.length >= 3);
+  for (const rule of related) {
+    for (const [name, value] of declarations(rule.body)) {
+      const where = `${rule.selectors.join(", ")} { ${name}: ${value} }`;
+      assert.ok(!(name === "text-overflow" && /ellipsis/u.test(value)), where);
+      assert.ok(!(name === "white-space" && /nowrap/u.test(value)), where);
+    }
+  }
+  assert.equal(last(".editor-record-list strong", "overflow-wrap"), "anywhere");
+  assert.ok(!css.includes(".editor-record-list strong, .editor-record-list small { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }"));
+});

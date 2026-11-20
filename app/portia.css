@@ -644,8 +644,8 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 .editor-record-list button { width: 100%; display: flex; flex-direction: column; gap: 4px; padding: 11px; border: 1px solid oklch(.358 calc(.031 * var(--accent-chroma)) var(--accent-hue)); background: rgba(255,255,255,.015); color: oklch(.777 calc(.021 * var(--accent-chroma)) var(--accent-hue)); text-align: left; cursor: pointer; }
 .editor-record-list button:hover, .editor-record-list button.active { border-color: var(--teal-dim); background: var(--teal-soft); }
 .editor-record-list strong { font: 700 12px var(--sans); }
-/* D-05: a long unbroken name stays one line inside the 210px column and ends in «…» (the full name is in title). */
-.editor-record-list strong, .editor-record-list small { display: block; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* OWN-04 (owner 2026-11-20, replaces D-05): a virus name in the list is read in full. It wraps by words, and a long unbroken one breaks, instead of ending in «…». */
+.editor-record-list strong, .editor-record-list small { display: block; max-width: 100%; overflow-wrap: anywhere; }
 .editor-record-list small { color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); }
 .editor-record-list .add-record { align-items: center; margin-top: 5px; border-style: dashed; color: var(--teal); }
 /* «ВНЕ ТАБЛИЦЫ» marks manual employees (D-02). The compound selectors outrank the list/identity rules that style a bare <small>. */
@@ -753,7 +753,11 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
 }
 .classification-select-wrap { display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: stretch; border: 1px solid oklch(.383 calc(.033 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-field); overflow: hidden; }
 .classification-select-wrap select { border: 0 !important; border-radius: 0 !important; }
-.classification-select-wrap > strong { min-width: 92px; display: grid; place-items: center; padding: 0 10px; background: #173127; color: #71d49c; font: 700 11px var(--sans); letter-spacing: .04em; }
+/* OWN-04: a variant label such as «1 уровень — Предупреждение» is 26 monospace glyphs of 13px (203px) with the select's 20px, its 24px arrow, the plate's 80px and the 2px border: 329px, so the
+   field is never narrower than 340px, and the group is as many columns of that width as fit (one, full width, in a narrow window). lib/classification-fit.test.ts holds the sum. */
+.classification-editor-field { min-width: min(100%, 340px); }
+.editor-field-grid:has(> .classification-editor-field) { grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); }
+.classification-select-wrap > strong { min-width: auto; display: grid; place-items: center; padding: 0 8px; background: #173127; color: #71d49c; font: 700 11px var(--sans); letter-spacing: .04em; }
 .classification-select-wrap.level-2 > strong { background: #3d361d; color: #e5c95f; }
 .classification-select-wrap.level-3 > strong { background: #412522; color: #ef8b82; }
 .classification-select-wrap > strong.neutral { background: #1a2c31; color: #85bcc8; }
@@ -2570,6 +2574,7 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
 .template-builder .editor-group > h2 { margin: 0 0 9px; }
 .template-builder .editor-field-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 9px 12px; }
 .template-builder .editor-group.stack .editor-field-grid { grid-template-columns: 1fr; }
+.template-builder .editor-field-grid:has(> .classification-editor-field) { grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); } /* OWN-04: after the builder's narrower columns above */
 .template-builder .editor-dropzone { min-height: 64px; padding: 10px; }
 /* D-55: the preview is the archive's own card (VirusCardBody). An empty field is said in words, never invented. */
 .formatted-empty { color: var(--ink-soft); font-style: italic; }
