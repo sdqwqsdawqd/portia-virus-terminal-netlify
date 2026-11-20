@@ -29,6 +29,9 @@ export function expandStyles(document: RichTextDocument) {
   return styles;
 }
 
+const isHighSurrogate = (code: number) => code >= 0xd800 && code <= 0xdbff;
+const isLowSurrogate = (code: number) => code >= 0xdc00 && code <= 0xdfff;
+
 /**
  * Re-fits the styles to a new text after an edit (OWN-05). Characters kept on either side of the edit keep their style;
  * inserted text is styled only when the character left of it and the one right of it carry the same style (typing inside a
@@ -39,12 +42,15 @@ export function replaceRichTextRuns(document: RichTextDocument, nextText: string
   const previousStyles = expandStyles(document);
   let prefix = 0;
   while (prefix < previousText.length && prefix < nextText.length && previousText[prefix] === nextText[prefix]) prefix += 1;
+  // A kept edge must not cut a surrogate pair (an emoji): both halves belong to the edited part or both stay kept, else the halves get different styles.
+  if (prefix > 0 && isHighSurrogate(previousText.charCodeAt(prefix - 1))) prefix -= 1;
   let suffix = 0;
   while (
     suffix < previousText.length - prefix &&
     suffix < nextText.length - prefix &&
     previousText[previousText.length - 1 - suffix] === nextText[nextText.length - 1 - suffix]
   ) suffix += 1;
+  if (suffix > 0 && isLowSurrogate(previousText.charCodeAt(previousText.length - suffix))) suffix -= 1;
   const insertedLength = Math.max(0, nextText.length - prefix - suffix);
   const left = prefix > 0 ? previousStyles[prefix - 1] : undefined;
   const right = previousStyles[previousText.length - suffix];

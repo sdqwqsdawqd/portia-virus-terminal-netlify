@@ -304,6 +304,31 @@ test("text typed in an empty document or before a styled fragment is plain", () 
   assert.deepEqual(replaceRichTextRuns(doc, "аслово"), { runs: [{ text: "а" }, { text: "слово", style: { fontSize: 22 } }] });
 });
 
+// 26.1 WR-03: a kept edge must not cut an emoji (surrogate pair) between two runs of different styles.
+const loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+test("replacing a styled emoji by one with the same high surrogate keeps both halves in one run", () => {
+  const next = replaceRichTextRuns({ runs: [{ text: "😀", style: { fontWeight: 800 } }, { text: "y" }] }, "😃y");
+  assert.deepEqual(next, { runs: [{ text: "😃y" }] });
+  assert.ok(next.runs.every((run) => !loneSurrogate.test(run.text)));
+});
+
+test("replacing a styled emoji by one with the same low surrogate keeps both halves in one run", () => {
+  const next = replaceRichTextRuns({ runs: [{ text: "a" }, { text: "😀", style: { fontWeight: 800 } }] }, "a\u{1E600}");
+  assert.deepEqual(next, { runs: [{ text: "a\u{1E600}" }] });
+  assert.ok(next.runs.every((run) => !loneSurrogate.test(run.text)));
+});
+
+test("typing next to an emoji and deleting one keep every run well formed and the styles of the rest", () => {
+  const doc: RichTextDocument = { runs: [{ text: "😀", style: { fontWeight: 800 } }, { text: "y😀z" }] };
+  for (const text of ["😀y", "😀y😀zz", "y😀z", "😀😀z", "😀yz"]) {
+    const next = replaceRichTextRuns(doc, text);
+    assert.equal(next.runs.map((run) => run.text).join(""), text);
+    assert.ok(next.runs.every((run) => !loneSurrogate.test(run.text)), text);
+  }
+  assert.deepEqual(replaceRichTextRuns(doc, "😀y😀zz"), { runs: [{ text: "😀", style: { fontWeight: 800 } }, { text: "y😀zz" }] });
+});
+
 test("deleting characters keeps the styles of the rest", () => {
   const doc = applyRichTextStyle(plain("abcd"), 2, 4, { fontWeight: 800 });
   assert.deepEqual(replaceRichTextRuns(doc, "abd"), { runs: [{ text: "ab" }, { text: "d", style: { fontWeight: 800 } }] });
