@@ -8,7 +8,7 @@ import { TYPING_PAUSE_MS } from "@/lib/editor-history";
 import { makeId } from "@/lib/editor-items";
 import { formatLaunchLabels } from "@/lib/format-launch";
 import type { RichTextDocument, RichTextStyle } from "@/lib/portia-content";
-import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset, type FieldSelectionEvent, type FieldSelectionState } from "@/lib/rich-text-style";
+import { applyRichTextStyle, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, replaceRichTextRuns, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset, type FieldSelectionEvent, type FieldSelectionState } from "@/lib/rich-text-style";
 import { clampPanelOffset, initialPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
 
 export type FormatTarget = {
@@ -61,25 +61,9 @@ const backgroundColorPalette = [
   { value: "#26312f", label: "Тёмный" },
 ];
 
+// OWN-05: the typing rule lives in lib/rich-text-style.ts; the export stays because portia-editor.tsx imports it.
 export function replaceRichText(document: RichTextDocument, nextText: string) {
-  const previousText = document.runs.map((run) => run.text).join("");
-  const previousStyles = expandStyles(document);
-  let prefix = 0;
-  while (prefix < previousText.length && prefix < nextText.length && previousText[prefix] === nextText[prefix]) prefix += 1;
-  let suffix = 0;
-  while (
-    suffix < previousText.length - prefix &&
-    suffix < nextText.length - prefix &&
-    previousText[previousText.length - 1 - suffix] === nextText[nextText.length - 1 - suffix]
-  ) suffix += 1;
-  const insertedLength = nextText.length - prefix - suffix;
-  const inheritedStyle = previousStyles[Math.max(0, prefix - 1)] ?? previousStyles[prefix] ?? {};
-  const styles = [
-    ...previousStyles.slice(0, prefix),
-    ...Array.from({ length: Math.max(0, insertedLength) }, () => ({ ...inheritedStyle })),
-    ...previousStyles.slice(previousText.length - suffix),
-  ];
-  return compactRuns(nextText, styles);
+  return replaceRichTextRuns(document, nextText);
 }
 
 function rgba(hex: string | undefined, opacity: number | undefined) {

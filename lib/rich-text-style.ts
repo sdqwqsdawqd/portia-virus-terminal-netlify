@@ -29,6 +29,35 @@ export function expandStyles(document: RichTextDocument) {
   return styles;
 }
 
+/**
+ * Re-fits the styles to a new text after an edit (OWN-05). Characters kept on either side of the edit keep their style;
+ * inserted text is styled only when the character left of it and the one right of it carry the same style (typing inside a
+ * styled fragment). At the edge of a fragment, after it, before it or in plain text, the inserted text is plain.
+ */
+export function replaceRichTextRuns(document: RichTextDocument, nextText: string): RichTextDocument {
+  const previousText = documentText(document);
+  const previousStyles = expandStyles(document);
+  let prefix = 0;
+  while (prefix < previousText.length && prefix < nextText.length && previousText[prefix] === nextText[prefix]) prefix += 1;
+  let suffix = 0;
+  while (
+    suffix < previousText.length - prefix &&
+    suffix < nextText.length - prefix &&
+    previousText[previousText.length - 1 - suffix] === nextText[nextText.length - 1 - suffix]
+  ) suffix += 1;
+  const insertedLength = Math.max(0, nextText.length - prefix - suffix);
+  const left = prefix > 0 ? previousStyles[prefix - 1] : undefined;
+  const right = previousStyles[previousText.length - suffix];
+  const insideFragment = left !== undefined && right !== undefined && styleKey(left) === styleKey(right);
+  const insertedStyle: RichTextStyle = insideFragment ? left : emptyRichTextStyle;
+  const styles = [
+    ...previousStyles.slice(0, prefix),
+    ...Array.from({ length: insertedLength }, () => ({ ...insertedStyle })),
+    ...previousStyles.slice(previousText.length - suffix),
+  ];
+  return compactRuns(nextText, styles);
+}
+
 /** Style of the character at `position` (clamped to the text); {} for empty text. */
 export function richTextStyleAt(document: RichTextDocument, position: number) {
   const styles = expandStyles(document);
