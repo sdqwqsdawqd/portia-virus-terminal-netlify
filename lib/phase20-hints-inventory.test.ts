@@ -222,10 +222,13 @@ test("D-56 (20-37): the register and the sources agree (old texts gone, new text
   // Phase 23 replaced these copy surfaces; the Phase 20 register remains historical evidence for unchanged files.
   // Phase 24 (D-15): the scientist document's denial text shows the real level, so the dossier is replaced copy too.
   const replacedCopy = new Set(["components/portia-promotion-qualification-editor.tsx", "components/portia-promotion.tsx", "components/portia-access-gate.tsx", "components/portia-desktop-dossier.tsx"]);
+  // 26.1-12: the heading of «Корзина» moved with the view of the bin into the seam of the desktop window; the register row still names the window, so the window is read together with its seam.
+  const movedSeam = "components/portia-desktop-trash.tsx";
   const historicEnv = {
     ...realEnv,
-    sourcePaths: () => realEnv.sourcePaths().filter((path) => !replacedCopy.has(path)),
-    hintPaths: () => realEnv.hintPaths().filter((path) => !replacedCopy.has(path)),
+    sourcePaths: () => realEnv.sourcePaths().filter((path) => !replacedCopy.has(path) && path !== movedSeam),
+    hintPaths: () => realEnv.hintPaths().filter((path) => !replacedCopy.has(path) && path !== movedSeam),
+    read: (path: string) => (path === "components/portia-desktop.tsx" ? `${realEnv.read(path)}\n${realEnv.read(movedSeam)}` : realEnv.read(path)),
   };
   const errors = validateRegistry(registry().filter((row) => !replacedCopy.has(row.file)), historicEnv, appliedFiles.filter((path) => !replacedCopy.has(path)));
   assert.deepEqual(errors, [], `\n${errors.join("\n")}\n`);

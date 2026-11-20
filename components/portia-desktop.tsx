@@ -33,11 +33,12 @@ import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
 import { EmbeddedDocument, GuideApp } from "@/components/portia-desktop-documents";
 import { BroadcastCard, BroadcastsHeader, InfoArticle, broadcastTabs } from "@/components/portia-desktop-info";
 import { FormattedText, LoadingState, RowBadges, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
+import { TrashFileRow, TrashHeader, TrashListHead, TrashViewer } from "@/components/portia-desktop-trash";
 import { PortiaImage } from "@/components/portia-desktop-media";
 import { newRecommendationSeed, pickSearchRecommendations, seededRandom } from "@/lib/search-recommendations";
 import { infoCurrentTitle, infoNextTarget, infoOverviewVisible, infoSectionsButtonLabel, infoSectionsHitCount, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";
 import { startMenuCloseReason, type StartMenuEvent } from "@/lib/start-menu";
-import { buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, searchKeyAction, searchKeyContext, searchFirstPage, searchMaxShown, searchShownCount, type SearchItem } from "@/lib/search-index";
+import { buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, searchKeyAction, searchKeyContext, searchFirstPage, searchMaxShown, searchShownCount, type SearchItem } from "@/lib/search-index";
 
 // Phase 24, D-20/D-22: a record window whose record became closed keeps its place and shows the block; the slot of the placeholder
 // is what is remembered, never the record. A selection with an id is a normal one; the lost state counts only while the id is empty,
@@ -2206,38 +2207,26 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
           </AppWindow>)}
           <AppWindow app="trash" state={windows.trash} active={activeApp === "trash"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window trash-window" meta={`ФАЙЛОВ ${String(trashRows.length).padStart(2, "0")}`}>
             <div className={`trash-app${activeTrashFile || activeTrashVirus || trashLostShown ? " is-viewing" : ""}`}>
-              <header><h1>Корзина</h1><p>Бесполезный хлам — кому вообще придет в голову его перебирать?</p></header>
+              <TrashHeader />
               {trashView === "stale" && contentStaleBanner}
               {trashView === "loading" ? <AppSkeleton shape="trash" /> : trashView === "fatal" ? contentFatal("flaskEmpty") : <div className="trash-layout">
                 <div className="trash-files">
-                  <div className="trash-list-head" aria-hidden="true"><span>ИМЯ</span><span>ИСХОДНОЕ РАСПОЛОЖЕНИЕ</span><span>ТИП</span></div>
+                  <TrashListHead />
                   {trashRows.map((row) => {
                     if (row.kind === "redacted") return <RedactedPlaceholder key={row.slot} variant="row" level={row.requiredLevel} index={String(row.position + 1).padStart(2, "0")} />;
                     const key = row.item;
                     if (key.startsWith("virus:")) {
                       const virus = recycledViruses.find((item) => item.id === key.slice(6));
-                      return virus ? <button key={key} className={`trash-file-row${activeTrashFileId === `virus:${virus.id}` ? " active" : ""}${hitClass("file", `virus:${virus.id}`)}`} {...hitAttrs("file", `virus:${virus.id}`)} type="button" onClick={() => openTrashVirus(virus)}><span className="trash-file-name"><i className="trash-file-icon virus">V</i><strong>{virus.name}</strong></span><span>C:\PORTIA\VIRUS_ARCHIVE</span><span>Вирус в корзине</span></button> : null;
+                      return virus ? <TrashFileRow key={key} entry={{ type: "virus", virus }} active={activeTrashFileId === `virus:${virus.id}`} hitClass={hitClass("file", `virus:${virus.id}`)} hitProps={hitAttrs("file", `virus:${virus.id}`)} onOpen={() => openTrashVirus(virus)} /> : null;
                     }
                     const file = trashFiles.find((item) => item.id === key.slice(5));
-                    return file ? <button key={key} className={`trash-file-row${activeTrashFileId === file.id ? " active" : ""}${hitClass("file", file.id)}`} {...hitAttrs("file", file.id)} type="button" onClick={() => openTrashFile(file)}><span className="trash-file-name"><i className={`trash-file-icon ${file.kind}`}>{file.kind === "virus" ? "V" : file.kind === "image" ? "IMG" : "TXT"}</i><strong>{file.name}</strong></span><span>{file.location}</span><span>{recycleFileType(file.kind)}</span></button> : null;
+                    return file ? <TrashFileRow key={key} entry={{ type: "file", file }} active={activeTrashFileId === file.id} hitClass={hitClass("file", file.id)} hitProps={hitAttrs("file", file.id)} onOpen={() => openTrashFile(file)} /> : null;
                   })}
                   {trashView === "empty" && <div className="editor-empty empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{emptyCopy.trash.heading}</strong><span>{emptyCopy.trash.body}</span></div>}
                 </div>
                 {trashLostShown && <div className="trash-viewer doc-open"><div className="trash-viewer-head"><div /><button type="button" onClick={closeTrashFile} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body"><RedactedPlaceholder variant="block" level={trashLostShown.level} /></div></div>}
-                {activeTrashVirus && <div className="trash-viewer virus doc-open" key={activeTrashVirus.id}><div className="trash-viewer-head"><div><span>ВИРУС В КОРЗИНЕ</span><strong>{activeTrashVirus.name} / {activeTrashVirus.code}</strong></div><button type="button" onClick={closeTrashFile} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body trash-virus-document doc-print"><VirusRecord virus={activeTrashVirus} formattedText={content.formattedText} viewerLevel={shownViewerLevel(content, viewerLevel)} onOpenLog={() => undefined} /></div></div>}
-                {activeTrashFile && <div className={`trash-viewer ${activeTrashFile.kind} doc-open`} key={activeTrashFile.id}>
-                  <div className="trash-viewer-head"><div><span>ТОЛЬКО ДЛЯ ЧТЕНИЯ</span><strong>{activeTrashFile.name}</strong></div><button type="button" onClick={closeTrashFile} aria-label="Закрыть файл">×</button></div>
-                  <div className="trash-viewer-body doc-print">
-                    {activeTrashFile.kind === "image" ? (
-                      <figure className="trash-image-document">
-                        <PortiaImage src={activeTrashFile.image} alt={activeTrashFile.name} recordId={activeTrashFile.id} priority="lazy" icon="trash" framing={activeTrashFile.imageFraming} />
-                        {activeTrashFile.content && <figcaption><FormattedText text={activeTrashFile.content} document={content.formattedText[portiaTextKey.recycle(activeTrashFile.id)]} /></figcaption>}
-                      </figure>
-                    ) : (
-                       <article className="trash-text-document"><div className="trash-document-meta">{recycleFileType(activeTrashFile.kind)} / {activeTrashFile.location}</div>{activeTrashFile.kind === "virus" ? <>{recycleFileBody({ ...activeTrashFile, content: "" }, [...content.viruses, ...recycledViruses]) && <pre>{recycleFileBody({ ...activeTrashFile, content: "" }, [...content.viruses, ...recycledViruses])}</pre>}{activeTrashFile.content && <FormattedText className="trash-formatted-text" text={activeTrashFile.content} document={content.formattedText[portiaTextKey.recycle(activeTrashFile.id)]} />}{!recycleFileBody({ ...activeTrashFile, content: "" }, [...content.viruses, ...recycledViruses]) && !activeTrashFile.content && <span>Файл не содержит текста.</span>}</> : <FormattedText className="trash-formatted-text" text={activeTrashFile.content || "Файл не содержит текста."} document={content.formattedText[portiaTextKey.recycle(activeTrashFile.id)]} />}</article>
-                    )}
-                  </div>
-                </div>}
+                {activeTrashVirus && <TrashViewer key={activeTrashVirus.id} entry={{ type: "virus", virus: activeTrashVirus }} formattedText={content.formattedText} viruses={[...content.viruses, ...recycledViruses]} viewerLevel={shownViewerLevel(content, viewerLevel)} onClose={closeTrashFile} />}
+                {activeTrashFile && <TrashViewer key={activeTrashFile.id} entry={{ type: "file", file: activeTrashFile }} formattedText={content.formattedText} viruses={[...content.viruses, ...recycledViruses]} viewerLevel={shownViewerLevel(content, viewerLevel)} onClose={closeTrashFile} />}
               </div>}
             </div>
           </AppWindow>

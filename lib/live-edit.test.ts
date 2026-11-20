@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS } from "./content-limits.ts";
-import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText } from "./live-edit.ts";
+import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText, liveRecycleKeys } from "./live-edit.ts";
 import { broadcastFeed } from "./broadcasts.ts";
 import { portiaTextKey, type PortiaContent } from "./portia-content.ts";
 
@@ -21,7 +21,7 @@ function draftWithGuide(): PortiaContent {
 }
 
 test("LIVE-01: the live mode knows its tabs; search and employees are not among them", () => {
-  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses"]);
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle"]);
   assert.equal(liveAppForTab("info"), "info", "26.1-11: «Информация» has its live mode");
   assert.equal(liveAppForTab("guide"), "guide");
   assert.equal(liveAppForTab("users"), null);
@@ -541,7 +541,7 @@ function draftWithBroadcasts(): PortiaContent {
 }
 
 test("LIVE-01 (26.1-11): «Сводка» has its live mode", () => {
-  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses"]);
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle"]);
   assert.equal(liveAppForTab("broadcasts"), "broadcasts");
 });
 
@@ -876,4 +876,142 @@ test("LIVE-02/04 (26.1-12): the live card puts the choice, the picture, the muta
   assert.match(seam, /applyLiveChoice\(/);
   assert.match(seam, /applyLiveLogText\(/);
   assert.match(seam, /choice: \(target, value, options\) =>/);
+});
+
+// ---- 26.1-12, task 3: «Корзина» ----
+
+function draftWithBin(): PortiaContent {
+  const draft = draftWithCard();
+  draft.recycleFiles = [
+    { id: "f1", name: "один.txt", location: "C:\\A", kind: "text", content: "Тело", image: "" , virusId: "" },
+    { id: "f2", name: "два.png", location: "C:\\B", kind: "image", content: "", image: "https://x/p.gif", imageFraming: { x: 1, y: 2, zoom: 1.2 }, virusId: "" },
+  ];
+  draft.recycleOrder = ["file:f2", "virus:r", "file:f1"];
+  draft.formattedText[portiaTextKey.recycle("f1")] = { runs: [{ text: "Тело" }] };
+  draft.formattedText[portiaTextKey.virus("r", "external")] = { runs: [{ text: "Внешность" }] };
+  draft.recycledViruses[0].scientistLogs = [{ id: "rl", title: "З", scientist: "Я", lockedLevel: 1, content: [""], richContent: { runs: [{ text: "" }] } }];
+  return draft;
+}
+
+test("LIVE-01 (26.1-12): the tab «Корзина» has its live mode", () => {
+  assert.equal(liveAppForTab("recycle"), "recycle");
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle"]);
+});
+
+test("LIVE-02 (26.1-12): the name, the place and the text of a file of the bin change in place; the text is kept whole and keyed like the editor's field", () => {
+  const draft = draftWithBin();
+  assert.equal(applyLiveText(draft, { kind: "recycle-file-name", fileId: "f1" }, "и".repeat(400)), true);
+  assert.equal(draft.recycleFiles[0].name.length, 300);
+  assert.equal(applyLiveText(draft, { kind: "recycle-file-location", fileId: "f1" }, "C:\\НОВОЕ"), true);
+  assert.equal(draft.recycleFiles[0].location, "C:\\НОВОЕ");
+  const target = { kind: "recycle-file-text", fileId: "f1" } as const;
+  assert.equal(liveTextKey(target), portiaTextKey.recycle("f1"));
+  assert.equal(applyLiveText(draft, target, "т".repeat(500)), true);
+  assert.equal(draft.recycleFiles[0].content.length, 500);
+  assert.equal(draft.recycleFiles[1].name, "два.png");
+  assert.equal(applyLiveText(draft, { kind: "recycle-file-name", fileId: "nope" }, "x"), false);
+});
+
+test("LIVE-02 (26.1-12): the type of a file takes one of three, the linked virus takes none or one of the archive", () => {
+  const draft = draftWithBin();
+  assert.equal(applyLiveChoice(draft, { kind: "recycle-file-kind", fileId: "f1" }, "image"), true);
+  assert.equal(draft.recycleFiles[0].kind, "image");
+  assert.equal(applyLiveChoice(draft, { kind: "recycle-file-kind", fileId: "f1" }, "exe"), false);
+  assert.equal(draft.recycleFiles[0].kind, "image");
+  assert.equal(applyLiveChoice(draft, { kind: "recycle-file-virus", fileId: "f1" }, "b"), true);
+  assert.equal(draft.recycleFiles[0].virusId, "b");
+  assert.equal(applyLiveChoice(draft, { kind: "recycle-file-virus", fileId: "f1" }, ""), true);
+  assert.equal(applyLiveChoice(draft, { kind: "recycle-file-virus", fileId: "f1" }, "nope"), false);
+  assert.equal(draft.recycleFiles[0].virusId, "");
+});
+
+test("LIVE-02 (26.1-12): the picture of a file replaces the address and drops the frame; the frame can be set and cleared", () => {
+  const draft = draftWithBin();
+  const target = { kind: "recycle-file-image", fileId: "f2" } as const;
+  applyLiveImage(draft, target, "https://x/p.gif");
+  assert.deepEqual(draft.recycleFiles[1].imageFraming, { x: 1, y: 2, zoom: 1.2 }, "the same address keeps the frame");
+  applyLiveImage(draft, target, "https://x/q.gif");
+  assert.equal(draft.recycleFiles[1].imageFraming, undefined);
+  assert.equal(applyLiveFraming(draft, target, { x: 3, y: 4, zoom: 2 }), true);
+  assert.deepEqual(draft.recycleFiles[1].imageFraming, { x: 3, y: 4, zoom: 2 });
+  assert.equal(applyLiveImage(draft, { kind: "recycle-file-image", fileId: "nope" }, "x"), false);
+});
+
+test("LIVE-02 (26.1-12): the bar adds a file like «+ ДОБАВИТЬ ФАЙЛ» and puts it last in the order", () => {
+  const draft = draftWithBin();
+  assert.deepEqual(liveAddKinds({ kind: "recycle" }), ["file"]);
+  const id = liveNewId({ kind: "recycle" }, "file");
+  assert.equal(applyLiveAdd(draft, { kind: "recycle" }, "file", id), id);
+  assert.deepEqual(draft.recycleFiles[2], { id, name: "НОВЫЙ_ФАЙЛ.txt", location: "C:\\PORTIA\\RECYCLE_BIN", kind: "text", content: "", image: "", virusId: "" });
+  assert.deepEqual(draft.recycleOrder, ["file:f2", "virus:r", "file:f1", `file:${id}`]);
+  assert.equal(liveAddBlocked(draft, { kind: "recycle" }, "file"), false);
+  assert.equal(applyLiveAdd(draft, { kind: "recycle" }, "text"), null);
+});
+
+test("LIVE-02 (26.1-12): the rows of the bin are moved in the order the editor keeps (recycleOrder), files and viruses together", () => {
+  const draft = draftWithBin();
+  assert.deepEqual(liveRecycleKeys(draft), ["file:f2", "virus:r", "file:f1"]);
+  assert.equal(applyLiveMove(draft, { kind: "recycle" }, 0, 2), true);
+  assert.deepEqual(draft.recycleOrder, ["virus:r", "file:f1", "file:f2"]);
+  assert.equal(applyLiveMove(draft, { kind: "recycle" }, 0, 5), false);
+  assert.equal(applyLiveMove(draft, { kind: "recycle" }, 1, 1), false);
+  assert.deepEqual(draft.recycleOrder, ["virus:r", "file:f1", "file:f2"]);
+  // an order that misses a row or holds a stale key is read as the editor reads it: stale dropped, missing rows appended
+  draft.recycleOrder = ["file:gone", "file:f1"];
+  assert.deepEqual(liveRecycleKeys(draft), ["file:f1", "file:f2", "virus:r"]);
+});
+
+test("LIVE-02 (26.1-12): removing a file or a virus of the bin takes its formatting and its place in the order", () => {
+  const draft = draftWithBin();
+  assert.deepEqual(liveRemovedKeys(draft, { kind: "recycle-file", fileId: "f1" }), [portiaTextKey.recycle("f1")]);
+  assert.equal(applyLiveRemove(draft, { kind: "recycle-file", fileId: "f1" }), true);
+  assert.deepEqual(draft.recycleFiles.map((item) => item.id), ["f2"]);
+  assert.equal(draft.formattedText[portiaTextKey.recycle("f1")], undefined);
+  assert.deepEqual(draft.recycleOrder, ["file:f2", "virus:r"]);
+  const keys = liveRemovedKeys(draft, { kind: "recycled-virus", virusId: "r" });
+  assert.ok(keys.includes(portiaTextKey.virus("r", "external")) && keys.includes("scientist:rl"));
+  assert.equal(applyLiveRemove(draft, { kind: "recycled-virus", virusId: "r" }), true);
+  assert.deepEqual(draft.recycledViruses, []);
+  assert.equal(draft.formattedText[portiaTextKey.virus("r", "external")], undefined);
+  assert.deepEqual(draft.recycleOrder, ["file:f2"]);
+  assert.equal(applyLiveRemove(draft, { kind: "recycled-virus", virusId: "r" }), false);
+  assert.equal(applyLiveRemove(draft, { kind: "recycle-file", fileId: "nope" }), false);
+});
+
+test("LIVE-02/04 (26.1-12): the window of the desktop draws the rows and the viewer of the bin through the seam, with no provider and no live class", () => {
+  const desktop = read("components/portia-desktop.tsx");
+  assert.match(desktop, /<TrashFileRow\b/);
+  assert.match(desktop, /<TrashViewer\b/);
+  const trash = read("components/portia-desktop-trash.tsx");
+  assert.match(trash, /export function TrashFileRow\(/);
+  assert.match(trash, /export function TrashViewer\(/);
+  assert.match(trash, /useLiveEdit\("recycle"\)/);
+  assert.doesNotMatch(trash, /LiveEditContext\.Provider/);
+  assert.doesNotMatch(trash, /portia-editor/);
+  assert.doesNotMatch(trash, /embedMedia=\{false\}/); // planner-discipline-allow: embedMedia={false}
+  assert.match(trash, /live\.rich\(/, "the text of a file is the visitor's FormattedText at rest");
+  assert.match(trash, /<PortiaImage\b/, "the picture of a file is the visitor's PortiaImage, so a GIF plays");
+  for (const part of ['live.text({ kind: "recycle-file-name"', 'live.text({ kind: "recycle-file-location"', 'kind: "recycle-file-text"', 'live.image({ kind: "recycle-file-image"', 'live.choice({ kind: "recycle-file-kind"', 'live.remove({ kind: "recycle-file"', 'live.remove({ kind: "recycled-virus"']) assert.ok(trash.includes(part), part);
+  // every live class of the seam stands in a branch of live, so a visitor's bin carries none
+  const lines = trash.split("\n");
+  for (const [index, line] of lines.entries()) {
+    if (!/["`]live-[a-z]/.test(line)) continue;
+    const near = lines.slice(Math.max(0, index - 5), index + 1).join(" ");
+    assert.ok(/\blive\b\s*(\?|&&)|if \(!?live\)|\{live\b/.test(near), `a live class outside a live branch: ${line.trim().slice(0, 100)}`);
+  }
+});
+
+test("LIVE-01/02/05 (26.1-12): the live «Корзина» draws the visitor's columns, held rows, the viewer and the bar «Файл»; a virus of the bin is the same live card", () => {
+  const seam = read("components/portia-editor-live.tsx");
+  assert.match(seam, /data-live-app="recycle"/);
+  assert.match(seam, /<TrashFileRow\b/);
+  assert.match(seam, /<TrashViewer\b/);
+  assert.ok(seam.includes('live.order({ kind: "recycle" }'));
+  assert.ok(seam.includes('live.addBar({ kind: "recycle" })'));
+  assert.match(seam, /liveRecycleKeys\(/);
+  assert.doesNotMatch(seam, /embedMedia=\{false\}/); // planner-discipline-allow: embedMedia={false}
+  // both live surfaces draw the card through VirusRecord/VirusCardBody, which embed pictures (a GIF plays) unlike the template (T-20-87)
+  assert.doesNotMatch(read("components/portia-desktop-dossier.tsx"), /embedMedia=\{false\}/); // planner-discipline-allow: embedMedia={false}
+  assert.match(read("components/portia-virus-card.tsx"), /embedMedia = true/);
+  assert.match(read("components/portia-virus-card.tsx"), /useLiveEdit\("recycle"\)/, "a virus of the bin asks for the tools of the bin");
 });

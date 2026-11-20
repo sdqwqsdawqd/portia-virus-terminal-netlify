@@ -4,6 +4,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } f
 import { GuideApp } from "@/components/portia-desktop-documents";
 import { RowBadges, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
 import { BroadcastCard, BroadcastsHeader, InfoArticle, broadcastTabs } from "@/components/portia-desktop-info";
+import { TrashFileRow, TrashHeader, TrashListHead, TrashViewer, type TrashEntry } from "@/components/portia-desktop-trash";
 import { ClassificationField, ConfirmDialog, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
 import { FormattedTextarea, findFormatField, type FormatTarget } from "@/components/portia-editor-rich-text";
 import { LevelPicker } from "@/components/portia-level-picker";
@@ -12,7 +13,7 @@ import { EmbeddedMediaStrip, FormattedText } from "@/components/portia-virus-car
 import { localDateKey, type BroadcastTab } from "@/lib/broadcasts";
 import type { ImageFraming } from "@/lib/image-framing";
 import {
-  applyLiveAdd, applyLiveCards, applyLiveChoice, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveLogText, applyLiveMove, applyLiveRemove, applyLiveText, findLiveVirus, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveNewId, liveRemovedKeys, liveTextKey,
+  applyLiveAdd, applyLiveCards, applyLiveChoice, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveLogText, applyLiveMove, applyLiveRemove, applyLiveText, findLiveVirus, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveNewId, liveRecycleKeys, liveRemovedKeys, liveTextKey,
   type LiveAddKind, type LiveApp, type LiveCardsTarget, type LiveChoiceTarget, type LiveContainer, type LiveDateTarget, type LiveFlagTarget, type LiveImageTarget, type LiveList, type LiveRemovable, type LiveTarget,
 } from "@/lib/live-edit";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
@@ -29,7 +30,7 @@ export const liveCopy = {
   untitled: "Без названия",
   addLabel: "Добавить:",
   addGroup: "Добавить элемент",
-  kinds: { section: "Раздел", card: "Карточку", heading: "Заголовок", text: "Текст", table: "Таблицу", photo: "Фото", video: "Видео", callout: "Врезку", cards: "Карточки", row: "Строку", subsection: "Подраздел", news: "Новость", quest: "Квест", mutation: "Мутацию", log: "Запись учёного" } satisfies Record<LiveAddKind, string>,
+  kinds: { section: "Раздел", card: "Карточку", heading: "Заголовок", text: "Текст", table: "Таблицу", photo: "Фото", video: "Видео", callout: "Врезку", cards: "Карточки", row: "Строку", subsection: "Подраздел", news: "Новость", quest: "Квест", mutation: "Мутацию", log: "Запись учёного", file: "Файл" } satisfies Record<LiveAddKind, string>,
   cover: "Обложку",
   coverLabel: "Обложка",
   full: "Больше нельзя",
@@ -62,6 +63,9 @@ export const liveCopy = {
     "log-title": "Название записи",
     "log-scientist": "Псевдоним учёного",
     "log-text": "Текст записи",
+    "recycle-file-name": "Имя файла",
+    "recycle-file-location": "Исходное расположение",
+    "recycle-file-text": "Текст файла",
   } satisfies Record<LiveTarget["kind"], string>,
   placeholders: {
     "guide-section-title": "Название раздела",
@@ -92,6 +96,9 @@ export const liveCopy = {
     "log-title": "Название записи",
     "log-scientist": "Псевдоним",
     "log-text": "Нажмите, чтобы написать",
+    "recycle-file-name": "Имя файла",
+    "recycle-file-location": "Расположение",
+    "recycle-file-text": "Нажмите, чтобы написать",
   } satisfies Record<LiveTarget["kind"], string>,
   dateStart: "Начало",
   dateEnd: "Окончание",
@@ -112,14 +119,15 @@ export const liveCopy = {
   infectedAdd: "Изображение",
   infectedLabel: "Фото после заражения",
   choiceEmpty: "Не указан",
+  trashEmpty: "Корзина пуста",
   richEmpty: "Нажмите, чтобы написать",
-  lists: { "guide-sections": "раздел", "guide-cards": "карточка", "guide-blocks": "блок", "info-sections": "раздел", "info-subsections": "подраздел", "info-blocks": "блок", viruses: "вирус" } satisfies Record<LiveList["kind"], string>,
+  lists: { "guide-sections": "раздел", "guide-cards": "карточка", "guide-blocks": "блок", "info-sections": "раздел", "info-subsections": "подраздел", "info-blocks": "блок", viruses: "вирус", recycle: "файл" } satisfies Record<LiveList["kind"], string>,
   removeLabel: "Удалить",
   removeTitle: "Удалить?",
   removeText: (label: string) => `Удалить вместе с содержимым: ${label}.`,
   removeConfirm: "УДАЛИТЬ",
   removeCancel: "ОТМЕНА",
-  removeNames: { "guide-section": "раздел", "guide-card": "карточку", "guide-block": "блок", "guide-table-row": "строку", "info-section": "раздел", "info-subsection": "подраздел", "info-block": "блок", "info-table-row": "строку", broadcast: "запись", mutation: "мутацию", log: "запись" } satisfies Record<LiveRemovable["kind"], string>,
+  removeNames: { "guide-section": "раздел", "guide-card": "карточку", "guide-block": "блок", "guide-table-row": "строку", "info-section": "раздел", "info-subsection": "подраздел", "info-block": "блок", "info-table-row": "строку", broadcast: "запись", mutation: "мутацию", log: "запись", "recycle-file": "файл", "recycled-virus": "вирус" } satisfies Record<LiveRemovable["kind"], string>,
   imageAdd: "Добавить фото",
   sectionPhoto: "Фото раздела",
   imageReplace: "Заменить",
@@ -182,6 +190,7 @@ export function LiveSurface({ tab, bridge }: { tab: string; bridge: LiveEditorBr
   if (app === "info") return <InfoSurface bridge={bridge} />;
   if (app === "broadcasts") return <BroadcastsSurface bridge={bridge} />;
   if (app === "viruses") return <VirusesSurface bridge={bridge} />;
+  if (app === "recycle") return <RecycleSurface bridge={bridge} />;
   return null;
 }
 
@@ -313,6 +322,57 @@ function VirusesSurface({ bridge }: { bridge: LiveEditorBridge }) {
               ? <ScientistDocument key={openLog} virus={virus} logId={openLog} viewerLevel={editorLevel} onBack={() => setOpenLog(null)} />
               : <VirusRecord virus={virus} formattedText={bridge.draft.formattedText} viewerLevel={editorLevel} onOpenLog={setOpenLog} />}
         </article>
+      </div>
+    </LiveEditContext.Provider>
+  </div>;
+}
+
+/**
+ * «Корзина» as the visitor sees it: the heading, the columns of the list, the rows (files and viruses together, held to reorder) and the viewer of the chosen one laid over the list
+ * (TrashViewer, the visitor's own, inside the provider). A file is edited in its viewer; a virus of the bin shows the same live card as the archive.
+ */
+function RecycleSurface({ bridge }: { bridge: LiveEditorBridge }) {
+  const draft = bridge.draft;
+  const keys = liveRecycleKeys(draft);
+  // The key of the open row ("file:<id>" / "virus:<id>"); nothing is open at first, as in the visitor's window. A removed row closes its viewer.
+  const [picked, setPicked] = useState<string | null>(null);
+  const [openLog, setOpenLog] = useState<string | null>(null);
+  const entryOf = (key: string): TrashEntry | null => {
+    const id = key.slice(key.indexOf(":") + 1);
+    if (key.startsWith("virus:")) { const virus = (draft.recycledViruses ?? []).find((item) => item.id === id); return virus ? { type: "virus", virus } : null; }
+    const file = draft.recycleFiles.find((item) => item.id === id);
+    return file ? { type: "file", file } : null;
+  };
+  const open = picked && keys.includes(picked) ? entryOf(picked) : null;
+  const select = (key: string | null) => {
+    setPicked(key);
+    setOpenLog(null);
+    if (key?.startsWith("virus:")) { bridge.setRecycledVirusId(key.slice(6)); bridge.setRecycleFileId(""); }
+    else if (key?.startsWith("file:")) { bridge.setRecycleFileId(key.slice(5)); bridge.setRecycledVirusId(""); }
+  };
+  // A file the bar adds is opened at once, like the editor's own «+ ДОБАВИТЬ ФАЙЛ» selects it.
+  const live = createLiveApi("recycle", bridge, { onAdded: (kind, id) => { if (kind === "file") select(`file:${id}`); } });
+  return <div className="live-surface" data-live-app="recycle">
+    <LiveEditContext.Provider value={live}>
+      <div className={`trash-app${open ? " is-viewing" : ""}`}>
+        <TrashHeader />
+        <div className="trash-layout">
+          <div className="trash-files">
+            <TrashListHead />
+            {keys.map((key, index) => {
+              const entry = entryOf(key);
+              if (!entry) return null;
+              const order = live.order({ kind: "recycle" }, index, entry.type === "virus" ? entry.virus.name : entry.file.name);
+              return <div key={key} className="live-index-row" {...order.rowProps}>
+                {order.handle}
+                <TrashFileRow entry={entry} active={key === picked} onOpen={() => select(key)} />
+              </div>;
+            })}
+            {!keys.length && <div className="editor-empty empty-state"><strong>{liveCopy.trashEmpty}</strong></div>}
+          </div>
+          {open && <TrashViewer key={picked} entry={open} formattedText={draft.formattedText} viruses={[...draft.viruses, ...(draft.recycledViruses ?? [])]} viewerLevel={editorLevel} onClose={() => select(null)} openLog={openLog} onOpenLog={setOpenLog} onCloseLog={() => setOpenLog(null)} />}
+        </div>
+        {live.addBar({ kind: "recycle" })}
       </div>
     </LiveEditContext.Provider>
   </div>;
@@ -450,11 +510,12 @@ export function LiveFlag({ bridge, target, checked }: { bridge: LiveEditorBridge
 }
 
 /** The display area of the editor's field for a place: it names the look (light paper or dark) the text has for the visitor. */
-function richAreaOf(target: LiveTarget): "lead" | "metric" | "mutation" | "scientist" | "broadcast" | "info" {
+function richAreaOf(target: LiveTarget): "lead" | "metric" | "mutation" | "scientist" | "caption" | "trash" | "broadcast" | "info" {
   if (target.kind === "broadcast-body") return "broadcast";
   if (target.kind === "virus-text") return target.field.startsWith("ppu-") ? "metric" : "lead";
   if (target.kind === "mutation-description") return "mutation";
   if (target.kind === "log-text") return "scientist";
+  if (target.kind === "recycle-file-text") return target.caption ? "caption" : "trash";
   return "info";
 }
 
@@ -517,8 +578,8 @@ function LivePopover({ onClose, children }: { onClose: () => void; children: Rea
   </div>;
 }
 
-const frameBoxOf = { "guide-section-photo": "band", "guide-card-cover": "tile", "guide-photo-url": "free", "info-photo-url": "natural", "virus-infected": "natural", "mutation-image": "natural" } as const;
-const placementOf = { "guide-section-photo": "guide", "guide-card-cover": "guide", "guide-photo-url": "guide", "info-photo-url": "guide", "virus-infected": "dossier", "mutation-image": "mutation" } as const;
+const frameBoxOf = { "guide-section-photo": "band", "guide-card-cover": "tile", "guide-photo-url": "free", "info-photo-url": "natural", "virus-infected": "natural", "mutation-image": "natural", "recycle-file-image": "natural" } as const;
+const placementOf = { "guide-section-photo": "guide", "guide-card-cover": "guide", "guide-photo-url": "guide", "info-photo-url": "guide", "virus-infected": "dossier", "mutation-image": "mutation", "recycle-file-image": "recycle" } as const;
 
 /** The picture place of the visitor's page (`children`, drawn by the visitor's own PortiaImage, GIFs play) and the way to change its address and visible part. */
 export function LiveImage({ bridge, target, value, framing, children, label, fieldLabel, compact = false }: { bridge: LiveEditorBridge; target: LiveImageTarget; value: string; framing?: ImageFraming; children?: ReactNode; label?: string; fieldLabel?: string; compact?: boolean }) {
@@ -560,7 +621,9 @@ export function LiveChoice({ bridge, target, value, label, options }: { bridge: 
     {open && <LivePopover onClose={() => setOpen(false)}>
       {target.kind === "virus-class"
         ? <ClassificationField label={label} classificationKey={target.axis} value={value} onChange={write} />
-        : <LevelPicker name={`level-log-${target.logId}`} value={Number(value)} onChange={(level) => write(String(level))} />}
+        : target.kind === "log-level"
+          ? <LevelPicker name={`level-log-${target.logId}`} value={Number(value)} onChange={(level) => write(String(level))} />
+          : <label className="editor-field"><span>{label}</span><select value={value} onChange={(event) => write(event.target.value)}>{options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>}
     </LivePopover>}
   </span>;
 }

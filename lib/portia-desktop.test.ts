@@ -130,7 +130,8 @@ test("component families import only their own seams and the known shared compon
     // portia-virus-card: LIVE-05, the live text shows the visitor's FormattedText with its GIFs, and the strip of GIFs under the field being edited.
     // portia-desktop-info: LIVE-02 (26.1-11), the live mode draws the visitor's article of «Информация» and card of «Сводки» on the draft.
     // portia-desktop-dossier: LIVE-02 (26.1-12), the live mode draws the visitor's virus record and scientist document on the draft.
-    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states", "portia-image-framing", "portia-users-tab", "portia-level-picker", "portia-image-rewrite", "portia-icons", "portia-live-edit", "portia-desktop-documents", "portia-desktop-info", "portia-desktop-dossier", "portia-virus-card"],
+    // portia-desktop-trash: LIVE-02 (26.1-12), the live mode draws the visitor's list rows and viewer of «Корзина» on the draft.
+    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states", "portia-image-framing", "portia-users-tab", "portia-level-picker", "portia-image-rewrite", "portia-icons", "portia-live-edit", "portia-desktop-documents", "portia-desktop-info", "portia-desktop-dossier", "portia-desktop-trash", "portia-virus-card"],
   } as const;
   for (const [main, family] of [["portia-desktop", desktopFamily], ["portia-editor", editorFamily]] as const) {
     const members = family.map((part) => part.file.replace(/\.tsx$/, ""));
@@ -469,7 +470,9 @@ test("every record picture goes through PortiaImage with its record id and the r
   const lazyOf = (file: string) => all.filter((entry) => entry.file === file).map((entry) => entry.tag);
   assert.ok(lazyOf("portia-desktop-documents.tsx").length >= 3 && lazyOf("portia-desktop-documents.tsx").every((tag) => tag.includes('priority="lazy"')));
   // 26.1-11: the information photo moved with the article into the seam portia-desktop-info.tsx.
-  assert.ok([...lazyOf("portia-desktop.tsx"), ...lazyOf("portia-desktop-info.tsx")].filter((tag) => tag.includes('priority="lazy"')).length >= 2, "information photo and trash image");
+  // 26.1-12: the picture of a file of the bin moved with the viewer into the seam portia-desktop-trash.tsx.
+  assert.ok([...lazyOf("portia-desktop.tsx"), ...lazyOf("portia-desktop-info.tsx"), ...lazyOf("portia-desktop-trash.tsx")].filter((tag) => tag.includes('priority="lazy"')).length >= 2, "information photo and trash image");
+  assert.ok(lazyOf("portia-desktop-trash.tsx").length >= 1 && lazyOf("portia-desktop-trash.tsx").every((tag) => tag.includes('priority="lazy"')));
   assert.ok(lazyOf("portia-desktop-info.tsx").length >= 1 && lazyOf("portia-desktop-info.tsx").every((tag) => tag.includes('priority="lazy"')));
   assert.ok(card.includes('recordId: `${virus.id}:mutation:${index}`, priority: "lazy"'));
   // No loading policy outside PortiaImage; the one fetchPriority left is the PORTIA mark of the boot screen.

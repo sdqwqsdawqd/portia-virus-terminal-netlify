@@ -2935,6 +2935,17 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 .live-log-row { position: relative; }
 .live-log-row .live-remove-wrap { top: 50%; right: 8px; transform: translateY(-50%); }
 .live-surface .archive-document-view .live-editable { display: inline-block; min-width: 4ch; }
+/* 26.1-12: «Корзина» — те же колонки, строки и просмотрщик, что у участника; просмотрщик лежит поверх списка и прокручивается внутри. */
+.live-surface .trash-app { height: auto; min-height: 520px; overflow: visible; }
+.live-surface .trash-layout { flex: none; height: min(76vh, 860px); min-height: 440px; max-height: none; }
+.live-surface .trash-files .live-index-row { position: relative; min-width: 0; }
+.live-surface .trash-files .order-drag-handle { grid-template-columns: none; }
+.live-surface .trash-viewer-head .live-remove-wrap { position: static; margin-left: auto; }
+.live-surface .trash-viewer-head .live-editable { display: inline-block; min-width: 6ch; }
+.live-surface .trash-document-meta .live-choice-button { min-height: 22px; }
+.live-trash-link { margin: 0 0 14px; font: 12px var(--sans); }
+.live-surface .trash-image-document .live-image { min-width: 0; }
+.live-surface .trash-app .live-add-bar { margin-top: 12px; }
 @media (max-width: 900px) {
   .live-surface .mutation-card .live-image { border-right: 0; border-bottom: 1px solid #c4beb0; }
 }

@@ -241,7 +241,8 @@ test("O-3 the window counter counts the placeholders, and an empty bin means no 
 test("D-20 a file that became closed while viewed is replaced by the block; the head keeps only the close button", () => {
   assert.ok(desktop.includes("reconcileTrashSelection(previous, next, current.trash)"));
   assert.ok(desktop.includes("trashLost"), "the lost placeholder is remembered");
-  const lost = between(desktop, "{trashLostShown && <div", "{activeTrashVirus && <div");
+  // 26.1-12: the viewer of a file or of a virus of the bin is TrashViewer of the seam portia-desktop-trash.tsx; the lost block stays in the window.
+  const lost = between(desktop, "{trashLostShown && <div", "{activeTrashVirus && <TrashViewer");
   assert.ok(lost.includes('<RedactedPlaceholder variant="block" level={trashLostShown.level} />'));
   assert.ok(lost.includes('aria-label="Закрыть файл"'));
   assert.doesNotMatch(lost, /\.name|\.code|ТОЛЬКО ДЛЯ ЧТЕНИЯ|ВИРУС В КОРЗИНЕ/, "no name in the head of the block");
