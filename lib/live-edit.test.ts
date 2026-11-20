@@ -310,3 +310,17 @@ test("LIVE-02: removing goes through lib/editor-items: the formatting leaves wit
   assert.deepEqual(draft.guideSections.map((section) => section.id), ["s1"]);
   assert.equal(applyLiveRemove(draft, { kind: "guide-section", sectionId: "s2" }), false);
 });
+
+test("T-26.1-22: the live text reads only textContent, takes a paste as plain text and puts a string in the draft", () => {
+  const seam = read("components/portia-editor-live.tsx");
+  assert.ok(seam.includes('getData("text/plain")'), "a paste is plain text");
+  assert.ok(seam.includes("event.currentTarget.textContent"), "only textContent is read");
+  assert.ok(!seam.includes("innerHTML") && !seam.includes("dangerouslySetInnerHTML"), "no markup goes in or out");
+  assert.ok(seam.includes('"plaintext-only"') && seam.includes('"true"'), "a browser without plaintext-only still edits as plain text");
+});
+
+test("LIVE-04: the live mode covers guide, info, broadcasts, viruses, recycle and assistant by type; search and employees are excluded", () => {
+  const model = read("lib/live-edit.ts");
+  assert.ok(model.includes('export type LiveApp = "guide" | "info" | "broadcasts" | "viruses" | "recycle" | "assistant";'));
+  assert.ok(!/LiveApp = [^;]*"(search|employees)"/.test(model));
+});

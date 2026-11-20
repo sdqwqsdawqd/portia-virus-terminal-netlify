@@ -159,6 +159,17 @@ function insertPlainText(text: string) {
   selection.addRange(range);
 }
 
+// A browser without "plaintext-only" (older Firefox) gets plain contentEditable; only textContent is read and a paste is plain either way.
+let plaintextOnly: boolean | null = null;
+function editableMode(): "plaintext-only" | "true" {
+  if (plaintextOnly === null) {
+    const probe = window.document.createElement("span");
+    probe.contentEditable = "plaintext-only";
+    plaintextOnly = probe.contentEditable === "plaintext-only";
+  }
+  return plaintextOnly ? "plaintext-only" : "true";
+}
+
 /** A plain text in place: the visitor's own element (its class), made editable. Enter does not break the line. */
 export function LiveText({ bridge, target, value, className }: { bridge: LiveEditorBridge; target: LiveTarget; value: string; className?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -179,7 +190,7 @@ export function LiveText({ bridge, target, value, className }: { bridge: LiveEdi
   return <span
     ref={ref}
     className={`live-editable${className ? ` ${className}` : ""}`}
-    contentEditable="plaintext-only"
+    contentEditable={editableMode()}
     suppressContentEditableWarning
     role="textbox"
     aria-label={liveCopy.targets[target.kind]}
