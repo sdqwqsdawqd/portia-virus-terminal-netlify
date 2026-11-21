@@ -630,7 +630,8 @@ test("D-13b: «Повышение» renders the shared action bar: the branches 
   assert.ok(bar.includes("['requests','ЗАПРОСЫ',ordinaryCount + qualificationCount],['tasks','ЗАДАНИЯ',banks.taskBanks.length],['qualification','КВАЛИФИКАЦИЯ',qualificationCount]"), "the same three branches and counts");
   assert.ok(bar.includes('statusText={message} tone={message ? (note.ok ? "saved" : "error") : ""} '), "the queue message is the polite status of the bar; WR-04: a success is not red");
   // 26.1-16 (owner 2026-11-21, item 13): the one thing in the actions slot is the toggle of the live mode; the draft buttons are still not here
-  assert.ok(bar.includes('actions={<LiveModeToggle on={live} onToggle={() => setLive((current) => !current)} />} />'), "the live toggle is the only action of the bar");
+  // 26.1-27 (owner item 26, WR-03): not on «Запросы» — the queue has no live view
+  assert.ok(bar.includes('actions={branch === "requests" ? undefined : <LiveModeToggle on={live} onToggle={() => setLive((current) => !current)} />} />'), "the live toggle is the only action of the bar, outside «Запросы»");
   for (const gone of ["СОХРАНИТЬ", "ОТМЕНИТЬ", "unsavedCount"]) assert.ok(!bar.includes(gone), `${gone}: no editor draft action on this bar`);
   assert.ok(!promotionMain.includes("promotion-editor-message"), "the old message line is gone");
   assert.doesNotMatch(styles, /\.promotion-editor-message/, "and so is its rule");

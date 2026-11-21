@@ -148,6 +148,16 @@ test("26.1-27 (owner 33): a multi-line place is the visitor's text block: no fra
   assert.ok(rulesOf(".live-surface .assistant-live-bubble .live-rich-edit .formatted-rich-input.is-editor-active").length > 0);
 });
 
+test("26.1-27 (owner 26, WR-03): «Запросы» of «Повышения» has no live toggle; «Задания» and «Квалификация» keep it, and going to «Запросы» turns the mode off", () => {
+  const bar = sliceOf(promotionMain, "<EditorActionBar", "{message && conflict &&");
+  assert.ok(bar.includes('actions={branch === "requests" ? undefined : <LiveModeToggle on={live} onToggle={() => setLive((current) => !current)} />}'), "the toggle stands only outside «Запросы»");
+  assert.equal((promotionMain.match(/<LiveModeToggle\b/g) ?? []).length, 1, "still one toggle on the tab");
+  assert.ok(bar.includes('onClick={() => { setBranch(id); if (id === "requests") { setKind("ordinary"); setSelectedRequestId(""); setLive(false); } setRequestView("queue"); }}'), "«Запросы» opens in its ordinary view: the live mode is off when it is chosen");
+  // the queue is the reviewer's work, not a page of the visitor; its view is never the live surface
+  assert.match(promotionMain, /\{branch === "requests" \? <>\n\s*<div className="promotion-requests-toolbar">/);
+  assert.match(promotionMain, /\{live && <PromotionLiveSurface key=\{branch\} kind=\{branch === "tasks" \? "ordinary" : "qualification"\}/);
+});
+
 test("26.1-27: the new live rules stand before the users-tab block, ui-unify stays last, no font under 11px", () => {
   const raw = read("app/portia.css");
   const usersTab = raw.indexOf("/* users-tab:start");
