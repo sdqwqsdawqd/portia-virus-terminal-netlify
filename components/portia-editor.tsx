@@ -4,7 +4,7 @@ import { ImageFramingEditor } from "@/components/portia-image-framing";
 import { CardTabs, cardTabsCopy, useCardTabSelection } from "@/components/portia-editor-card-tabs";
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { LiveSurface, useLiveMode } from "@/components/portia-editor-live";
+import { AccessLiveTab, LiveSurface, useLiveMode } from "@/components/portia-editor-live";
 import { changedDossierTabs, changedSections, deniedSections, editorSections, revertSections, sectionLabels, type DossierTab, type EditorSection } from "@/lib/editor-changes";
 import { draftEdits, partialSave, rebaseDecision, SaveConflictError, SectionClosedError, saveStatusText, type DraftEdit, type SaveStatus } from "@/lib/editor-save-status";
 import { closedMessage, closedSectionsOf, openTabIds, tabRegistry, type TabDef } from "@/lib/editor-tabs";
@@ -1720,7 +1720,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
         {tab === "access" && canManageEditors && <EditorDraftBar />}
       </EditorDraftBarContext.Provider>
 
-      {tab === "access" && canManageEditors && <EditorAccessManager />}
+      {tab === "access" && canManageEditors && <AccessLiveTab manager={<EditorAccessManager />} />}
       {formatterOpen && formatTarget && !minimized && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onBatch={runBatch} onClose={() => setFormatterOpen(false)} />, document.getElementById("desktop") ?? document.body)}
       {/* Review WR-05: one live region for the save status. On the draft tabs it is the status of the bar; on the other tabs the draft row is not live and this hidden line is. */}
       {!editorSections.some((section) => section === tab) && <p className="sr-only" role="status" aria-live="polite">{`${statusText}${dirty ? `${status === "dirty" ? ":" : ". Не сохранено:"} ${shownChanged.map((id) => sectionLabels[id]).join(", ")}` : ""}`}</p>}

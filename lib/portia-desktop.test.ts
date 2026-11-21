@@ -131,7 +131,8 @@ test("component families import only their own seams and the known shared compon
     // portia-desktop-info: LIVE-02 (26.1-11), the live mode draws the visitor's article of «Информация» and card of «Сводки» on the draft.
     // portia-desktop-dossier: LIVE-02 (26.1-12), the live mode draws the visitor's virus record and scientist document on the draft.
     // portia-desktop-trash: LIVE-02 (26.1-12), the live mode draws the visitor's list rows and viewer of «Корзина» on the draft.
-    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states", "portia-image-framing", "portia-users-tab", "portia-level-picker", "portia-image-rewrite", "portia-icons", "portia-live-edit", "portia-desktop-documents", "portia-desktop-info", "portia-desktop-dossier", "portia-desktop-trash", "portia-virus-card"],
+    // portia-access-gate: owner 2026-11-21 item 13: live «Доступ» shows the visitor's gate screens (AccessGateScreen, no requests).
+    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states", "portia-image-framing", "portia-users-tab", "portia-level-picker", "portia-image-rewrite", "portia-icons", "portia-live-edit", "portia-desktop-documents", "portia-desktop-info", "portia-desktop-dossier", "portia-desktop-trash", "portia-virus-card", "portia-access-gate"],
   } as const;
   for (const [main, family] of [["portia-desktop", desktopFamily], ["portia-editor", editorFamily]] as const) {
     const members = family.map((part) => part.file.replace(/\.tsx$/, ""));

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { AccessGateScreen } from "@/components/portia-access-gate";
 import { GuideApp } from "@/components/portia-desktop-documents";
 import { RowBadges, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
 import { BroadcastCard, BroadcastsHeader, InfoArticle, broadcastTabs } from "@/components/portia-desktop-info";
@@ -10,6 +11,8 @@ import { FormattedTextarea, findFormatField, type FormatTarget } from "@/compone
 import { LevelPicker } from "@/components/portia-level-picker";
 import { LiveEditContext, type LiveEditApi } from "@/components/portia-live-edit";
 import { EmbeddedMediaStrip, FormattedText } from "@/components/portia-virus-card";
+import { accessGateLayout, type AccessGateView } from "@/lib/access-gate-view";
+import type { AccessOrigin } from "@/lib/access-levels";
 import { localDateKey, type BroadcastTab } from "@/lib/broadcasts";
 import type { ImageFraming } from "@/lib/image-framing";
 import {
@@ -193,6 +196,8 @@ export const liveCopy = {
   cardsPick: "Выбрать карточки",
   cardsGroup: "Карточки блока",
   cardsFull: "Выбрано 24",
+  /** «Доступ» (26.1-19): the preview of the visitor's gate screens. */
+  access: { surface: "Экран посетителя", submitNote: "Просмотр: заявка не отправляется" },
 } as const;
 
 /** Everything the editor hands the live mode: the draft and the ways to change it, the format panel, the upload, and the choices the tabs keep. */
@@ -943,4 +948,38 @@ export function LiveRemove({ bridge, item, title }: { bridge: LiveEditorBridge; 
       ]}
     />}
   </span>;
+}
+
+// ---- «Доступ» (26.1-19; owner 2026-11-21, item 13, checkpoint answered: option A) ----
+
+// The one under review in the sense of access is a visitor who files a request. Their screens are code of the site, not data of the draft, so the preview shows them
+// and edits nothing. It makes no request and touches no storage of the device: the screen is handed fixed samples and handlers that only keep what is typed here.
+const accessFormView: AccessGateView = { kind: "decision", decision: { mode: "closed", state: { state: "none" }, allowed: false, level: null, editor: false } };
+
+/**
+ * The tab «Доступ» of the editor: the button «ЖИВОЙ РЕЖИМ» above the accounts of the editors (`manager`, kept mounted so nothing typed there is lost) and, with the mode on,
+ * the screens of the visitor's gate in place of it.
+ */
+export function AccessLiveTab({ manager }: { manager: ReactNode }) {
+  const [on, setOn] = useState(false);
+  const [nickname, setNickname] = useState("");
+  const [origin, setOrigin] = useState<AccessOrigin | null>(null);
+  return <>
+    <div className="etab-actions access-live-bar"><LiveModeToggle on={on} onToggle={() => setOn((current) => !current)} /></div>
+    <div hidden={on}>{manager}</div>
+    {on && <div className="live-surface access-live" data-live-app="access" role="group" aria-label={liveCopy.access.surface}>
+      <div className="access-gate-live">
+        <AccessGateScreen
+          layout={accessGateLayout(accessFormView, true)}
+          checking={false}
+          form={{ nickname, origin, submitting: false, formError: "", fieldErrors: { nickname: false, origin: false } }}
+          onNickname={setNickname}
+          onOrigin={setOrigin}
+          onSubmit={(event) => event.preventDefault()}
+          onRetry={() => undefined}
+          preview={{ note: liveCopy.access.submitNote }}
+        />
+      </div>
+    </div>}
+  </>;
 }

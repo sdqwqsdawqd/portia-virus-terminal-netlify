@@ -11,30 +11,29 @@ import { compactRuns, expandStyles, replaceRichTextRuns } from "./rich-text-styl
 // LIVE-01..05 (26.1-10): the pure model of the live editing mode. The editor shows the visitor's own view of an app on the draft and edits it in place;
 // every function here edits the editor's draft inside one changeDraft call (the draft is already a copy), so one call is one undo step.
 
-/** The apps the live mode covers: the six of the draft (owner 2026-11-20) and «Повышение» (owner 2026-11-21, item 13); the tabs without one are in LIVE_EXCLUDED. */
-export type LiveApp = "guide" | "info" | "broadcasts" | "viruses" | "recycle" | "assistant" | "promo";
+/** The apps the live mode covers: the six of the draft (owner 2026-11-20), «Повышение» and «Доступ» (owner 2026-11-21, item 13); the tabs without one are in LIVE_EXCLUDED. */
+export type LiveApp = "guide" | "info" | "broadcasts" | "viruses" | "recycle" | "assistant" | "promo" | "access";
 
 /**
- * The editor tabs that have no live mode, each with its reason. «Поиск» and «Сотрудники»: the owner's decision (2026-11-20; the drafts of the employees of 26.1-02 stay as they are, OWN-07).
- * «Пользователи», «Доступ»: management tools - there is no view of the visitor that is edited in place, and their data is not in the shared draft.
- * «Повышение» left the list on 2026-11-21 (owner, item 13): the candidate's view of it is edited in place (26.1-16).
+ * The editor tabs that have no live mode, each with its reason: the final boundary of the mode. «Поиск» and «Сотрудники»: the owner's decision (2026-11-20; the drafts of the employees of 26.1-02 stay as they are, OWN-07).
+ * «Пользователи»: the owner's decision (2026-11-21, item 13) - no live mode.
+ * «Повышение» and «Доступ» left the list on 2026-11-21 (owner, item 13): the view of the one under review is shown in place (26.1-16, 26.1-19).
  */
-export const LIVE_EXCLUDED: Readonly<Record<"search" | "employees" | "users" | "access", string>> = {
+export const LIVE_EXCLUDED: Readonly<Record<"search" | "employees" | "users", string>> = {
   search: "решение владельца 2026-11-20",
   employees: "решение владельца 2026-11-20",
-  users: "нет вида участника: инструмент управления, данные не в общем черновике",
-  access: "нет вида участника: инструмент управления, данные не в общем черновике",
+  users: "решение владельца 2026-11-21: без живого режима",
 };
 
 /** The editor tabs that have a live mode, and the app each one shows. */
-export const LIVE_TABS = ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo"] as const;
+export const LIVE_TABS = ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo", "access"] as const;
 export type LiveTab = (typeof LIVE_TABS)[number];
 
-const liveAppOfTab: Record<LiveTab, LiveApp> = { guide: "guide", info: "info", broadcasts: "broadcasts", viruses: "viruses", recycle: "recycle", assistant: "assistant", promo: "promo" };
+const liveAppOfTab: Record<LiveTab, LiveApp> = { guide: "guide", info: "info", broadcasts: "broadcasts", viruses: "viruses", recycle: "recycle", assistant: "assistant", promo: "promo", access: "access" };
 
 /**
  * The editor tabs whose live mode lives in their own seam, not in the surface of the editor: «Повышение» draws its toggle in its own bar and writes the banks of the server (its data is not in the draft),
- * so `useLiveMode` draws no toggle for them (one button per tab, not one in the draft row too). «Доступ» is listed for 26.1-19.
+ * so `useLiveMode` draws no toggle for them (one button per tab, not one in the draft row too). «Доступ» (26.1-19) draws its own toggle too and shows the visitor's gate screens, which edit nothing.
  */
 export const LIVE_SEAM_TABS = ["promo", "access"] as const;
 

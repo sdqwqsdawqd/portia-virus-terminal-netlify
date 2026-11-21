@@ -22,14 +22,14 @@ function draftWithGuide(): PortiaContent {
 }
 
 test("LIVE-01: the live mode knows its tabs; search and employees are not among them", () => {
-  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo"]);
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo", "access"]);
   assert.equal(liveAppForTab("info"), "info", "26.1-11: «Информация» has its live mode");
   assert.equal(liveAppForTab("guide"), "guide");
   assert.equal(liveAppForTab("users"), null);
   assert.equal(liveAppForTab("search"), null, "owner 2026-11-20: no live search");
   assert.equal(liveAppForTab("employees"), null, "owner 2026-11-20: no live employees");
-  // owner 2026-11-21, item 13: «Повышение» has its live mode (26.1-16); «Доступ» goes to 26.1-19
-  assert.deepEqual(Object.keys(LIVE_EXCLUDED).sort(), ["access", "employees", "search", "users"]);
+  // owner 2026-11-21, item 13: «Повышение» has its live mode (26.1-16) and «Доступ» (26.1-19); «Пользователи» stays without one (final boundary)
+  assert.deepEqual(Object.keys(LIVE_EXCLUDED).sort(), ["employees", "search", "users"]);
 });
 
 test("LIVE-02: a section title and a card title change in place and nothing else", () => {
@@ -323,10 +323,10 @@ test("T-26.1-22: the live text reads only textContent, takes a paste as plain te
   assert.ok(seam.includes('"plaintext-only"') && seam.includes('"true"'), "a browser without plaintext-only still edits as plain text");
 });
 
-test("LIVE-04: the live mode covers guide, info, broadcasts, viruses, recycle, assistant and promo (26.1-16) by type; search and employees are excluded", () => {
+test("LIVE-04: the live mode covers guide, info, broadcasts, viruses, recycle, assistant, promo (26.1-16) and access (26.1-19) by type; search, employees and users are excluded", () => {
   const model = read("lib/live-edit.ts");
-  assert.ok(model.includes('export type LiveApp = "guide" | "info" | "broadcasts" | "viruses" | "recycle" | "assistant" | "promo";'));
-  assert.ok(!/LiveApp = [^;]*"(search|employees)"/.test(model));
+  assert.ok(model.includes('export type LiveApp = "guide" | "info" | "broadcasts" | "viruses" | "recycle" | "assistant" | "promo" | "access";'));
+  assert.ok(!/LiveApp = [^;]*"(search|employees|users)"/.test(model));
 });
 
 // ---- 26.1-11: «Информация» и «Сводка» ----
@@ -543,7 +543,7 @@ function draftWithBroadcasts(): PortiaContent {
 }
 
 test("LIVE-01 (26.1-11): «Сводка» has its live mode", () => {
-  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo"]);
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo", "access"]);
   assert.equal(liveAppForTab("broadcasts"), "broadcasts");
 });
 
@@ -897,7 +897,7 @@ function draftWithBin(): PortiaContent {
 
 test("LIVE-01 (26.1-12): the tab «Корзина» has its live mode", () => {
   assert.equal(liveAppForTab("recycle"), "recycle");
-  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo"]);
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo", "access"]);
 });
 
 test("LIVE-02 (26.1-12): the name, the place and the text of a file of the bin change in place; the text is kept whole and keyed like the editor's field", () => {
@@ -1053,14 +1053,15 @@ function draftWithAssistant(): PortiaContent {
   } as unknown as PortiaContent;
 }
 
-test("LIVE-01 (26.1-13, 26.1-16): the live mode has seven apps; the four others are named with the reason", () => {
-  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo"]);
+test("LIVE-01 (26.1-13, 26.1-16, 26.1-19): the live mode has eight apps; the three others are named with the reason", () => {
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo", "access"]);
   assert.equal(liveAppForTab("assistant"), "assistant");
-  for (const tab of ["search", "employees", "users", "access"]) assert.equal(liveAppForTab(tab), null, tab);
+  for (const tab of ["search", "employees", "users"]) assert.equal(liveAppForTab(tab), null, tab);
   assert.equal(liveAppForTab("promo"), "promo", "owner 2026-11-21, item 13");
+  assert.equal(liveAppForTab("access"), "access", "owner 2026-11-21, item 13: the visitor's gate screens");
   assert.match(LIVE_EXCLUDED.search, /решение владельца 2026-11-20/);
   assert.match(LIVE_EXCLUDED.employees, /решение владельца 2026-11-20/);
-  for (const tab of ["users", "access"] as const) assert.match(LIVE_EXCLUDED[tab], /нет вида участника/, tab);
+  assert.match(LIVE_EXCLUDED.users, /решение владельца 2026-11-21: без живого режима/, "owner 2026-11-21, item 13");
   // every tab of the editor is either live or excluded, never both and never neither
   for (const tab of ["viruses", "info", "guide", "broadcasts", "recycle", "search", "assistant", "employees", "users", "promo", "access"]) {
     assert.equal((LIVE_TABS as readonly string[]).includes(tab) !== (tab in LIVE_EXCLUDED), true, tab);
@@ -1238,15 +1239,15 @@ test("LIVE-02 (26.1-13): the live Vivian has the bars of its groups, the cross o
   for (const text of ["Совет", "Фразу обиды", "Фразу бездействия", "Фразу активности"]) assert.ok(seam.includes(`"${text}"`), text);
 });
 
-test("LIVE-01 (26.1-13, 26.1-16): the live surfaces are exactly the live apps: six in the seam of the editor, «Повышение» in its own seam", () => {
+test("LIVE-01 (26.1-13, 26.1-16, 26.1-19): the live surfaces are exactly the live apps: six of the draft and «Доступ» in the seam of the editor, «Повышение» in its own seam", () => {
   const seam = read("components/portia-editor-live.tsx");
   const promo = read("components/portia-promotion-editor-main.tsx");
   const surfaces = [...seam.matchAll(/data-live-app="([a-z]+)"/g), ...promo.matchAll(/data-live-app="([a-z]+)"/g)].map((match) => match[1]).sort();
   const apps = [...new Set((LIVE_TABS as readonly string[]).map((tab) => liveAppForTab(tab)))].sort();
   assert.deepEqual(surfaces, apps);
-  assert.equal(apps.length, 7);
-  // the six apps of the draft are made by createLiveApi; «Повышение» writes the banks of the server, so its tools are its own (26.1-16)
-  assert.deepEqual([...seam.matchAll(/createLiveApi\("([a-z]+)"/g)].map((match) => match[1]).sort(), apps.filter((app) => app !== "promo"), "every surface makes the tools of its own app");
+  assert.equal(apps.length, 8);
+  // the six apps of the draft are made by createLiveApi; «Повышение» writes the banks of the server, so its tools are its own (26.1-16); «Доступ» edits nothing (26.1-19)
+  assert.deepEqual([...seam.matchAll(/createLiveApi\("([a-z]+)"/g)].map((match) => match[1]).sort(), apps.filter((app) => app !== "promo" && app !== "access"), "every surface makes the tools of its own app");
   assert.equal((seam.match(/LiveEditContext\.Provider value=/g) ?? []).length, 6, "one provider per live app");
   // the toggle is drawn for a tab only through liveAppForTab
   assert.match(seam, /const app = liveAppForTab\(tab\);\n  const on = app !== null && enabled\.includes\(tab\);/);
@@ -1277,11 +1278,11 @@ test("LIVE-04 (26.1-14): the context has one provider in all of components/, and
   assert.match(read("components/portia-desktop.tsx"), /import\("@\/components\/portia-editor"\)/);
 });
 
-test("LIVE-04 (26.1-14, 26.1-16): the live mode exists for exactly the seven tabs and for no other tab of the editor", () => {
-  const live = ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo"];
-  assert.equal(LIVE_TABS.length, 7);
+test("LIVE-04 (26.1-14, 26.1-16, 26.1-19): the live mode exists for exactly the eight tabs and for no other tab of the editor", () => {
+  const live = ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo", "access"];
+  assert.equal(LIVE_TABS.length, 8);
   for (const tab of live) assert.notEqual(liveAppForTab(tab), null, tab);
-  for (const tab of ["search", "employees", "users", "access"]) assert.equal(liveAppForTab(tab), null, tab);
+  for (const tab of ["search", "employees", "users"]) assert.equal(liveAppForTab(tab), null, tab);
 });
 
 test("LIVE-05 (26.1-14): no live surface and no live branch of the visitor's components turns the embedding of media off", () => {
@@ -1311,6 +1312,7 @@ test("LIVE-01 (26.1-16): «Повышение» has its live mode; its toggle is
   assert.equal(liveAppForTab("promo"), "promo");
   assert.deepEqual([...LIVE_SEAM_TABS], ["promo", "access"]);
   assert.equal("promo" in LIVE_EXCLUDED, false);
+  assert.equal("access" in LIVE_EXCLUDED, false, "26.1-19: «Доступ» left the list");
   const seam = read("components/portia-editor-live.tsx");
   const mode = seam.slice(seam.indexOf("export function useLiveMode"), seam.indexOf("export function LiveModeToggle"));
   assert.match(mode, /LIVE_SEAM_TABS/, "useLiveMode knows the tabs whose toggle lives in their own seam");
@@ -1419,4 +1421,48 @@ test("LIVE-01 (26.1-16): the live styles of «Повышения» stand before 
   assert.ok(css.indexOf("/* users-tab:start") < css.indexOf("/* ui-unify:start"), "users-tab stands before ui-unify");
   const block = css.slice(at, css.indexOf("/* users-tab:start"));
   assert.doesNotMatch(block, /font(?:-size)?:[^;}]*\b(?:9|10)px/);
+});
+
+// ---- 26.1-19: the live «Доступ» as the visitor sees it (owner 2026-11-21, item 13; checkpoint answered, option A: the screens are shown, their texts are code and are not edited) ----
+
+const sliceOf = (text: string, from: string) => {
+  const start = text.indexOf(from);
+  assert.ok(start >= 0, from);
+  const rest = text.slice(start + from.length);
+  const next = rest.search(/\n(?:export )?(?:function|const|type) /);
+  return text.slice(start, next < 0 ? text.length : start + from.length + next);
+};
+
+test("LIVE-01 (26.1-19): «Доступ» has its live mode; the toggle is drawn by its own seam and the tab row wraps the accounts of the editors", () => {
+  assert.equal(liveAppForTab("access"), "access");
+  assert.equal("access" in LIVE_EXCLUDED, false);
+  assert.deepEqual(Object.keys(LIVE_EXCLUDED).sort(), ["employees", "search", "users"], "owner 2026-11-21, item 13: the final boundary");
+  const seam = read("components/portia-editor-live.tsx");
+  assert.equal((seam.match(/<LiveModeToggle\b/g) ?? []).length, 2, "the draft row's toggle and the one of «Доступа»");
+  const tab = sliceOf(seam, "export function AccessLiveTab");
+  assert.match(tab, /<LiveModeToggle\b/);
+  assert.match(tab, /\{manager\}/, "the accounts of the editors stay the content of the tab");
+  assert.match(tab, /data-live-app="access"/);
+  const editor = read("components/portia-editor.tsx");
+  assert.equal((editor.match(/<AccessLiveTab manager=\{<EditorAccessManager \/>\} \/>/g) ?? []).length, 1);
+  assert.equal((editor.match(/<EditorAccessManager \/>/g) ?? []).length, 1, "the manager is rendered only through the live tab");
+});
+
+test("LIVE-02/04 (26.1-19, T-26.1-46): the live preview of the gate makes no request and touches no storage; the gate keeps them", () => {
+  const seam = read("components/portia-editor-live.tsx");
+  const tab = sliceOf(seam, "export function AccessLiveTab");
+  assert.doesNotMatch(tab, /fetch\(|localStorage|sessionStorage|document\.cookie|XMLHttpRequest|sendBeacon/);
+  assert.match(tab, /<AccessGateScreen\b/);
+  assert.match(tab, /onSubmit=\{\(event\) => event\.preventDefault\(\)\}/, "a submit sends nothing");
+  assert.match(tab, /preview=\{/, "the submit button is locked");
+  const gate = read("components/portia-access-gate.tsx");
+  const screen = sliceOf(gate, "export function AccessGateScreen");
+  assert.doesNotMatch(screen, /fetch\(|localStorage|sessionStorage|useEffect|document\./, "the extracted screen only draws and calls what it is given");
+  assert.match(gate, /export function AccessGateScreen\(/);
+  assert.match(gate, /<AccessGateScreen\b/, "the gate draws its card by the extracted screen");
+  const live = sliceOf(gate, "export function PortiaAccessGate");
+  for (const request of ['fetch("/api/access/status"', 'fetch("/api/access/request"', "clearDeviceContentCaches", "claimApprovedNotice", "purgeLegacyDeviceCaches"]) assert.ok(live.includes(request), `the gate keeps ${request}`);
+  assert.match(gate, /disabled=\{form\.submitting \|\| !!preview\}/);
+  // without the preview the ids and the markup are the gate's own
+  assert.match(gate, /const prefix = preview \? "access-preview" : "access";/);
 });
