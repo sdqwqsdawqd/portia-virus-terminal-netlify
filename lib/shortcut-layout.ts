@@ -132,6 +132,66 @@ export function snapShortcutPosition(
   return { x: inset + column * (cell.width + gap), y: inset + row * (cell.height + gap) };
 }
 
+const cellBlocked = (point: { x: number; y: number }, cell: ShortcutCell, blockers: readonly Rect[]) => blockers.some((blocker) => overlaps({ ...point, ...cell }, blocker));
+
+/**
+ * 26.1-REVIEW-2 WR-05: with the grid on, the cell a shortcut is dropped into is the nearest one that no other shortcut (or obstacle) covers, so two shortcuts never share a cell
+ * and the result is always a cell of the grid (no clamp afterwards that could push it off the grid). `blockers` are the rectangles of the other shortcuts and of the assistant and
+ * the format button, in the coordinates of the area; ties go to the upper row, then the left column. null when every cell is taken.
+ */
+export function nearestFreeGridCell(
+  position: { x: number; y: number },
+  cell: ShortcutCell,
+  area: { width: number; height: number },
+  blockers: readonly Rect[],
+  inset = 8,
+  gap = 8,
+): { x: number; y: number } | null {
+  const { columns, rows } = shortcutGridSize(cell, area, inset, gap);
+  const x = finiteOr(position.x, inset);
+  const y = finiteOr(position.y, inset);
+  let best: { x: number; y: number } | null = null;
+  let bestDistance = Infinity;
+  for (let row = 0; row < rows; row += 1) for (let column = 0; column < columns; column += 1) {
+    const point = { x: inset + column * (cell.width + gap), y: inset + row * (cell.height + gap) };
+    if (cellBlocked(point, cell, blockers)) continue;
+    const distance = Math.hypot(point.x - x, point.y - y);
+    if (distance < bestDistance) { best = point; bestDistance = distance; }
+  }
+  return best;
+}
+
+/**
+ * The free cell an Alt+Arrow press goes to (26.1-REVIEW-2 WR-05): from the cell `from` is in, `cells` steps in the direction `step` (each -1, 0 or 1); a cell that is taken is jumped over to the
+ * next free one in the same direction. A step that would leave the grid falls back to the farthest free cell short of the full step. null when there is no free cell that way (the shortcut stays).
+ */
+export function freeGridCellAlong(
+  from: { x: number; y: number },
+  step: { x: number; y: number },
+  cells: number,
+  cell: ShortcutCell,
+  area: { width: number; height: number },
+  blockers: readonly Rect[],
+  inset = 8,
+  gap = 8,
+): { x: number; y: number } | null {
+  const { columns, rows } = shortcutGridSize(cell, area, inset, gap);
+  const origin = snapShortcutPosition(from, cell, area, inset, gap);
+  const column0 = Math.round((origin.x - inset) / (cell.width + gap));
+  const row0 = Math.round((origin.y - inset) / (cell.height + gap));
+  const start = Math.max(1, Math.floor(cells));
+  const longest = Math.max(columns, rows);
+  const counts = [...Array.from({ length: longest - start + 1 }, (_, index) => start + index), ...Array.from({ length: start - 1 }, (_, index) => start - 1 - index)];
+  for (const count of counts) {
+    const column = column0 + Math.sign(step.x) * count;
+    const row = row0 + Math.sign(step.y) * count;
+    if (column < 0 || column >= columns || row < 0 || row >= rows) continue;
+    const point = { x: inset + column * (cell.width + gap), y: inset + row * (cell.height + gap) };
+    if (!cellBlocked(point, cell, blockers)) return point;
+  }
+  return null;
+}
+
 /**
  * Puts every shortcut that has a position into its own cell of the grid: the nearest free one, the shortcuts in the given order
  * (the earlier one picks first, ties go to the upper row, then the left column). Shortcuts without a position are left out.

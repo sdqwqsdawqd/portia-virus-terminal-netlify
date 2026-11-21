@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { PortiaIcon, type PortiaIconName } from "@/components/portia-icons";
 import { appMeta, type AppId } from "@/components/portia-desktop-window";
 import { originOf, type OpenOrigin } from "@/lib/window-open";
-import { alignShortcutsToGrid, clampShortcutPosition, placeShortcuts, shortcutCell, shortcutDropArea, snapShortcutPosition, type Rect, type ShortcutCell } from "@/lib/shortcut-layout";
+import { alignShortcutsToGrid, clampShortcutPosition, freeGridCellAlong, nearestFreeGridCell, placeShortcuts, shortcutCell, shortcutDropArea, snapShortcutPosition, type Rect, type ShortcutCell } from "@/lib/shortcut-layout";
 
 export type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "guide" | "promotion" | "settings" | "charter" | "sheet" | "trash" | "template";
 export type ShortcutPosition = { x: number; y: number };
@@ -158,6 +158,15 @@ function shortcutObstacles(workspace: HTMLElement): Rect[] {
   });
 }
 
+// The other shortcuts as rectangles in the workspace: with the grid on, the cell of one of them is not free for the shortcut that is moved (26.1-REVIEW-2 WR-05).
+function shortcutNeighbours(workspace: HTMLElement, ownId: string): Rect[] {
+  const workspaceRect = workspace.getBoundingClientRect();
+  return Array.from(workspace.querySelectorAll<HTMLElement>("[data-shortcut]")).filter((element) => element.dataset.shortcut !== ownId).flatMap((element): Rect[] => {
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 ? [{ x: rect.left - workspaceRect.left, y: rect.top - workspaceRect.top, width: rect.width, height: rect.height }] : [];
+  });
+}
+
 // Alt+Arrow moves a shortcut by this many px (Shift: the large step); the drag it replaces has no other keyboard route.
 const keyboardMoveStep = 16;
 const keyboardMoveLargeStep = 64;
@@ -260,8 +269,11 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, placed, onMov
       // On drop the shortcut also leaves the assistant and the format button free.
       const obstacles = shortcutObstacles(operation.workspace);
       const bounds = dropBounds(operation.workspace, operation.target);
-      const dropped = grid ? snapShortcutPosition(operation.last, gridCellOf(placed?.cell), bounds.area) : operation.last;
-      onMove(shortcutId, clampShortcutPosition(dropped, bounds.size, bounds.area, obstacles));
+      // With the grid on the drop ends in the nearest FREE cell (no other shortcut, no obstacle in it), which is a cell of the grid, so no clamp follows that could push it off the grid;
+      // only when every cell is taken does the old snap-and-clamp stand (26.1-REVIEW-2 WR-05).
+      const gridCell = gridCellOf(placed?.cell);
+      const landing = grid ? nearestFreeGridCell(operation.last, gridCell, bounds.area, [...obstacles, ...shortcutNeighbours(operation.workspace, shortcutId)]) ?? clampShortcutPosition(snapShortcutPosition(operation.last, gridCell, bounds.area), bounds.size, bounds.area, obstacles) : clampShortcutPosition(operation.last, bounds.size, bounds.area, obstacles);
+      onMove(shortcutId, landing);
       suppressActivation.current = true;
       window.setTimeout(() => { suppressActivation.current = false; }, 0);
       setDropping(true);
@@ -293,16 +305,15 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, placed, onMov
     // With the grid on one press is one cell (Shift: four), counted from the cell the shortcut is in now.
     const cell = gridCellOf(placed?.cell);
     const cells = event.shiftKey ? 4 : 1;
-    const base = grid ? snapShortcutPosition(from, cell, bounds.area) : from;
-    const target = grid
-      ? snapShortcutPosition({ x: base.x + Math.sign(deltaX) * cells * (cell.width + shortcutGap), y: base.y + Math.sign(deltaY) * cells * (cell.height + shortcutGap) }, cell, bounds.area)
-      : { x: from.x + deltaX, y: from.y + deltaY };
-    onMove(shortcutId, clampShortcutPosition(
-      target,
-      bounds.size,
-      bounds.area,
-      shortcutObstacles(workspace),
-    ));
+    if (grid) {
+      // A taken cell is jumped over to the next free one that way; with none, the shortcut stays and says so (26.1-REVIEW-2 WR-05).
+      const free = freeGridCellAlong(from, { x: Math.sign(deltaX), y: Math.sign(deltaY) }, cells, cell, bounds.area, [...shortcutObstacles(workspace), ...shortcutNeighbours(workspace, shortcutId)]);
+      if (!free) { onAnnounce?.(`Ярлык «${label}» остался на месте: клетка занята`); return; }
+      onMove(shortcutId, free);
+      onAnnounce?.(`Ярлык «${label}» перемещён`);
+      return;
+    }
+    onMove(shortcutId, clampShortcutPosition({ x: from.x + deltaX, y: from.y + deltaY }, bounds.size, bounds.area, shortcutObstacles(workspace)));
     onAnnounce?.(`Ярлык «${label}» перемещён`);
   };
 

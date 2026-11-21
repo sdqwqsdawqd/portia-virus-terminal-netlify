@@ -281,3 +281,44 @@ test("the shortcut seam snaps a drop and an Alt+Arrow step to the grid only whil
   assert.ok(/const grid = useContext\(ShortcutGridContext\)/.test(shortcuts));
   assert.ok(shortcuts.includes("grid ?"), "off: the old free drop stays");
 });
+
+// 26.1-REVIEW-2 WR-05: with the grid on, a drop or an Alt+Arrow step never ends in a cell another shortcut stands in, and never leaves the grid.
+const cellAt = (column: number, row: number) => ({ x: 8 + column * stepX, y: 8 + row * stepY });
+const rectAt = (column: number, row: number) => ({ ...cellAt(column, row), ...cell });
+const maxColumnIndex = Math.floor((gridArea.width - 16 + 8) / stepX) - 1;
+const maxRowIndex = Math.floor((gridArea.height - 16 + 8) / stepY) - 1;
+
+test("nearestFreeGridCell: a free cell is the nearest cell, a taken one gives way to the nearest free one", () => {
+  assert.deepEqual(layout.nearestFreeGridCell(cellAt(2, 1), cell, gridArea, []), cellAt(2, 1), "nothing in the way: the cell itself");
+  assert.deepEqual(layout.nearestFreeGridCell({ x: cellAt(2, 1).x + 10, y: cellAt(2, 1).y + 5 }, cell, gridArea, [rectAt(1, 1), rectAt(0, 0)]), cellAt(2, 1), "a taken cell elsewhere does not matter");
+  const dropped = layout.nearestFreeGridCell(cellAt(2, 1), cell, gridArea, [rectAt(2, 1)]);
+  assert.notDeepEqual(dropped, cellAt(2, 1), "the cell of another shortcut is not taken");
+  assert.ok(dropped && Math.hypot(dropped.x - cellAt(2, 1).x, dropped.y - cellAt(2, 1).y) <= stepX, "one cell away at most");
+  assert.deepEqual(dropped, cellAt(2, 0), "ties go to the upper row");
+});
+
+test("nearestFreeGridCell: the result is always a cell of the grid, even when an obstacle sits where the drop is", () => {
+  const obstacle = { x: cellAt(3, 2).x + 20, y: cellAt(3, 2).y + 20, width: 40, height: 40 };
+  const dropped = layout.nearestFreeGridCell(cellAt(3, 2), cell, gridArea, [obstacle]);
+  assert.ok(dropped);
+  assert.equal((dropped.x - 8) % stepX, 0, "on a column of the grid");
+  assert.equal((dropped.y - 8) % stepY, 0, "on a row of the grid");
+  assert.ok(![obstacle].some((blocker) => dropped.x < blocker.x + blocker.width && blocker.x < dropped.x + cell.width && dropped.y < blocker.y + blocker.height && blocker.y < dropped.y + cell.height), "off the obstacle");
+});
+
+test("nearestFreeGridCell: no free cell is null, junk is held in the area", () => {
+  const all = Array.from({ length: (maxColumnIndex + 1) * (maxRowIndex + 1) }, (_, index) => rectAt(index % (maxColumnIndex + 1), Math.floor(index / (maxColumnIndex + 1))));
+  assert.equal(layout.nearestFreeGridCell(cellAt(0, 0), cell, gridArea, all), null);
+  assert.deepEqual(layout.nearestFreeGridCell({ x: Number.NaN, y: -900 }, cell, gridArea, []), cellAt(0, 0));
+});
+
+test("freeGridCellAlong: one step goes to the next cell, a taken cell is jumped over, the edge stops it", () => {
+  const right = { x: 1, y: 0 };
+  assert.deepEqual(layout.freeGridCellAlong(cellAt(1, 1), right, 1, cell, gridArea, []), cellAt(2, 1));
+  assert.deepEqual(layout.freeGridCellAlong(cellAt(1, 1), right, 1, cell, gridArea, [rectAt(2, 1)]), cellAt(3, 1), "the taken cell is jumped over");
+  assert.deepEqual(layout.freeGridCellAlong(cellAt(1, 1), { x: 0, y: -1 }, 1, cell, gridArea, [rectAt(1, 0)]), null, "the top row is taken and nothing is above it: the shortcut stays");
+  assert.deepEqual(layout.freeGridCellAlong(cellAt(maxColumnIndex, 1), right, 1, cell, gridArea, []), null, "the last column: no cell that way");
+  assert.deepEqual(layout.freeGridCellAlong(cellAt(maxColumnIndex - 1, 1), right, 4, cell, gridArea, []), cellAt(maxColumnIndex, 1), "a long step past the edge ends in the last free cell short of it");
+  assert.deepEqual(layout.freeGridCellAlong(cellAt(0, 0), right, 4, cell, gridArea, []), cellAt(4, 0), "a long step is four cells");
+  assert.deepEqual(layout.freeGridCellAlong({ x: cellAt(1, 1).x + 12, y: cellAt(1, 1).y - 9 }, right, 1, cell, gridArea, []), cellAt(2, 1), "counted from the cell the shortcut is in now");
+});
