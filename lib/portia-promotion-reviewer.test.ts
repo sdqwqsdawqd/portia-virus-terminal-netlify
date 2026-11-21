@@ -406,3 +406,16 @@ test("26.1 WR-02: the chosen questions are compared with what the preview showed
   const confirm = route.slice(route.indexOf("const token = typeof body.preview"));
   assert.match(confirm, /synced\.failure === "changed"\s*\? Response\.json\(\{ error: "Вопросы набора изменились после предпросмотра\./);
 });
+
+test("26.1-17 L1: the body limit is checked on the raw text before the JSON is parsed, for every action, and the selection is bounded", () => {
+  const route = bankRouteSource();
+  const post = route.slice(route.indexOf("export async function POST"));
+  const authAt = post.indexOf("requirePromotionReviewer(");
+  const limitAt = post.indexOf("bankBodyTooLarge(");
+  const parseAt = post.indexOf("parseJsonObject(");
+  assert.ok(authAt !== -1 && limitAt > authAt && parseAt > limitAt, "permissions first, then the size, then the parse");
+  assert.match(post, /bankBodyTooLarge\(text\)\) return Response\.json\(\{ error: "Данные слишком велики\." \}, \{ status: 413/);
+  assert.ok(!route.includes("JSON.stringify(body).length"), "the late size check after the parse is replaced by the early one");
+  assert.match(post, /manualIds === "invalid" \|\| replaceId\.length > 64\) return Response\.json\([^\n]*code: "invalid-selection" \}, \{ status: 400/);
+  assert.match(post, /replaceId\.length > 64/);
+});

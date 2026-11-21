@@ -14,6 +14,7 @@ import { qualificationPromotionTransitions } from "@/lib/portia-promotion";
 import { createPreviewToken, verifyPreviewToken } from "@/lib/portia-promotion-preview-token";
 import { pickAutoQualificationSet, qualificationSetMessages, qualificationSetProblem, qualificationTestQuotas } from "@/lib/portia-qualification-builder";
 import { qualificationRulesSaveFailure, qualificationRulesText } from "@/lib/portia-qualification-rules";
+import { bankBodyTooLarge, parseManualIds } from "@/lib/promotion-bank-request";
 import { parseJsonObject } from "@/lib/request-json";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -91,7 +92,10 @@ export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient();
   const auth = await requirePromotionReviewer(supabase);
   if (auth.status !== "allowed") return denied(auth.status);
-  const body = parseJsonObject(await request.text());
+  // 26.1-17 L1: the size is checked on the raw text, before the JSON is parsed, for every action (preview and confirm included).
+  const text = await request.text();
+  if (bankBodyTooLarge(text)) return Response.json({ error: "Данные слишком велики." }, { status: 413, headers: noStoreHeaders });
+  const body = parseJsonObject(text);
   if (!body || typeof body.action !== "string") return Response.json({ error: "Некорректные данные." }, { status: 400, headers: noStoreHeaders });
 
   if (body.action === "preview" || body.action === "confirm") {
@@ -102,9 +106,11 @@ export async function POST(request: Request) {
     if (!kind || !bank) return Response.json({ error: "Банк не найден." }, { status: 404, headers: noStoreHeaders });
     const secret = promotionDeviceSecret();
     if (body.action === "preview") {
+      // 26.1-17 L1: the selection is bounded (at most 100 ids of 64 characters; replaceId of 64 characters) before anything is looked up.
+      const manualIds = parseManualIds(body.manualIds);
+      const replaceId = typeof body.replaceId === "string" ? body.replaceId : "";
+      if (manualIds === "invalid" || replaceId.length > 64) return Response.json({ error: "Некорректный выбор вопросов.", code: "invalid-selection" }, { status: 400, headers: noStoreHeaders });
       try {
-        const manualIds = Array.isArray(body.manualIds) && body.manualIds.every((id) => typeof id === "string") ? body.manualIds : undefined;
-        const replaceId = typeof body.replaceId === "string" ? body.replaceId : "";
         const priorIds = replaceId && typeof body.preview === "string"
           ? verifyPreviewToken(body.preview, { kind, bankId, version: bank.version, now: Date.now() }, secret)
           : null;
@@ -167,7 +173,6 @@ export async function POST(request: Request) {
       : Response.json({ id: data, ...afterConfirm }, { status: 201, headers: noStoreHeaders });
   }
 
-  if (JSON.stringify(body).length > 64 * 1024) return Response.json({ error: "Данные слишком велики." }, { status: 413, headers: noStoreHeaders });
   // Rules text of a transition (quick 261117-px5). Not part of the frozen question set: the bank version, and so an open preview, stay valid.
   if (body.action === "save-qualification-rules") {
     const transitionId = typeof body.transitionId === "string" && qualificationPromotionTransitions.some((item) => item.transitionId === body.transitionId) ? body.transitionId : "";
