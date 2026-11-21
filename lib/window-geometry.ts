@@ -74,16 +74,3 @@ export function refitGeometry(geometry: WindowGeometry, bounds: Bounds, minimum:
     height: fitted.height,
   };
 }
-
-export type PreviewRect = { left: number; top: number; width: number; height: number };
-
-/** Where the window sits on the taskbar preview map, in percent of the workspace; values below 0 or above 100 mean beyond the edge. */
-export function previewRect(geometry: WindowGeometry | undefined, bounds: Bounds): PreviewRect {
-  if (!geometry || bounds.width <= 0 || bounds.height <= 0) return { left: 0, top: 0, width: 100, height: 100 };
-  return {
-    left: (geometry.x / bounds.width) * 100,
-    top: (geometry.y / bounds.height) * 100,
-    width: (geometry.width / bounds.width) * 100,
-    height: (geometry.height / bounds.height) * 100,
-  };
-}

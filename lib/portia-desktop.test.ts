@@ -527,12 +527,14 @@ test("OWN-06: the taskbar marks a window whose title bar is out of reach, and a 
   assert.ok(mark.includes("border-bottom: 2px dashed var(--teal)"), "a dashed accent mark, no new colour");
 });
 
-test("OWN-06: the taskbar preview is its own seam with a map, РАЗВЕРНУТЬ and ЗАКРЫТЬ", () => {
+test("OWN-06: the taskbar preview is its own seam with a small copy of the window, РАЗВЕРНУТЬ and ЗАКРЫТЬ", () => {
   const seam = desktopFamily.find((part) => part.file === "portia-desktop-taskbar.tsx")?.text ?? "";
   assert.ok(seam.includes("export function TaskbarPreview"));
   assert.ok(seam.includes("export function useTaskbarPreview"));
   assert.ok(seam.includes('role="group" aria-label={`${label}: окно`}'));
-  assert.ok(seam.includes("previewRect(geometry, bounds)"));
+  assert.ok(!seam.includes("previewRect") && !seam.includes("taskbar-preview-map"), "owner 21: no map of the screen, the window itself is shown");
+  assert.ok(seam.includes("cloneNode(true)") && seam.includes("export function previewCloneOf"));
+  assert.ok(seam.includes('className="taskbar-preview-thumb"') && seam.includes('aria-hidden="true"'));
   assert.ok(seam.includes("titlebarReachable("));
   assert.ok(seam.includes("За краем экрана"));
   assert.ok(seam.includes('<button type="button" onClick={onMaximize}>РАЗВЕРНУТЬ</button>'));
@@ -540,6 +542,21 @@ test("OWN-06: the taskbar preview is its own seam with a map, РАЗВЕРНУТ
   assert.ok(seam.includes('event.key !== "Escape"'));
   assert.ok(seam.includes("PREVIEW_SHOW_MS = 300") && seam.includes("PREVIEW_HIDE_MS = 200"));
   assert.ok(!seam.includes("localStorage") && !seam.includes("sessionStorage"), "the preview stores nothing (STAB-DESK-07)");
+});
+
+test("OWN-06 owner 21: the copy of the window is only a picture: inert, no ids, no embedded documents, refreshed at most once a second", () => {
+  const seam = desktopFamily.find((part) => part.file === "portia-desktop-taskbar.tsx")?.text ?? "";
+  const clone = seam.slice(seam.indexOf("export function previewCloneOf"), seam.indexOf("type TaskbarPreviewProps"));
+  assert.ok(clone.includes('copy.setAttribute("inert", "")') && clone.includes('copy.setAttribute("aria-hidden", "true")'));
+  for (const name of ["id", "name", "for", "autofocus", "tabindex", "data-window-app"]) assert.ok(seam.includes(`"${name}"`), `the copy loses ${name}`);
+  assert.ok(seam.includes('REPLACED_TAGS = ["iframe", "video", "canvas", "embed", "object"]'));
+  assert.ok(clone.includes("taskbar-preview-placeholder") && clone.includes("node.replaceWith(stub)"));
+  assert.ok(seam.includes("PREVIEW_REFRESH_MS = 1000") && seam.includes("window.setInterval(paint, PREVIEW_REFRESH_MS)"));
+  assert.ok(seam.includes("window.clearInterval(timer)") && seam.includes("canvas.replaceChildren()"), "the copy leaves with the preview");
+  assert.ok(seam.includes("lastPreviewClone") && seam.includes("minimized ? lastPreviewClone.get(app)"), "a minimized window shows its last picture");
+  assert.ok(seam.includes("taskbar-preview-fallback"), "no window and no picture: the icon of the app");
+  const preview = seam.slice(seam.indexOf("export function TaskbarPreview"));
+  assert.ok(!seam.includes("localStorage") && !seam.includes("fetch(") && !preview.includes("useState"), "no storage, no request, no new state");
 });
 
 test("OWN-06: a taskbar button and its preview share one span.taskbar-entry; hover, focus and Escape drive the preview", () => {
@@ -591,9 +608,12 @@ test("OWN-06: the preview CSS: above the taskbar, 220px, panel colours, accent f
   const preview = rule(".taskbar-preview");
   assert.ok(preview.includes("bottom: calc(100% + 6px)") && preview.includes("width: 220px"));
   assert.ok(preview.includes("background: var(--panel)") && preview.includes("border: 1px solid var(--line)") && preview.includes("box-shadow: 0 22px 60px rgba(0,0,0,.55)"));
-  assert.ok(rule(".taskbar-preview-map").includes("overflow: hidden") && rule(".taskbar-preview-map").includes("padding: 12px"));
-  assert.ok(rule(".taskbar-preview-screen").includes("overflow: visible"));
-  assert.ok(rule(".taskbar-preview-window").includes("var(--teal)"));
+  const thumb = rule(".taskbar-preview-thumb");
+  assert.ok(thumb.includes("overflow: hidden") && thumb.includes("pointer-events: none") && thumb.includes("contain: strict"), "the frame of the copy is closed and takes no pointer");
+  assert.ok(rule(".taskbar-preview-canvas, .taskbar-preview-canvas *").includes("animation: none !important") && rule(".taskbar-preview-canvas, .taskbar-preview-canvas *").includes("transition: none !important"));
+  assert.ok(styles.includes(".taskbar-preview-placeholder {"));
+  assert.ok(styles.indexOf(".taskbar-preview-thumb {") < styles.indexOf("users-tab:start"), "new rules stand before the users-tab block");
+  assert.ok(!styles.includes(".taskbar-preview-map") && !styles.includes(".taskbar-preview-window"), "the map is gone");
   assert.ok(rule(".taskbar-preview-actions button").includes("height: 28px"));
   assert.ok(styles.includes('html[data-motion="full"] .taskbar-preview {'), "the fade is only for full motion");
   assert.ok(styles.includes("  .taskbar-preview { display: none; }"), "phone: no preview");

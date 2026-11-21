@@ -1377,16 +1377,23 @@ html[data-motion="full"] .boot-lines p { clip-path: inset(0 100% 0 0); animation
 @media (width > 900px) {
   .taskbar-app[data-unreachable]::before { content: ""; position: absolute; left: 10px; right: 10px; bottom: -4px; border-bottom: 2px dashed var(--teal); pointer-events: none; }
 }
-/* OWN-06: the preview of a taskbar window: the window on a small map of the screen, РАЗВЕРНУТЬ and ЗАКРЫТЬ. */
+/* OWN-06: the preview of a taskbar window: a small copy of the window, РАЗВЕРНУТЬ and ЗАКРЫТЬ. */
 .taskbar-entry { position: relative; display: flex; }
 .taskbar-preview { position: absolute; z-index: 5; left: 0; bottom: calc(100% + 6px); width: 220px; display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-window); background: var(--panel); box-shadow: 0 22px 60px rgba(0,0,0,.55); color: oklch(.918 calc(.013 * var(--accent-chroma)) var(--accent-hue)); cursor: default; }
 .taskbar-preview::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 8px; }
 .taskbar-preview-head { display: flex; align-items: center; gap: 8px; min-width: 0; font: 700 12px var(--display); letter-spacing: .04em; }
 .taskbar-preview-head strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: inherit; }
-.taskbar-preview-map { position: relative; margin: 0 -12px; padding: 12px; overflow: hidden; }
-.taskbar-preview-screen { position: relative; width: 100%; overflow: visible; border: 1px solid var(--line-bright); background: rgba(var(--desktop-glow), .05); }
-.taskbar-preview-window { position: absolute; box-sizing: border-box; border: 1.5px solid var(--teal); background: var(--teal-soft); }
-.taskbar-preview-window[data-minimized] { border-style: dashed; opacity: .7; }
+/* Owner 21: the frame holds a small copy of the window (scaled by the seam, size set inline once the copy is taken); only a picture: no input, no animation. */
+.taskbar-preview-thumb { position: relative; width: 192px; height: 108px; margin: 0 auto; overflow: hidden; contain: strict; pointer-events: none; outline: 1px solid var(--line-bright); background: rgba(var(--desktop-glow), .05); }
+.taskbar-preview-thumb[data-minimized] { opacity: .7; outline-style: dashed; }
+.taskbar-preview-fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--teal); }
+.taskbar-preview-fallback svg { width: 40px; height: 40px; }
+.taskbar-preview-thumb[data-live] .taskbar-preview-fallback { display: none; }
+.taskbar-preview-canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.taskbar-preview-canvas, .taskbar-preview-canvas * { animation: none !important; transition: none !important; caret-color: transparent; }
+.taskbar-preview-canvas > .app-window { position: absolute !important; inset: 0 !important; width: 100% !important; height: 100% !important; margin: 0 !important; transform: none !important; translate: none !important; scale: none !important; }
+.taskbar-preview-placeholder { position: relative; display: inline-block; box-sizing: border-box; border: 1px dashed var(--line-bright); background: rgba(var(--desktop-glow), .06); vertical-align: top; }
+.taskbar-preview-placeholder::before { content: ""; position: absolute; left: 50%; top: 50%; width: 22%; max-width: 280px; aspect-ratio: 4 / 5; translate: -50% -50%; border: 6px solid var(--line-bright); background: linear-gradient(var(--line-bright), var(--line-bright)) 50% 28% / 56% 5% no-repeat, linear-gradient(var(--line-bright), var(--line-bright)) 50% 48% / 56% 5% no-repeat, linear-gradient(var(--line-bright), var(--line-bright)) 50% 68% / 38% 5% no-repeat; }
 .taskbar-preview-note { margin: 0; color: var(--teal); font: 700 11px var(--sans); letter-spacing: .04em; }
 .taskbar-preview-actions { display: flex; gap: 6px; }
 .taskbar-preview-actions button { flex: 1; height: 28px; padding: 0 8px; border: 1px solid var(--line-bright); border-radius: var(--radius-control); background: transparent; color: inherit; font: 700 11px var(--sans); letter-spacing: .05em; cursor: pointer; }

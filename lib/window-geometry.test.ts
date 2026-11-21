@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { dragGeometry, fitGeometry, previewRect, refitGeometry, resizeGeometry, titlebarReachable } from "./window-geometry.ts";
+import { dragGeometry, fitGeometry, refitGeometry, resizeGeometry, titlebarReachable } from "./window-geometry.ts";
 
 const minimum = { width: 680, height: 320 };
 
@@ -175,10 +175,3 @@ test("refitGeometry only moves a window whose top went above the workspace", () 
   assert.deepEqual(refitGeometry({ x: 100, y: -40, width: 700, height: 400 }, room, minimum), { x: 100, y: 0, width: 700, height: 400 });
 });
 
-test("previewRect gives the window place in percent of the workspace, beyond the frame too", () => {
-  assert.deepEqual(previewRect({ x: 300, y: 200, width: 600, height: 400 }, room), { left: 25, top: 25, width: 50, height: 50 });
-  assert.deepEqual(previewRect({ x: -300, y: 0, width: 600, height: 400 }, room), { left: -25, top: 0, width: 50, height: 50 });
-  assert.equal(previewRect({ x: 1500, y: 100, width: 600, height: 400 }, room).left, 125);
-  assert.deepEqual(previewRect(undefined, room), { left: 0, top: 0, width: 100, height: 100 });
-  assert.deepEqual(previewRect({ x: 1, y: 1, width: 1, height: 1 }, { width: 0, height: 0 }), { left: 0, top: 0, width: 100, height: 100 });
-});
