@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS } from "./content-limits.ts";
-import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText, liveRecycleKeys, applyLivePhrase, liveFormatKey, livePhraseLines, livePhraseSlice, applyLiveSettings, liveSettingsOk } from "./live-edit.ts";
+import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText, liveRecycleKeys, applyLivePhrase, liveFormatKey, livePhraseLines, livePhraseSlice, applyLiveSettings, liveSettingsOk, LIVE_SEAM_TABS, PROMO_NEW_TASK_TEXT, promoMoveId, promoNewQuestion, promoNextOrder, promoOrderChanges, promoQuestionEdit } from "./live-edit.ts";
 import { broadcastFeed } from "./broadcasts.ts";
+import { validateQuestionDraft } from "./portia-promotion-reviewer.ts";
 import { portiaTextKey, type PortiaContent } from "./portia-content.ts";
 
 // LIVE-01..05 (26.1-10): the pure model of the live editing mode. The draft is the editor's draft; every function edits it in place, as the editor's updaters do.
@@ -21,13 +22,14 @@ function draftWithGuide(): PortiaContent {
 }
 
 test("LIVE-01: the live mode knows its tabs; search and employees are not among them", () => {
-  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant"]);
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo"]);
   assert.equal(liveAppForTab("info"), "info", "26.1-11: «Информация» has its live mode");
   assert.equal(liveAppForTab("guide"), "guide");
   assert.equal(liveAppForTab("users"), null);
   assert.equal(liveAppForTab("search"), null, "owner 2026-11-20: no live search");
   assert.equal(liveAppForTab("employees"), null, "owner 2026-11-20: no live employees");
-  assert.deepEqual(Object.keys(LIVE_EXCLUDED).sort(), ["access", "employees", "promo", "search", "users"]);
+  // owner 2026-11-21, item 13: «Повышение» has its live mode (26.1-16); «Доступ» goes to 26.1-19
+  assert.deepEqual(Object.keys(LIVE_EXCLUDED).sort(), ["access", "employees", "search", "users"]);
 });
 
 test("LIVE-02: a section title and a card title change in place and nothing else", () => {
@@ -321,9 +323,9 @@ test("T-26.1-22: the live text reads only textContent, takes a paste as plain te
   assert.ok(seam.includes('"plaintext-only"') && seam.includes('"true"'), "a browser without plaintext-only still edits as plain text");
 });
 
-test("LIVE-04: the live mode covers guide, info, broadcasts, viruses, recycle and assistant by type; search and employees are excluded", () => {
+test("LIVE-04: the live mode covers guide, info, broadcasts, viruses, recycle, assistant and promo (26.1-16) by type; search and employees are excluded", () => {
   const model = read("lib/live-edit.ts");
-  assert.ok(model.includes('export type LiveApp = "guide" | "info" | "broadcasts" | "viruses" | "recycle" | "assistant";'));
+  assert.ok(model.includes('export type LiveApp = "guide" | "info" | "broadcasts" | "viruses" | "recycle" | "assistant" | "promo";'));
   assert.ok(!/LiveApp = [^;]*"(search|employees)"/.test(model));
 });
 
@@ -541,7 +543,7 @@ function draftWithBroadcasts(): PortiaContent {
 }
 
 test("LIVE-01 (26.1-11): «Сводка» has its live mode", () => {
-  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant"]);
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo"]);
   assert.equal(liveAppForTab("broadcasts"), "broadcasts");
 });
 
@@ -895,7 +897,7 @@ function draftWithBin(): PortiaContent {
 
 test("LIVE-01 (26.1-12): the tab «Корзина» has its live mode", () => {
   assert.equal(liveAppForTab("recycle"), "recycle");
-  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant"]);
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo"]);
 });
 
 test("LIVE-02 (26.1-12): the name, the place and the text of a file of the bin change in place; the text is kept whole and keyed like the editor's field", () => {
@@ -1051,13 +1053,14 @@ function draftWithAssistant(): PortiaContent {
   } as unknown as PortiaContent;
 }
 
-test("LIVE-01 (26.1-13): the live mode has exactly six apps; the five others are named with the reason", () => {
-  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant"]);
+test("LIVE-01 (26.1-13, 26.1-16): the live mode has seven apps; the four others are named with the reason", () => {
+  assert.deepEqual([...LIVE_TABS], ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo"]);
   assert.equal(liveAppForTab("assistant"), "assistant");
-  for (const tab of ["search", "employees", "users", "promo", "access"]) assert.equal(liveAppForTab(tab), null, tab);
+  for (const tab of ["search", "employees", "users", "access"]) assert.equal(liveAppForTab(tab), null, tab);
+  assert.equal(liveAppForTab("promo"), "promo", "owner 2026-11-21, item 13");
   assert.match(LIVE_EXCLUDED.search, /решение владельца 2026-11-20/);
   assert.match(LIVE_EXCLUDED.employees, /решение владельца 2026-11-20/);
-  for (const tab of ["users", "promo", "access"] as const) assert.match(LIVE_EXCLUDED[tab], /нет вида участника/, tab);
+  for (const tab of ["users", "access"] as const) assert.match(LIVE_EXCLUDED[tab], /нет вида участника/, tab);
   // every tab of the editor is either live or excluded, never both and never neither
   for (const tab of ["viruses", "info", "guide", "broadcasts", "recycle", "search", "assistant", "employees", "users", "promo", "access"]) {
     assert.equal((LIVE_TABS as readonly string[]).includes(tab) !== (tab in LIVE_EXCLUDED), true, tab);
@@ -1235,13 +1238,15 @@ test("LIVE-02 (26.1-13): the live Vivian has the bars of its groups, the cross o
   for (const text of ["Совет", "Фразу обиды", "Фразу бездействия", "Фразу активности"]) assert.ok(seam.includes(`"${text}"`), text);
 });
 
-test("LIVE-01 (26.1-13): the six live surfaces of the seam are exactly the six live apps", () => {
+test("LIVE-01 (26.1-13, 26.1-16): the live surfaces are exactly the live apps: six in the seam of the editor, «Повышение» in its own seam", () => {
   const seam = read("components/portia-editor-live.tsx");
-  const surfaces = [...seam.matchAll(/data-live-app="([a-z]+)"/g)].map((match) => match[1]).sort();
+  const promo = read("components/portia-promotion-editor-main.tsx");
+  const surfaces = [...seam.matchAll(/data-live-app="([a-z]+)"/g), ...promo.matchAll(/data-live-app="([a-z]+)"/g)].map((match) => match[1]).sort();
   const apps = [...new Set((LIVE_TABS as readonly string[]).map((tab) => liveAppForTab(tab)))].sort();
   assert.deepEqual(surfaces, apps);
-  assert.equal(apps.length, 6);
-  assert.deepEqual([...seam.matchAll(/createLiveApi\("([a-z]+)"/g)].map((match) => match[1]).sort(), apps, "every surface makes the tools of its own app");
+  assert.equal(apps.length, 7);
+  // the six apps of the draft are made by createLiveApi; «Повышение» writes the banks of the server, so its tools are its own (26.1-16)
+  assert.deepEqual([...seam.matchAll(/createLiveApi\("([a-z]+)"/g)].map((match) => match[1]).sort(), apps.filter((app) => app !== "promo"), "every surface makes the tools of its own app");
   assert.equal((seam.match(/LiveEditContext\.Provider value=/g) ?? []).length, 6, "one provider per live app");
   // the toggle is drawn for a tab only through liveAppForTab
   assert.match(seam, /const app = liveAppForTab\(tab\);\n  const on = app !== null && enabled\.includes\(tab\);/);
@@ -1259,7 +1264,8 @@ test("LIVE-02 (26.1-13): the live Vivian blocks come after the live block and be
 
 test("LIVE-04 (26.1-14): the context has one provider in all of components/, and no desktop file imports an editor seam statically", () => {
   const files = readdirSync(new URL("../components/", import.meta.url)).filter((name) => name.endsWith(".tsx"));
-  assert.deepEqual(files.filter((name) => /LiveEditContext\.Provider/.test(read(`components/${name}`))), ["portia-editor-live.tsx"]);
+  // the six apps of the draft are provided by the seam of the editor; «Повышение» (26.1-16) by its own seam, which writes the banks of the server
+  assert.deepEqual(files.filter((name) => /LiveEditContext\.Provider/.test(read(`components/${name}`))), ["portia-editor-live.tsx", "portia-promotion-editor-main.tsx"]);
   const desktop = files.filter((name) => name.startsWith("portia-desktop"));
   assert.ok(desktop.length >= 8, "the scan must see the desktop files");
   for (const name of desktop) {
@@ -1271,11 +1277,11 @@ test("LIVE-04 (26.1-14): the context has one provider in all of components/, and
   assert.match(read("components/portia-desktop.tsx"), /import\("@\/components\/portia-editor"\)/);
 });
 
-test("LIVE-04 (26.1-14): the toggle of the live mode exists for exactly the six tabs and for no other tab of the editor", () => {
-  const live = ["guide", "info", "broadcasts", "viruses", "recycle", "assistant"];
-  assert.equal(LIVE_TABS.length, 6);
+test("LIVE-04 (26.1-14, 26.1-16): the live mode exists for exactly the seven tabs and for no other tab of the editor", () => {
+  const live = ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo"];
+  assert.equal(LIVE_TABS.length, 7);
   for (const tab of live) assert.notEqual(liveAppForTab(tab), null, tab);
-  for (const tab of ["search", "employees", "users", "promo", "access"]) assert.equal(liveAppForTab(tab), null, tab);
+  for (const tab of ["search", "employees", "users", "access"]) assert.equal(liveAppForTab(tab), null, tab);
 });
 
 test("LIVE-05 (26.1-14): no live surface and no live branch of the visitor's components turns the embedding of media off", () => {
@@ -1294,4 +1300,123 @@ test("LIVE-05 (26.1-14): the live text at rest is FormattedText, pressed it has 
   assert.match(seam, /<FormattedText\b/);
   assert.match(seam, /<EmbeddedMediaStrip\b/);
   assert.doesNotMatch(seam, /embedMedia/);
+});
+
+// ---- 26.1-16: the live «Повышение» as the candidate sees it (owner 2026-11-21, item 13) ----
+
+// the check of a question is the reviewer's own: the model takes it as an argument and imports none of the server side
+const edit = (item: Parameters<typeof promoQuestionEdit>[0], change: Parameters<typeof promoQuestionEdit>[1]) => promoQuestionEdit(item, change, validateQuestionDraft);
+
+test("LIVE-01 (26.1-16): «Повышение» has its live mode; its toggle is drawn by its own seam, not by the draft row", () => {
+  assert.equal(liveAppForTab("promo"), "promo");
+  assert.deepEqual([...LIVE_SEAM_TABS], ["promo", "access"]);
+  assert.equal("promo" in LIVE_EXCLUDED, false);
+  const seam = read("components/portia-editor-live.tsx");
+  const mode = seam.slice(seam.indexOf("export function useLiveMode"), seam.indexOf("export function LiveModeToggle"));
+  assert.match(mode, /LIVE_SEAM_TABS/, "useLiveMode knows the tabs whose toggle lives in their own seam");
+  assert.match(mode, /const toggle = app === null \|\| seamTab \? null/, "no toggle in the draft row for a seam tab");
+  const promo = read("components/portia-promotion-editor-main.tsx");
+  assert.equal((promo.match(/<LiveModeToggle\b/g) ?? []).length, 1, "one button on the tab");
+  assert.match(promo, /<EditorActionBar[^\n]*actions=\{/, "the button stands in the bar of the tab, not in the draft row");
+});
+
+test("LIVE-02 (26.1-16): the question edit keeps the type, the other variants, the answer, the switch and the place", () => {
+  const single = { id: "q", text: "Столица?", active: true, sortOrder: 3, type: "single" as const, options: [{ text: "Рим" }, { text: "Париж" }], answerKey: 1 };
+  assert.deepEqual(edit(single, { text: "Столица Франции?" }), { question: { type: "single", text: "Столица Франции?", options: ["Рим", "Париж"], answer: 1 }, active: true, sortOrder: 3 });
+  assert.deepEqual(edit(single, { option: 0, text: "Берлин" }), { question: { type: "single", text: "Столица?", options: ["Берлин", "Париж"], answer: 1 }, active: true, sortOrder: 3 });
+  assert.equal(edit(single, { active: false })?.active, false);
+  assert.equal(edit(single, { sortOrder: 9 })?.sortOrder, 9);
+  const multiple = { id: "m", text: "Цвета?", active: false, sortOrder: 0, type: "multiple" as const, options: ["Красный", "Синий", "Дом"], answerKey: [0, 1] };
+  assert.deepEqual(edit(multiple, { option: 2, text: "Зелёный" }), { question: { type: "multiple", text: "Цвета?", options: ["Красный", "Синий", "Зелёный"], answer: [0, 1] }, active: false, sortOrder: 0 });
+  const free = { id: "f", text: "Почему?", active: true, sortOrder: 1, type: "free-text" as const, answerKey: "Потому" };
+  assert.deepEqual(edit(free, { text: "Как?" }), { question: { type: "free-text", text: "Как?", answer: "Потому" }, active: true, sortOrder: 1 });
+});
+
+test("LIVE-03 (26.1-16): an edit that the dialog and the server would refuse sends no command", () => {
+  const single = { id: "q", text: "Столица?", active: true, sortOrder: 3, type: "single" as const, options: ["Рим", "Париж"], answerKey: 1 };
+  assert.equal(edit(single, { text: "   " }), null, "an empty text");
+  assert.equal(edit(single, { option: 0, text: "Париж" }), null, "two equal variants");
+  assert.equal(edit(single, { option: 0, text: "" }), null, "an empty variant");
+  assert.equal(edit(single, { option: 5, text: "Х" }), null, "a variant that is not there");
+  assert.equal(edit({ id: "f", text: "Почему?", active: true, sortOrder: 0, type: "free-text" }, { option: 0, text: "Х" }), null, "a free answer has no variants");
+  assert.equal(edit({ ...single, answerKey: 7 }, { text: "Другое?" }), null, "an answer that does not fit the variants");
+});
+
+test("LIVE-02 (26.1-16): a new question is valid for the server in all three types", () => {
+  for (const type of ["single", "multiple", "free-text"] as const) {
+    const question = promoNewQuestion(type);
+    assert.equal(question.type, type);
+    const item = { id: "n", text: question.text, active: true, sortOrder: 0, type, ...(question.type === "free-text" ? { answerKey: question.answer } : { options: question.options, answerKey: question.answer }) };
+    assert.notEqual(edit(item, { text: "Своё?" }), null, type);
+  }
+  assert.equal(PROMO_NEW_TASK_TEXT.split(" ").length <= 7, true);
+  assert.equal(promoNextOrder([]), 0);
+  assert.equal(promoNextOrder([{ sortOrder: 4 }, { sortOrder: 1 }]), 5);
+});
+
+test("LIVE-02 (26.1-16): the order of questions and tasks changes by the same places the arrows of the ordinary tab swap", () => {
+  const items = [{ id: "a", sortOrder: 0 }, { id: "b", sortOrder: 1 }, { id: "c", sortOrder: 2 }];
+  assert.deepEqual(promoMoveId(["a", "b", "c"], 0, 1), ["b", "a", "c"]);
+  assert.deepEqual(promoMoveId(["a", "b", "c"], 2, 0), ["c", "a", "b"]);
+  assert.deepEqual(promoMoveId(["a", "b", "c"], 0, 9), ["a", "b", "c"], "out of the list: nothing moves");
+  assert.deepEqual(promoOrderChanges(items, ["b", "a", "c"]), [{ id: "b", sortOrder: 0 }, { id: "a", sortOrder: 1 }], "a swap is two commands");
+  assert.deepEqual(promoOrderChanges(items, ["a", "b", "c"]), [], "no move, no command");
+  assert.deepEqual(promoOrderChanges([{ id: "a", sortOrder: 10 }, { id: "b", sortOrder: 30 }], ["b", "a"]), [{ id: "b", sortOrder: 10 }, { id: "a", sortOrder: 30 }], "the places held are handed out again");
+  assert.deepEqual(promoOrderChanges([{ id: "a", sortOrder: 0 }, { id: "b", sortOrder: 0 }], ["b", "a"]), [{ id: "a", sortOrder: 1 }], "equal places: numbered from zero");
+});
+
+test("LIVE-02 (26.1-16): the candidate's components are extracted, and the window of the candidate draws them without a context", () => {
+  const visitor = read("components/portia-promotion.tsx");
+  for (const name of ["CandidateRules", "CandidateQuestion", "CandidateTasks"]) assert.match(visitor, new RegExp(`export function ${name}\\(`), name);
+  assert.match(visitor, /<CandidateRules text=\{rules\} \/>/, "the runner draws the rules by the extracted component");
+  assert.match(visitor, /<CandidateQuestion\b/);
+  assert.match(visitor, /<CandidateTasks\b/);
+  assert.match(visitor, /useLiveEdit\("promo"\)/);
+  assert.doesNotMatch(visitor, /LiveEditContext|portia-editor-live/, "the visitor knows only the door of the context");
+});
+
+test("LIVE-02 (26.1-16, T-26.1-38): the live view of a question never receives the correct answer", () => {
+  const visitor = read("components/portia-promotion.tsx");
+  const view = visitor.slice(visitor.indexOf("export function CandidateQuestion"), visitor.indexOf("export function CandidateTasks"));
+  assert.ok(view.length > 200);
+  assert.doesNotMatch(view, /answerKey|correct/i);
+  const promo = read("components/portia-promotion-editor-main.tsx");
+  // the seam hands the view of the candidate the projection a candidate gets: id, type, text, options, number, total
+  assert.match(promo, /candidateQuestionOf\(/);
+  const projection = promo.slice(promo.indexOf("function candidateQuestionOf"), promo.indexOf("function candidateQuestionOf") + 500);
+  assert.doesNotMatch(projection, /answerKey/);
+});
+
+test("LIVE-03 (26.1-16): the live edits go through the commands of the banks, one command per edit, none on a refused edit", () => {
+  const promo = read("components/portia-promotion-editor-main.tsx");
+  assert.match(promo, /LiveEditContext\.Provider value=/);
+  assert.match(promo, /data-live-app="promo"/);
+  for (const action of ["save-qualification-rules", "save-question", "save-task-item", "delete-question", "delete-task-item", "save-qualification-bank", "save-task-bank"]) assert.ok(promo.includes(`"${action}"`), action);
+  assert.match(promo, /promoQuestionEdit\(/);
+  assert.match(promo, /savingRef/, "a second command does not start while one is saving");
+  assert.match(promo, /<LiveCommitText\b/);
+  assert.match(promo, /<PortiaQualificationQuestionDialog\b/, "the correct answer is edited in the ordinary dialog");
+  const seam = read("components/portia-editor-live.tsx");
+  const text = seam.slice(seam.indexOf("export function LiveCommitText"), seam.indexOf("export function LiveTextarea"));
+  assert.match(text, /event\.key === "Escape"/, "Escape cancels the edit");
+  assert.match(text, /onBlur/, "leaving the place commits");
+  assert.match(text, /event\.clipboardData\.getData\("text\/plain"\)/, "a paste is plain text");
+});
+
+test("LIVE-04 (26.1-16): the live places of the candidate's components stand in live branches only", () => {
+  const visitor = read("components/portia-promotion.tsx");
+  assert.doesNotMatch(visitor, /["`]live-[a-z]/, "no live class in the visitor's file");
+  const calls = visitor.split("\n").filter((row) => /\blive\.(?:text|rich|image|video|cards|addBar|order|date|flag|choice|remove)\(/.test(row));
+  assert.ok(calls.length >= 4, "the places of rules, question, variant and task");
+  for (const line of calls) assert.match(line, /live\s*\?|live &&/, line.trim().slice(0, 90));
+});
+
+test("LIVE-01 (26.1-16): the live styles of «Повышения» stand before users-tab, in fonts of 11px and more", () => {
+  const css = read("app/portia.css");
+  const at = css.indexOf(".promo-live {");
+  assert.ok(at > css.indexOf(".live-surface { width: 100%"), "after the live block");
+  assert.ok(at < css.indexOf("/* users-tab:start"), "before users-tab");
+  assert.ok(css.indexOf("/* users-tab:start") < css.indexOf("/* ui-unify:start"), "users-tab stands before ui-unify");
+  const block = css.slice(at, css.indexOf("/* users-tab:start"));
+  assert.doesNotMatch(block, /font(?:-size)?:[^;}]*\b(?:9|10)px/);
 });

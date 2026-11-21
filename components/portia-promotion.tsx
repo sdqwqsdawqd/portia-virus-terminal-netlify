@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode, type Ref } from "react";
+import { useLiveEdit } from "@/components/portia-live-edit";
 import { parseRetakeLedger, updateRetakeLedger, type RetakeLedger, type RetakeNotification } from "@/lib/portia-promotion-notifications";
 import { promotionAvailabilityText } from "@/lib/portia-promotion";
 import { QUALIFICATION_HEARTBEAT_MS } from "@/lib/portia-qualification";
@@ -17,10 +18,10 @@ type Eligibility =
   | { status: "awaiting-sheet-change" }
   | { status: "special-task"; targetTitleId: string }
   | { status: "not-listed" };
-type PublicTask = { id: string; text: string; sortOrder: number };
+export type PublicTask = { id: string; text: string; sortOrder: number };
 type ActiveState = { status: string; targetTitleId: string | null; attemptId?: string; availableAt?: string; percent?: number; tasks?: PublicTask[] } | null;
 type PublicResult = { kind: RequestKind; outcome: string; createdAt: string };
-type QualificationQuestion = { id: string; type: "single" | "multiple" | "free-text"; text: string; options: string[]; index: number; total: number };
+export type QualificationQuestion = { id: string; type: "single" | "multiple" | "free-text"; text: string; options: string[]; index: number; total: number };
 type QualificationTest = { attemptId: string; status: string; clientMode: "desktop" | "phone"; deadlineAt: string | null; question: QualificationQuestion | null; result?: "passed" | "failed"; percent?: number; questionCount?: number; rulesText?: string };
 type PromotionStatus = { nickname: string; promotionRecord: null; workflowAvailable: false } | {
   nickname: string;
@@ -60,6 +61,64 @@ function minuteSecond(deadlineAt: string | null, now: number) {
   const remaining = deadlineAt ? Math.max(0, Date.parse(deadlineAt) - now) : 0;
   const seconds = Math.ceil(remaining / 1000);
   return { remaining, label: `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}` };
+}
+
+// 26.1-16: the three parts of the candidate's view that the editor's live mode draws too. The window of the candidate draws them as they were; inside the live mode of «Повышения»
+// useLiveEdit("promo") answers, and the places of the data of the banks (rules, questions, variants, tasks) become places to edit. The texts around them are the code of the site and stay as they are.
+
+/** The head of a card of the window: the icon, the kind, the title and, when the window has one, the badge of the step. */
+export function CandidateCardHeader({ kind, step }: { kind: RequestKind; step?: { tone: string; label: string } }) {
+  const ordinary = kind === "ordinary";
+  return <header><span className="promotion-flow-icon" aria-hidden="true">{ordinary ? "▤" : "◇"}</span><div><span className="promotion-eyebrow">{ordinary ? "ОБЫЧНОЕ ПОВЫШЕНИЕ" : "КВАЛИФИКАЦИЯ"}</span><h2>{ordinary ? "Задания на повышение" : "Проверка знаний"}</h2></div>{step && <span className={`promotion-step-badge ${step.tone}`}>{step.label}</span>}</header>;
+}
+
+/** The screen before the check: the fixed lines of the site, then what the caller puts under them (the rules, the start). */
+export function CandidatePrestart({ lines, children }: { lines: ReturnType<typeof qualificationPreStartLines>; children?: ReactNode }) {
+  return <section className="promotion-qualification-prestart">
+    <span className="promotion-eyebrow">ПРАВИЛА ПРОВЕРКИ</span>
+    <h3>ПРОВЕРКА ГОТОВА К НАЧАЛУ</h3>
+    <ul className="promotion-prestart-lines">{lines.map((line) => <li key={line.id} className={line.current ? "is-current" : undefined}>{line.text}{line.current ? " — ваше устройство" : ""}</li>)}</ul>
+    {children}
+  </section>;
+}
+
+/** The rules of the reviewer on the screen before the check. */
+export function CandidateRules({ text }: { text: string }) {
+  const live = useLiveEdit("promo");
+  return <div className="promotion-prestart-rules"><h4>ПРАВИЛА ПРОВЕРЯЮЩЕГО</h4><p>{live ? live.text({ kind: "promo-rules" }, text, { multiline: true }) : text}</p></div>;
+}
+
+type CandidateAnswer = string | number | number[];
+
+/** One question of the check as the candidate sees it: the number, the text, the variants by type or the field of a free answer. The live mode shows the same, with nothing to answer. */
+export function CandidateQuestion({ question, index, total, answer = "", onAnswer, headingRef }: {
+  question: QualificationQuestion;
+  index: number;
+  total: number;
+  answer?: CandidateAnswer;
+  onAnswer?: (value: CandidateAnswer) => void;
+  headingRef?: Ref<HTMLHeadingElement>;
+}) {
+  const live = useLiveEdit("promo");
+  const selected = Array.isArray(answer) ? answer : [];
+  const choose = (value: CandidateAnswer) => onAnswer?.(value);
+  const variant = (option: string, at: number) => live ? live.text({ kind: "promo-question-option", questionId: question.id, index: at }, option) : option;
+  return <>
+    <div className="promotion-question-progress">ВОПРОС {index + 1} ИЗ {total}</div>
+    <div className="promotion-question">
+      <h3 ref={headingRef} tabIndex={-1}>{live ? live.text({ kind: "promo-question-text", questionId: question.id }, question.text) : question.text}</h3>
+      {question.type === "single" && <fieldset><legend>Выберите один вариант</legend>{question.options.map((option, at) => <label key={at}><input type="radio" name={`question-${question.id}`} checked={answer === at} disabled={Boolean(live)} onChange={() => choose(at)} /><span>{variant(option, at)}</span></label>)}</fieldset>}
+      {question.type === "multiple" && <fieldset><legend>Выберите один или несколько вариантов</legend>{question.options.map((option, at) => <label key={at}><input type="checkbox" checked={selected.includes(at)} disabled={Boolean(live)} onChange={(event) => choose(event.target.checked ? [...selected, at] : selected.filter((item) => item !== at))} /><span>{variant(option, at)}</span></label>)}</fieldset>}
+      {question.type === "free-text" && <label className="promotion-free-answer">Ваш ответ<textarea value={typeof answer === "string" ? answer : ""} maxLength={4000} disabled={Boolean(live)} onChange={(event) => choose(event.target.value)} /><span>{typeof answer === "string" ? answer.length : 0} / 4000</span></label>}
+    </div>
+  </>;
+}
+
+/** The ordinary tasks handed to the candidate. `rowTools` is the live mode's: a slot in each row (the order, the switch, the removal); the candidate's window passes none. */
+export function CandidateTasks({ tasks, rowTools }: { tasks: PublicTask[]; rowTools?: (task: PublicTask, index: number) => ReactNode }) {
+  const live = useLiveEdit("promo");
+  if (!tasks.length && !live) return null;
+  return <div className="promotion-tasks"><h3>Назначенные задания</h3><ol className="promotion-task-list">{tasks.map((task, index) => <li key={task.id} {...(rowTools ? { "data-sort-index": index } : {})}><span>{String(task.sortOrder).padStart(2, "0")}</span><div><p>{live ? live.text({ kind: "promo-task-text", taskId: task.id }, task.text, { multiline: true }) : task.text}</p>{rowTools?.(task, index)}</div></li>)}</ol></div>;
 }
 
 function QualificationRunner({ attemptId, visible, onLockChange, onFinished }: { attemptId: string; visible: boolean; onLockChange: (locked: boolean) => void; onFinished: () => void }) {
@@ -237,14 +296,11 @@ function QualificationRunner({ attemptId, visible, onLockChange, onFinished }: {
     const mode = test?.clientMode === "desktop" || test?.clientMode === "phone" ? test.clientMode : null;
     const lines = qualificationPreStartLines({ clientMode: mode, questionCount: typeof test?.questionCount === "number" ? test.questionCount : null });
     const rules = typeof test?.rulesText === "string" ? test.rulesText : "";
-    return <section className="promotion-qualification-prestart">
-      <span className="promotion-eyebrow">ПРАВИЛА ПРОВЕРКИ</span>
-      <h3>ПРОВЕРКА ГОТОВА К НАЧАЛУ</h3>
-      <ul className="promotion-prestart-lines">{lines.map((line) => <li key={line.id} className={line.current ? "is-current" : undefined}>{line.text}{line.current ? " — ваше устройство" : ""}</li>)}</ul>
-      {rules && <div className="promotion-prestart-rules"><h4>ПРАВИЛА ПРОВЕРЯЮЩЕГО</h4><p>{rules}</p></div>}
+    return <CandidatePrestart lines={lines}>
+      {rules && <CandidateRules text={rules} />}
       {startError && <p className="promotion-error" role="alert">{startError}</p>}
       <button className="promotion-action" type="button" disabled={starting} onClick={() => void startTest()}>{starting ? "НАЧИНАЕМ…" : "НАЧАТЬ ПРОВЕРКУ"}</button>
-    </section>;
+    </CandidatePrestart>;
   }
   if (!test) return <section className="promotion-qualification-terminal"><h3>ПРОВЕРКА НЕДОСТУПНА</h3><p>Обновите состояние позже.</p></section>;
   if (test.result || test.status === "passed" || test.status === "failed") return <section className={`promotion-qualification-result ${test.result ?? test.status}`}><span className="promotion-eyebrow">ИТОГ КВАЛИФИКАЦИИ</span><h3>{(test.result ?? test.status) === "passed" ? "ПРОВЕРКА ПРОЙДЕНА" : "ПРОВЕРКА НЕ ПРОЙДЕНА"}</h3>{Number.isInteger(test.percent) && <p>Процент: <strong>{test.percent}%</strong></p>}<p>Подробности ответов участнику не показываются.</p></section>;
@@ -258,13 +314,7 @@ function QualificationRunner({ attemptId, visible, onLockChange, onFinished }: {
     <p className="promotion-mode-warning">{test.clientMode === "phone" ? phoneModeWarning : desktopModeWarning}</p>
     <div className={`promotion-test-timer ${timer.remaining <= 60_000 ? "danger" : timer.remaining <= 180_000 ? "warning" : ""}`}><span>ОСТАЛОСЬ</span><strong>{timer.label}</strong></div>
     <p className="sr-only" aria-live="polite">{announcement}</p>
-    <div className="promotion-question-progress">ВОПРОС {question.index + 1} ИЗ {question.total}</div>
-    <div className="promotion-question">
-      <h3 ref={headingRef} tabIndex={-1}>{question.text}</h3>
-      {question.type === "single" && <fieldset><legend>Выберите один вариант</legend>{question.options.map((option, index) => <label key={option}><input type="radio" name={`question-${question.id}`} checked={answer === index} onChange={() => setAnswer(index)} /><span>{option}</span></label>)}</fieldset>}
-      {question.type === "multiple" && <fieldset><legend>Выберите один или несколько вариантов</legend>{question.options.map((option, index) => <label key={option}><input type="checkbox" checked={selected.includes(index)} onChange={(event) => setAnswer(event.target.checked ? [...selected, index] : selected.filter((item) => item !== index))} /><span>{option}</span></label>)}</fieldset>}
-      {question.type === "free-text" && <label className="promotion-free-answer">Ваш ответ<textarea value={typeof answer === "string" ? answer : ""} maxLength={4000} onChange={(event) => setAnswer(event.target.value)} /><span>{typeof answer === "string" ? answer.length : 0} / 4000</span></label>}
-    </div>
+    <CandidateQuestion question={question} index={question.index} total={question.total} answer={answer} onAnswer={setAnswer} headingRef={headingRef} />
     <button className="promotion-action" type="button" disabled={!valid || busy} onClick={() => void submit()}>{busy ? "ОТПРАВЛЯЕМ…" : "ОТПРАВИТЬ И ДАЛЬШЕ"}</button>
   </section>;
 }
@@ -343,13 +393,13 @@ function PromotionStatusCard({ kind, active, eligibility, busy, stale, next, fee
   // The state is always written out, never carried by colour alone (D-17/D-20).
   const step = active ? { tone: "running", label: "В ПРОЦЕССЕ" } : canRequest ? { tone: "available", label: "ДОСТУПНО СЕЙЧАС" } : { tone: "waiting", label: "ПОКА НЕДОСТУПНО" };
   return <section className={`promotion-card ${ordinary ? "promotion-ordinary-card" : "promotion-qualification-card"}`} data-next={next ? "true" : undefined}>
-    <header><span className="promotion-flow-icon" aria-hidden="true">{ordinary ? "▤" : "◇"}</span><div><span className="promotion-eyebrow">{ordinary ? "ОБЫЧНОЕ ПОВЫШЕНИЕ" : "КВАЛИФИКАЦИЯ"}</span><h2>{ordinary ? "Задания на повышение" : "Проверка знаний"}</h2></div><span className={`promotion-step-badge ${step.tone}`}>{step.label}</span></header>
+    <CandidateCardHeader kind={kind} step={step} />
     {!active && !canRequest && <span className="promotion-reason-label">Почему сейчас нельзя</span>}
     <p className="promotion-status-copy">{active ? activeCopy(kind, active) : eligibilityCopy(kind, eligibility)}</p>
     {feedback.phase !== "idle" && <p ref={feedbackRef} tabIndex={-1} role={feedback.phase === "error" ? "alert" : "status"} className={`promotion-submit-feedback ${feedback.phase}`}>{feedback.message}</p>}
     {!ordinary && active && !active.attemptId && (active.status === "claimed" || active.status === "approved") && <div className="promotion-test-warning"><strong>15 МИНУТ ПОСЛЕ НАЧАЛА</strong><p>Когда проверяющий подтвердит набор вопросов, здесь появятся правила и кнопка «НАЧАТЬ ПРОВЕРКУ». 15 минут пойдут только после её нажатия.</p><p className="promotion-mode-warning">ПК. {desktopModeWarning}</p><p className="promotion-mode-warning">Телефон. {phoneModeWarning}</p></div>}
     {!ordinary && active?.attemptId && <QualificationRunner attemptId={active.attemptId} visible={visible !== false} onLockChange={onQualificationLockChange ?? (() => undefined)} onFinished={onQualificationFinished ?? (() => undefined)} />}
-    {tasks.length > 0 && <div className="promotion-tasks"><h3>Назначенные задания</h3><ol className="promotion-task-list">{tasks.map((task) => <li key={task.id}><span>{String(task.sortOrder).padStart(2, "0")}</span><div><p>{task.text}</p></div></li>)}</ol></div>}
+    <CandidateTasks tasks={tasks} />
     {canRequest && <button className="promotion-action" type="button" disabled={busy || stale} onClick={() => onRequest(kind)}>{busy ? "ОТПРАВЛЯЕМ…" : ordinary ? "ПОДАТЬ ЗАЯВКУ НА ЗАДАНИЯ" : "ЗАПРОСИТЬ КВАЛИФИКАЦИЮ"}</button>}
     {canRequest && stale && <p className="promotion-next-note">Отправка недоступна, пока состояние не обновится.</p>}
   </section>;

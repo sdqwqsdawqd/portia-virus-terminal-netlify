@@ -11,26 +11,32 @@ import { compactRuns, expandStyles, replaceRichTextRuns } from "./rich-text-styl
 // LIVE-01..05 (26.1-10): the pure model of the live editing mode. The editor shows the visitor's own view of an app on the draft and edits it in place;
 // every function here edits the editor's draft inside one changeDraft call (the draft is already a copy), so one call is one undo step.
 
-/** The apps the live mode covers: exactly six (owner 2026-11-20); the tabs without one are in LIVE_EXCLUDED. */
-export type LiveApp = "guide" | "info" | "broadcasts" | "viruses" | "recycle" | "assistant";
+/** The apps the live mode covers: the six of the draft (owner 2026-11-20) and «Повышение» (owner 2026-11-21, item 13); the tabs without one are in LIVE_EXCLUDED. */
+export type LiveApp = "guide" | "info" | "broadcasts" | "viruses" | "recycle" | "assistant" | "promo";
 
 /**
  * The editor tabs that have no live mode, each with its reason. «Поиск» and «Сотрудники»: the owner's decision (2026-11-20; the drafts of the employees of 26.1-02 stay as they are, OWN-07).
- * «Пользователи», «Повышение», «Доступ»: management tools - there is no view of the visitor that is edited in place, and their data is not in the shared draft.
+ * «Пользователи», «Доступ»: management tools - there is no view of the visitor that is edited in place, and their data is not in the shared draft.
+ * «Повышение» left the list on 2026-11-21 (owner, item 13): the candidate's view of it is edited in place (26.1-16).
  */
-export const LIVE_EXCLUDED: Readonly<Record<"search" | "employees" | "users" | "promo" | "access", string>> = {
+export const LIVE_EXCLUDED: Readonly<Record<"search" | "employees" | "users" | "access", string>> = {
   search: "решение владельца 2026-11-20",
   employees: "решение владельца 2026-11-20",
   users: "нет вида участника: инструмент управления, данные не в общем черновике",
-  promo: "нет вида участника: инструмент управления, данные не в общем черновике",
   access: "нет вида участника: инструмент управления, данные не в общем черновике",
 };
 
 /** The editor tabs that have a live mode, and the app each one shows. */
-export const LIVE_TABS = ["guide", "info", "broadcasts", "viruses", "recycle", "assistant"] as const;
+export const LIVE_TABS = ["guide", "info", "broadcasts", "viruses", "recycle", "assistant", "promo"] as const;
 export type LiveTab = (typeof LIVE_TABS)[number];
 
-const liveAppOfTab: Record<LiveTab, LiveApp> = { guide: "guide", info: "info", broadcasts: "broadcasts", viruses: "viruses", recycle: "recycle", assistant: "assistant" };
+const liveAppOfTab: Record<LiveTab, LiveApp> = { guide: "guide", info: "info", broadcasts: "broadcasts", viruses: "viruses", recycle: "recycle", assistant: "assistant", promo: "promo" };
+
+/**
+ * The editor tabs whose live mode lives in their own seam, not in the surface of the editor: «Повышение» draws its toggle in its own bar and writes the banks of the server (its data is not in the draft),
+ * so `useLiveMode` draws no toggle for them (one button per tab, not one in the draft row too). «Доступ» is listed for 26.1-19.
+ */
+export const LIVE_SEAM_TABS = ["promo", "access"] as const;
 
 /** The app the live mode of an editor tab shows; null where the tab has none. */
 export function liveAppForTab(tab: string): LiveApp | null {
@@ -74,7 +80,15 @@ export type LiveTarget =
   | { kind: "recycle-file-name" | "recycle-file-location"; fileId: string }
   | { kind: "recycle-file-text"; fileId: string; caption?: boolean }
   /** «Вивьян» (26.1-13): one phrase of a group; the formatting of the whole group is one document under portiaTextKey.assistant<Group>, one line per phrase. */
-  | { kind: "assistant-phrase"; group: LivePhraseGroup; index: number };
+  | { kind: "assistant-phrase"; group: LivePhraseGroup; index: number }
+  /**
+   * «Повышение» (26.1-16): the places of the candidate's view. They are not in the draft: the banks live on the server, so the seam of «Повышения» writes them by the commands of the banks
+   * (applyLiveText knows nothing of them). The rules belong to the transition on show, which the seam knows.
+   */
+  | { kind: "promo-rules" }
+  | { kind: "promo-question-text"; questionId: string }
+  | { kind: "promo-question-option"; questionId: string; index: number }
+  | { kind: "promo-task-text"; taskId: string };
 
 /** The four groups of the phrases of the assistant, in the order of the editor's tab: advice, after the patience is out, long idleness, activity. */
 export type LivePhraseGroup = "advice" | "offended" | "idle" | "activity";
@@ -408,6 +422,12 @@ export function applyLiveText(draft: PortiaContent, target: LiveTarget, value: s
       if (target.kind === "guide-table-key") row.key = line; else row.value = line;
       return true;
     }
+    // 26.1-16: the places of «Повышения» are data of the server banks; the seam of «Повышения» writes them, not the draft
+    case "promo-rules":
+    case "promo-question-text":
+    case "promo-question-option":
+    case "promo-task-text":
+      return false;
     default: {
       const block = findBlock(draft, target.cardId, target.blockId);
       if (!block) return false;
@@ -881,4 +901,85 @@ export function applyLiveSettings(draft: PortiaContent, patch: LiveSettingsPatch
   if (!write) return false;
   write();
   return true;
+}
+
+// ---- «Повышение» (26.1-16): the candidate's view is edited in place, and its data is the banks of the server, not the draft. These functions only build the bodies of the commands. ----
+
+export type PromoQuestionType = "single" | "multiple" | "free-text";
+
+/** A question as the server accepts it (the shape of the question check of the banks). */
+export type PromoQuestion =
+  | { type: "single"; text: string; options: string[]; answer: number }
+  | { type: "multiple"; text: string; options: string[]; answer: number[] }
+  | { type: "free-text"; text: string; answer: string };
+
+/** The check of a question the dialog and the server use (validateQuestionDraft of the reviewer). It is handed in, so this model keeps no import of the server side of the banks. */
+export type PromoQuestionCheck = (value: unknown) => PromoQuestion | null;
+
+/** A question or an ordinary task of a bank, as the reviewer's bank listing gives it. */
+export type PromoBankItem = { id: string; text: string; active: boolean; sortOrder: number; type?: PromoQuestionType; options?: Array<{ text: string }> | string[]; answerKey?: unknown };
+
+/** What an in-place edit changes of a question: its text, the text of one variant, its switch, its place. */
+export type PromoQuestionEdit = { text: string } | { option: number; text: string } | { active: boolean } | { sortOrder: number };
+
+/** The body of `save-question` (without the bank and the question id). */
+export type PromoQuestionBody = { question: PromoQuestion; active: boolean; sortOrder: number };
+
+/**
+ * The body of `save-question` for an edited question: the type, the other variants, the correct answer, the switch and the place stay as they were.
+ * Null, and no command, when the result would not pass the check of the dialog and the server (an empty text, two equal variants, an answer that no longer fits).
+ */
+export function promoQuestionEdit(item: PromoBankItem, edit: PromoQuestionEdit, check: PromoQuestionCheck): PromoQuestionBody | null {
+  const type = item.type ?? "free-text";
+  const options = (item.options ?? []).map((option) => (typeof option === "string" ? option : option.text));
+  let text = item.text;
+  if ("option" in edit) {
+    if (type === "free-text" || !Number.isInteger(edit.option) || edit.option < 0 || edit.option >= options.length) return null;
+    options[edit.option] = edit.text;
+  } else if ("text" in edit) text = edit.text;
+  const question = check(type === "free-text" ? { type, text, answer: String(item.answerKey ?? "Ответ") } : { type, text, options, answer: item.answerKey ?? 0 });
+  if (!question) return null;
+  return { question, active: "active" in edit ? edit.active : item.active, sortOrder: "sortOrder" in edit ? edit.sortOrder : item.sortOrder };
+}
+
+/** A new question of the add bar: placeholder texts, which the owner then edits in place; the first variant is the answer, which the dialog «Ответ» changes. */
+export function promoNewQuestion(type: PromoQuestionType): PromoQuestion {
+  if (type === "free-text") return { type, text: "Новый вопрос", answer: "Ответ" };
+  return type === "single"
+    ? { type, text: "Новый вопрос", options: ["Вариант 1", "Вариант 2"], answer: 0 }
+    : { type, text: "Новый вопрос", options: ["Вариант 1", "Вариант 2"], answer: [0] };
+}
+
+/** The text of a new ordinary task. */
+export const PROMO_NEW_TASK_TEXT = "Новое задание";
+
+/** The place after the last item. */
+export function promoNextOrder(items: readonly { sortOrder: number }[]): number {
+  return items.reduce((top, item) => Math.max(top, item.sortOrder), -1) + 1;
+}
+
+/** The ids with the one at `from` put at `to`; the same list when either is out of the list. */
+export function promoMoveId(ids: readonly string[], from: number, to: number): string[] {
+  const next = [...ids];
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from === to || from < 0 || to < 0 || from >= next.length || to >= next.length) return next;
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}
+
+/**
+ * The new places of the items after they were put in the order of `orderedIds`: the places the items hold now are handed out again in that order, so a move of one row
+ * is the swap the arrows of the ordinary tab make, and only the items whose place changes are listed (one command each).
+ */
+export function promoOrderChanges(items: readonly { id: string; sortOrder: number }[], orderedIds: readonly string[]): Array<{ id: string; sortOrder: number }> {
+  const held = items.map((item) => item.sortOrder).sort((first, second) => first - second);
+  // equal places could not tell the new order apart: then the items are numbered from zero
+  const places = new Set(held).size === held.length ? held : held.map((_, at) => at);
+  const byId = new Map(items.map((item) => [item.id, item]));
+  const changes: Array<{ id: string; sortOrder: number }> = [];
+  orderedIds.forEach((id, at) => {
+    const item = byId.get(id);
+    if (item && at < places.length && item.sortOrder !== places[at]) changes.push({ id, sortOrder: places[at] });
+  });
+  return changes;
 }

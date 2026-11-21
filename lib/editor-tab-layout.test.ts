@@ -628,8 +628,10 @@ test("D-13b: «Повышение» renders the shared action bar: the branches 
   assert.ok(bar.includes("aria-label={`${label}: ${count}`} onKeyDown={moveButtonTab}"), "the accessible name with its count and the arrow keys stay");
   assert.ok(bar.includes('{label}<span className="tab-count" aria-hidden="true">{count}</span>'), "the count is the house plaque");
   assert.ok(bar.includes("['requests','ЗАПРОСЫ',ordinaryCount + qualificationCount],['tasks','ЗАДАНИЯ',banks.taskBanks.length],['qualification','КВАЛИФИКАЦИЯ',qualificationCount]"), "the same three branches and counts");
-  assert.ok(bar.includes('statusText={message} tone={message ? (note.ok ? "saved" : "error") : ""} />'), "the queue message is the polite status of the bar; WR-04: a success is not red");
-  for (const gone of ["actions=", "СОХРАНИТЬ", "ОТМЕНИТЬ", "unsavedCount"]) assert.ok(!bar.includes(gone), `${gone}: no editor draft action on this bar`);
+  assert.ok(bar.includes('statusText={message} tone={message ? (note.ok ? "saved" : "error") : ""} '), "the queue message is the polite status of the bar; WR-04: a success is not red");
+  // 26.1-16 (owner 2026-11-21, item 13): the one thing in the actions slot is the toggle of the live mode; the draft buttons are still not here
+  assert.ok(bar.includes('actions={<LiveModeToggle on={live} onToggle={() => setLive((current) => !current)} />} />'), "the live toggle is the only action of the bar");
+  for (const gone of ["СОХРАНИТЬ", "ОТМЕНИТЬ", "unsavedCount"]) assert.ok(!bar.includes(gone), `${gone}: no editor draft action on this bar`);
   assert.ok(!promotionMain.includes("promotion-editor-message"), "the old message line is gone");
   assert.doesNotMatch(styles, /\.promotion-editor-message/, "and so is its rule");
   // T-26-16: the closed workspace is returned before the bar is ever drawn.

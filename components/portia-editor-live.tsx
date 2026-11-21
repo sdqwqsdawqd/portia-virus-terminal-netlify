@@ -13,7 +13,7 @@ import { EmbeddedMediaStrip, FormattedText } from "@/components/portia-virus-car
 import { localDateKey, type BroadcastTab } from "@/lib/broadcasts";
 import type { ImageFraming } from "@/lib/image-framing";
 import {
-  applyLiveAdd, applyLiveCards, applyLiveChoice, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveLogText, applyLiveMove, applyLivePhrase, applyLiveRemove, applyLiveSettings, applyLiveText, findLiveVirus, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveFormatKey, liveNewId, livePhraseLines, livePhraseSlice, liveRecycleKeys, liveRemovedKeys, liveSettingsOk, liveTextKey, LIVE_PHRASE_GROUPS,
+  applyLiveAdd, applyLiveCards, applyLiveChoice, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveLogText, applyLiveMove, applyLivePhrase, applyLiveRemove, applyLiveSettings, applyLiveText, findLiveVirus, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveFormatKey, liveNewId, livePhraseLines, livePhraseSlice, liveRecycleKeys, liveRemovedKeys, liveSettingsOk, liveTextKey, LIVE_PHRASE_GROUPS, LIVE_SEAM_TABS,
   type LiveAddKind, type LiveApp, type LivePhraseGroup, type LiveCardsTarget, type LiveChoiceTarget, type LiveContainer, type LiveDateTarget, type LiveFlagTarget, type LiveImageTarget, type LiveList, type LiveRemovable, type LiveSettingsPatch, type LiveTarget,
 } from "@/lib/live-edit";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
@@ -67,6 +67,10 @@ export const liveCopy = {
     "recycle-file-location": "Исходное расположение",
     "recycle-file-text": "Текст файла",
     "assistant-phrase": "Фраза помощника",
+    "promo-rules": "Правила для кандидата",
+    "promo-question-text": "Текст вопроса",
+    "promo-question-option": "Текст варианта",
+    "promo-task-text": "Текст задания",
   } satisfies Record<LiveTarget["kind"], string>,
   placeholders: {
     "guide-section-title": "Название раздела",
@@ -101,7 +105,35 @@ export const liveCopy = {
     "recycle-file-location": "Расположение",
     "recycle-file-text": "Нажмите, чтобы написать",
     "assistant-phrase": "Нажмите, чтобы написать",
+    "promo-rules": "Нажмите, чтобы написать",
+    "promo-question-text": "Текст вопроса",
+    "promo-question-option": "Вариант",
+    "promo-task-text": "Текст задания",
   } satisfies Record<LiveTarget["kind"], string>,
+  /** «Повышение» (26.1-16): the texts of the tools of its seam; the texts of the candidate's view are the code of the site and are not here. */
+  promo: {
+    transition: "Переход",
+    saving: "Сохраняем изменения…",
+    notSaved: "Изменения не сохранены. Проверьте данные.",
+    refused: "Не сохранено: проверьте текст и варианты.",
+    refusedTask: "Не сохранено: текст не пустой.",
+    answerError: "Проверьте варианты и ответ.",
+    bankError: "Банк не создан. Попробуйте ещё раз.",
+    rulesNoBank: "Сначала добавьте вопрос.",
+    rulesNoMigration: "Правила недоступны: миграция ждёт владельца.",
+    off: "Выключен",
+    switchOff: "Выключить",
+    switchOn: "Включить",
+    answer: "Ответ…",
+    orderSaved: "Порядок сохранён.",
+    questionsEmpty: "Вопросов пока нет.",
+    tasksEmpty: "Заданий пока нет.",
+    addQuestion: { single: "Один ответ", multiple: "Несколько", "free-text": "Свободный" },
+    addQuestionLabel: "Добавить вопрос:",
+    addTask: "Задание",
+    removeQuestion: "Удалить вопрос",
+    removeTask: "Удалить задание",
+  },
   dateStart: "Начало",
   dateEnd: "Окончание",
   dateError: "Окончание раньше начала",
@@ -192,7 +224,9 @@ export function useLiveMode(tab: string, onSwitch?: () => void): { on: boolean; 
   const [enabled, setEnabled] = useState<string[]>([]);
   const app = liveAppForTab(tab);
   const on = app !== null && enabled.includes(tab);
-  const toggle = app === null ? null : <LiveModeToggle on={on} onToggle={() => {
+  // a tab with its own seam (26.1-16: «Повышение») draws the button in its own bar; here it would be a second one among the common buttons
+  const seamTab = (LIVE_SEAM_TABS as readonly string[]).includes(tab);
+  const toggle = app === null || seamTab ? null : <LiveModeToggle on={on} onToggle={() => {
     onSwitch?.();
     setEnabled((current) => (current.includes(tab) ? current.filter((id) => id !== tab) : [...current, tab]));
   }} />;
@@ -596,6 +630,58 @@ export function LiveText({ bridge, target, value, className }: { bridge: LiveEdi
       insertPlainText(event.clipboardData.getData("text/plain").replace(/[\r\n]+/g, " "));
       commit(event.currentTarget.textContent ?? "");
     }}
+  />;
+}
+
+/**
+ * 26.1-16: a text in place that is written once, when the place is left: for data that is not in the draft (the banks of «Повышения»), where each keystroke cannot be a command.
+ * What is typed stays on the screen while the command runs; Escape puts the saved text back and writes nothing; a paste is plain text (T-26.1-22); a single line ends with Enter.
+ * `onCommit` gets the text as typed and answers when the command is done; a text that equals the saved one (but for the ends) sends no command.
+ */
+export function LiveCommitText({ value, onCommit, label, placeholder, className, multiline = false, maxLength }: { value: string; onCommit: (raw: string) => Promise<unknown> | void; label: string; placeholder?: string; className?: string; multiline?: boolean; maxLength?: number }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [typed, setTyped] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  // a place that is not being typed in shows the saved text, but never while its own command runs (the typed text would flash back)
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element || running || window.document.activeElement === element || element.textContent === value) return;
+    element.textContent = value;
+  });
+  const commit = (raw: string) => {
+    if (raw.trim() === value.trim()) { setTyped(null); return; }
+    setRunning(true);
+    void Promise.resolve(onCommit(raw)).catch(() => undefined).finally(() => { setTyped(null); setRunning(false); });
+  };
+  if (multiline) {
+    const shown = typed ?? value;
+    return <textarea
+      className={`live-editable live-textarea${className ? ` ${className}` : ""}`}
+      value={shown}
+      rows={Math.max(3, shown.split("\n").length)}
+      maxLength={maxLength}
+      aria-label={label}
+      placeholder={placeholder}
+      onChange={(event) => setTyped(event.target.value)}
+      onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setTyped(null); event.currentTarget.blur(); } }}
+      onBlur={() => { if (typed !== null) commit(typed); }}
+    />;
+  }
+  return <span
+    ref={ref}
+    className={`live-editable${className ? ` ${className}` : ""}`}
+    contentEditable={editableMode()}
+    suppressContentEditableWarning
+    role="textbox"
+    aria-label={label}
+    data-placeholder={placeholder}
+    spellCheck
+    onKeyDown={(event) => {
+      if (event.key === "Escape") { event.preventDefault(); event.currentTarget.textContent = value; event.currentTarget.blur(); return; }
+      if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
+    }}
+    onPaste={(event) => { event.preventDefault(); insertPlainText(event.clipboardData.getData("text/plain").replace(/[\r\n]+/g, " ")); }}
+    onBlur={(event) => commit((event.currentTarget.textContent ?? "").replace(/[\r\n]+/g, " "))}
   />;
 }
 

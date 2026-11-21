@@ -176,3 +176,18 @@ test("participant component never receives reviewer identity, keys, notes or fut
     assert.ok(!source.includes(forbidden), forbidden);
   }
 });
+
+// 26.1-16: the window of the candidate draws the extracted parts; the live mode adds places, not markup of its own.
+test("26.1-16: the window of the candidate draws the extracted parts and keeps its markup, tasks and fields unchanged", () => {
+  for (const part of ["<CandidateCardHeader kind={kind}", "<CandidatePrestart lines={lines}>", "<CandidateRules text={rules} />", "<CandidateQuestion question={question}", "<CandidateTasks tasks={tasks} />"]) assert.ok(source.includes(part), part);
+  for (const markup of ["promotion-qualification-prestart", "promotion-prestart-rules", "promotion-question-progress", "promotion-free-answer", "promotion-task-list", "ВОПРОС {index + 1} ИЗ {total}"]) assert.ok(source.includes(markup), markup);
+  // a task of the candidate stays plain text: the live place is the answer of useLiveEdit only
+  assert.match(source, /\{live \? live\.text\(\{ kind: "promo-task-text", taskId: task\.id \}, task\.text, \{ multiline: true \}\) : task\.text\}/);
+});
+
+test("26.1-16: the live «Повышение» styles use 11px and more and stand before users-tab", () => {
+  const start = styles.indexOf(".promo-live {");
+  const end = styles.indexOf("/* users-tab:start");
+  assert.ok(start > 0 && start < end);
+  assert.doesNotMatch(styles.slice(start, end), /font(?:-size)?:[^;}]*\b(?:9|10)px/);
+});

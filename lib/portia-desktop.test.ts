@@ -1420,7 +1420,8 @@ test("owner 2026-11-20 (OWN-01): a tile title gets a size from lib/guide-tile.ts
 
 // LIVE-04/LIVE-05 (26.1-13): the sweep over the whole family of the visitor's desktop (the window parts and the virus card). The visitor draws no live class and calls no live tool
 // without the answer of useLiveEdit, never provides the context, and never turns a link to a GIF back into text.
-const visitorFamily = [...desktopFamily, { file: "portia-virus-card.tsx", text: lf(readFileSync(new URL("../components/portia-virus-card.tsx", import.meta.url), "utf8")) }];
+// 26.1-16: the window «Повышение» of the visitor joins the sweep: its three extracted parts (rules, question, tasks) have live places of their own.
+const visitorFamily = [...desktopFamily, { file: "portia-virus-card.tsx", text: lf(readFileSync(new URL("../components/portia-virus-card.tsx", import.meta.url), "utf8")) }, { file: "portia-promotion.tsx", text: lf(readFileSync(new URL("../components/portia-promotion.tsx", import.meta.url), "utf8")) }];
 
 test("LIVE-04 (26.1-13): no component of the visitor draws a live class or calls a live tool outside the answer of useLiveEdit, and none provides the context", () => {
   const apiCall = /\blive\.(?:text|rich|image|video|cards|addBar|order|date|flag|choice|remove)\(/;

@@ -2979,6 +2979,24 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 @media (max-width: 900px) {
   .live-timing input:not([type="checkbox"]), .live-timing select { height: var(--tap-target); min-height: var(--tap-target); }
 }
+/* LIVE-01..04 (26.1-16): живое «Повышение» — вид кандидата (его классы: promotion-card, promotion-question, promotion-task-list) с инструментами редактора. Шрифты инструментов — от 11px. */
+.promo-live { display: grid; gap: 12px; max-width: 760px; min-width: 0; color: oklch(.866 calc(.018 * var(--accent-chroma)) var(--accent-hue)); }
+.promo-live-nav { align-items: center; }
+.promo-live .promotion-command-state { margin: 0; }
+.promo-live .promotion-card { margin: 0; }
+.promo-live-list { display: grid; gap: 12px; }
+.promo-live-row { display: grid; gap: 6px; min-width: 0; }
+.promo-live-row[data-inactive="true"] .promotion-question { opacity: .62; }
+.promo-live-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.promo-live-tools .live-button, .promo-live-tools .live-remove { min-height: 28px; font-size: 11px; }
+.promo-live-tools .live-remove { width: auto; padding: 0 10px; line-height: 26px; }
+.promo-live .promotion-question .live-editable, .promo-live .promotion-task-list .live-editable { min-width: 6ch; }
+.promo-live .promotion-question label .live-editable { flex: 1 1 auto; }
+.promo-live textarea.live-textarea { display: block; width: 100%; box-sizing: border-box; min-height: 64px; padding: 8px 10px; border: 1px dashed var(--line-bright); border-radius: var(--radius-field); background: rgba(0,0,0,.16); color: inherit; font: inherit; line-height: 1.55; resize: vertical; }
+.promo-live textarea.live-textarea:hover, .promo-live textarea.live-textarea:focus { border-color: var(--teal); }
+.promo-live .promotion-free-answer textarea:disabled, .promo-live .promotion-question input:disabled { cursor: default; }
+.promo-live-readonly { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
+.promo-live-empty { margin: 0; color: var(--muted); font: 400 13px/1.5 var(--doc); }
 /* users-tab:start — Phase 22 «Пользователи» (USR-01..USR-09): sharp corners, values from 22-UI-SPEC, nothing else in the file changes */
 .tab-count { min-width: 24px; margin-left: 8px; padding: 0 8px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px/1.35 var(--mono); text-align: center; }
 .users-tab { display: grid; gap: 24px; min-width: 0; }
