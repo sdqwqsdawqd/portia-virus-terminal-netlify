@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS } from "./content-limits.ts";
-import { accessPreviewStates, LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText, liveRecycleKeys, applyLivePhrase, liveFormatKey, livePhraseLines, livePhraseSlice, applyLiveSettings, liveSettingsOk, LIVE_SEAM_TABS, PROMO_NEW_TASK_TEXT, promoMoveId, promoNewQuestion, promoNextOrder, promoOrderChanges, promoQuestionEdit } from "./live-edit.ts";
+import { accessPreviewStates, LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText, liveRecycleKeys, applyLivePhrase, liveFormatKey, livePhraseLines, livePhraseSlice, applyLiveSettings, liveSettingsOk, LIVE_SEAM_TABS, PROMO_NEW_TASK_TEXT, promoMoveId, promoNewQuestion, promoNextOrder, promoOrderChanges, promoQuestionEdit, liveCommitDecision } from "./live-edit.ts";
 import { broadcastFeed } from "./broadcasts.ts";
 import { accessGateLayout } from "./access-gate-view.ts";
 import { validateQuestionDraft } from "./portia-promotion-reviewer.ts";
@@ -1526,4 +1526,13 @@ test("LIVE-04 (26.1-19): the preview styles stand after the live block and befor
   // the gate's own rules are not changed by the preview: the fixed full-screen frame stays the gate's
   assert.match(css, /^\.access-gate \{ position: fixed; inset: 0;/m);
   assert.doesNotMatch(block, /\.access-gate \{/);
+});
+
+// 26.1-REVIEW-2 CR-01: leaving a text in place writes it, unless the edit was cancelled (Escape) or nothing changed.
+test("CR-01 (26.1-REVIEW-2): a cancelled edit never commits, however much was typed", () => {
+  assert.equal(liveCommitDecision({ raw: "новый текст", saved: "старый", cancelled: true }), "skip", "Escape then blur: the typed text is given up");
+  assert.equal(liveCommitDecision({ raw: "", saved: "старый", cancelled: true }), "skip");
+  assert.equal(liveCommitDecision({ raw: "новый текст", saved: "старый", cancelled: false }), "commit", "a plain blur commits what was typed");
+  assert.equal(liveCommitDecision({ raw: "  старый ", saved: "старый", cancelled: false }), "skip", "the same text but for the ends: no command");
+  assert.equal(liveCommitDecision({ raw: "", saved: "старый", cancelled: false }), "commit", "a cleared text is a real edit (the caller refuses what it must)");
 });

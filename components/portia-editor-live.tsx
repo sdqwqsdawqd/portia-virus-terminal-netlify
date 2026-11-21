@@ -15,7 +15,7 @@ import { accessGateLayout } from "@/lib/access-gate-view";
 import { localDateKey, type BroadcastTab } from "@/lib/broadcasts";
 import type { ImageFraming } from "@/lib/image-framing";
 import {
-  accessPreviewStates, applyLiveAdd, applyLiveCards, applyLiveChoice, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveLogText, applyLiveMove, applyLivePhrase, applyLiveRemove, applyLiveSettings, applyLiveText, findLiveVirus, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveFormatKey, liveNewId, livePhraseLines, livePhraseSlice, liveRecycleKeys, liveRemovedKeys, liveSettingsOk, liveTextKey, LIVE_PHRASE_GROUPS, LIVE_SEAM_TABS,
+  accessPreviewStates, applyLiveAdd, applyLiveCards, applyLiveChoice, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveLogText, applyLiveMove, applyLivePhrase, applyLiveRemove, applyLiveSettings, applyLiveText, findLiveVirus, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveCommitDecision, liveFormatKey, liveNewId, livePhraseLines, livePhraseSlice, liveRecycleKeys, liveRemovedKeys, liveSettingsOk, liveTextKey, LIVE_PHRASE_GROUPS, LIVE_SEAM_TABS,
   type AccessPreviewId, type LiveAddKind, type LiveApp, type LivePhraseGroup, type LiveCardsTarget, type LiveChoiceTarget, type LiveContainer, type LiveDateTarget, type LiveFlagTarget, type LiveImageTarget, type LiveList, type LiveRemovable, type LiveSettingsPatch, type LiveTarget,
 } from "@/lib/live-edit";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
@@ -658,8 +658,12 @@ export function LiveCommitText({ value, onCommit, label, placeholder, className,
     if (!element || running || window.document.activeElement === element || element.textContent === value) return;
     element.textContent = value;
   });
+  // Escape sets this before it blurs the place: the blur runs inside the same key handler, where `typed` still holds the text that is being given up (26.1-REVIEW-2 CR-01).
+  const cancelled = useRef(false);
   const commit = (raw: string) => {
-    if (raw.trim() === value.trim()) { setTyped(null); return; }
+    const skip = cancelled.current;
+    cancelled.current = false;
+    if (liveCommitDecision({ raw, saved: value, cancelled: skip }) === "skip") { setTyped(null); return; }
     setRunning(true);
     void Promise.resolve(onCommit(raw)).catch(() => undefined).finally(() => { setTyped(null); setRunning(false); });
   };
@@ -673,8 +677,8 @@ export function LiveCommitText({ value, onCommit, label, placeholder, className,
       aria-label={label}
       placeholder={placeholder}
       onChange={(event) => setTyped(event.target.value)}
-      onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setTyped(null); event.currentTarget.blur(); } }}
-      onBlur={() => { if (typed !== null) commit(typed); }}
+      onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); cancelled.current = true; setTyped(null); event.currentTarget.blur(); } }}
+      onBlur={() => { if (typed !== null) commit(typed); else cancelled.current = false; }}
     />;
   }
   return <span
@@ -687,7 +691,7 @@ export function LiveCommitText({ value, onCommit, label, placeholder, className,
     data-placeholder={placeholder}
     spellCheck
     onKeyDown={(event) => {
-      if (event.key === "Escape") { event.preventDefault(); event.currentTarget.textContent = value; event.currentTarget.blur(); return; }
+      if (event.key === "Escape") { event.preventDefault(); cancelled.current = true; event.currentTarget.textContent = value; event.currentTarget.blur(); return; }
       if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); }
     }}
     onPaste={(event) => { event.preventDefault(); insertPlainText(event.clipboardData.getData("text/plain").replace(/[\r\n]+/g, " ")); }}

@@ -1019,3 +1019,13 @@ export function promoOrderChanges(items: readonly { id: string; sortOrder: numbe
   });
   return changes;
 }
+
+/**
+ * 26.1-REVIEW-2 CR-01: what leaving a text in place does. An edit that was cancelled (Escape) writes nothing, however much was typed;
+ * a text that equals the saved one (but for the ends) writes nothing either. The cancel is a flag, not a state, because the blur that follows Escape
+ * runs inside the same key handler, before the state the handler set is applied.
+ */
+export function liveCommitDecision(input: { raw: string; saved: string; cancelled: boolean }): "commit" | "skip" {
+  if (input.cancelled) return "skip";
+  return input.raw.trim() === input.saved.trim() ? "skip" : "commit";
+}
