@@ -99,7 +99,10 @@ test("OWN-03 the card draws a button per route with its icon, an «Не указ
   assert.match(cell, /<button type="button" className="route-item"/);
   assert.match(cell, /<PortiaIcon name=\{icon\} className="class-badge"/);
   assert.match(cell, /<em className="formatted-empty">Не указан<\/em>/);
-  assert.match(card, /<TransmissionCell value=\{value\} \/>/, "the transmission cell of VirusCardBody is the new component");
+  assert.match(card, /<TransmissionCell value=\{value\} still=\{staticRoutes\} \/>/, "the transmission cell of VirusCardBody is the new component");
+  // Owner 2026-11-22: the template draws the routes as name and icon only, nothing to press.
+  assert.match(cell, /<span className="route-item is-still"/);
+  assert.match(readFileSync(new URL("../components/portia-template-builder.tsx", import.meta.url), "utf8"), /emptyText=\{emptyTemplateText\}\s+staticRoutes\b/);
   for (const match of card.matchAll(/from "(@\/[^"]+)"/g)) {
     assert.ok(["@/lib/portia-content", "@/components/portia-icons", "@/components/portia-live-edit", "@/lib/rich-text-media", "@/lib/transmission-routes"].includes(match[1]), `the card imports ${match[1]}`);
   }
@@ -261,4 +264,11 @@ test("OWN-03 the long texts live in the model, not in the components: the picker
     assert.ok(!card.includes(choice.description), `${choice.name}: the description is not retyped in the card`);
   }
   assert.match(cell, /\{description\}/, "the opened paragraph shows the model's text");
+});
+
+test("owner 2026-11-22: in live mode a press in the routes panel reaches its checkbox and does not close the live popover", () => {
+  const live = read("../components/portia-editor-live.tsx");
+  const dossier = read("../components/portia-editor-dossier.tsx");
+  assert.match(dossier, /className="route-dropdown-panel"[^>]*data-floating-layer=""/, "the portaled routes panel is marked as a floating layer");
+  assert.match(live, /closest\("\[data-floating-layer\]"\)\) return;/, "LivePopover ignores a press inside a floating layer");
 });

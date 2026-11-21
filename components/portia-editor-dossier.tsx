@@ -542,7 +542,7 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
         </span>
         <span className="route-dropdown-chevron" aria-hidden="true">{open ? "▴" : "▾"}</span>
       </button>
-      {open && host && createPortal(<div className="route-dropdown-panel" id={panelId} role="group" aria-labelledby={labelId} ref={panel} onMouseLeave={() => describe(null)}>
+      {open && host && createPortal(<div className="route-dropdown-panel" id={panelId} role="group" aria-labelledby={labelId} ref={panel} data-floating-layer="" onMouseLeave={() => describe(null)}>
         <div className="route-dropdown-list">
           {TRANSMISSION_CHOICES.map((choice) => {
             const icon = classificationIconFor(choice.name);

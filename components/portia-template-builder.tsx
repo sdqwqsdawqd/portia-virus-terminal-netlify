@@ -158,6 +158,7 @@ function TemplateCard({ dossier, label, exporting = false }: { dossier: Template
       media={(slot) => templateMedia(dossier.images, slot)}
       embedMedia={false}
       emptyText={emptyTemplateText}
+      staticRoutes
       footer={["PORTIA / SCIENCE REPORTS", code === "" ? "ШАБЛОН" : `ШАБЛОН ${code}`]}
     />
   </article>;

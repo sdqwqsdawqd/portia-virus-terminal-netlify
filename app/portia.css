@@ -1268,6 +1268,7 @@ html[data-motion="full"] .boot-lines p { clip-path: inset(0 100% 0 0); animation
 .route-list { gap: 4px 14px; }
 .route-item { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 2px 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .route-item:hover { text-decoration: underline; }
+.route-item.is-still { cursor: default; text-decoration: none; } /* owner 2026-11-22: the template's routes are a name and an icon, nothing to press */
 .route-description { margin: 6px 0 0; color: oklch(.37 calc(.014 * var(--accent-chroma)) var(--accent-hue)); font-size: 12px; line-height: 1.5; }
 /* UAT 2026-11-16 gap 11 (UI-07): a class name is read in full, in whole words. "Предупреждение" is 14 glyphs x 0.6em x 12px = 101px; with the cell's 24px of padding
    and 1px of border a cell needs 126px. The name's size follows its cell (12-15px, 13px on a phone), a name that does not fit beside the badge goes under it,

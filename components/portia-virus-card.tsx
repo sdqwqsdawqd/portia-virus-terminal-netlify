@@ -108,6 +108,8 @@ export type VirusCardBodyProps = {
   embedMedia?: boolean;
   /** Shown in place of an empty field, an empty classification value and the absence of mutations. */
   emptyText?: string;
+  /** Owner 2026-11-22: the template shows each route as its name and icon only, nothing to press. */
+  staticRoutes?: boolean;
   /** A node after section 05 and before the footer (the public card puts the scientist records there). */
   after?: ReactNode;
   /** The two lines of the footer. */
@@ -116,10 +118,17 @@ export type VirusCardBodyProps = {
 
 // OWN-03 (owner 2026-11-20): a virus has several routes of transmission. Each is a line with its own icon; a press opens the owner's text for it.
 // Closed by default, so the captured card of the template file has no open description. A value the table does not know is plain text without an icon.
-function TransmissionCell({ value }: { value: string }) {
+function TransmissionCell({ value, still = false }: { value: string; still?: boolean }) {
   const routes = parseTransmissionRoutes(value);
   const [open, setOpen] = useState<string | null>(null);
   if (routes.length === 0) return <strong><em className="formatted-empty">Не указан</em></strong>;
+  // Owner 2026-11-22: in the template (preview and file) a route is its icon and name, not a button.
+  if (still) return <strong className="route-list">
+    {routes.map((name) => {
+      const icon = classificationIconFor(name);
+      return <span className="route-item is-still" key={name}>{icon && <PortiaIcon name={icon} className="class-badge" />}{name}</span>;
+    })}
+  </strong>;
   const description = open !== null && routes.includes(open) ? transmissionDescription(open) : undefined;
   return <>
     <strong className="route-list">
@@ -144,7 +153,7 @@ export function useLiveVirus(): LiveEditApi | null {
   return archive ?? bin;
 }
 
-export function VirusCardBody({ virus, formattedText, media, embedMedia = true, emptyText, after, footer }: VirusCardBodyProps) {
+export function VirusCardBody({ virus, formattedText, media, embedMedia = true, emptyText, staticRoutes = false, after, footer }: VirusCardBodyProps) {
   const live = useLiveVirus();
   // LIVE-05: at rest the live text is the visitor's FormattedText (a GIF plays), pressed it is the editor's field with the strip of its GIFs.
   const liveRich = (live: LiveEditApi, field: LiveVirusField, text: string, className?: string) => live.rich({ kind: "virus-text", virusId: virus.id, field }, { text, document: formattedText[portiaTextKey.virus(virus.id, field)], className });
@@ -158,7 +167,7 @@ export function VirusCardBody({ virus, formattedText, media, embedMedia = true, 
   return <div className="record-body content-fade">
     <header className="record-header"><div><span className="record-code">{live ? live.text({ kind: "virus-code", virusId: virus.id }, virus.code) : plain(virus.code)}</span><h2>{live ? live.text({ kind: "virus-name", virusId: virus.id }, virus.name) : plain(virus.name)}</h2></div><div className="record-status"><span />{live ? live.text({ kind: "virus-status", virusId: virus.id }, virus.status) : plain(virus.status)}</div></header>
     <div className="record-document">
-      <section className="record-hero">{live ? live.image({ kind: "virus-infected", virusId: virus.id }, { value: virus.infectedImage, framing: virus.infectedImageFraming, children: infectedPicture }) : infectedPicture}<div className="classification-panel"><div className="section-kicker"><span>01</span>КЛАССИФИКАЦИЯ</div><div className="classification-grid">{classification.map(([key, label, value, tone]) => { const level = classificationLevel(key, value); const badge = classificationIconFor(value); if (key === "transmission") return <div className={`class-cell ${tone}`} key={label}><span>{label}</span>{live ? <strong>{live.choice({ kind: "virus-class", virusId: virus.id, axis: "transmission" }, value, { label })}</strong> : <TransmissionCell value={value} />}</div>; return <div className={`class-cell ${tone}${level ? ` level-${level}` : ""}`} key={label}><span>{label}</span><strong>{badge && <PortiaIcon name={badge} className="class-badge" />}{live ? live.choice({ kind: "virus-class", virusId: virus.id, axis: key }, value, { label }) : plain(value)}</strong>{level && <small>УРОВЕНЬ {level}</small>}</div>; })}</div></div></section>
+      <section className="record-hero">{live ? live.image({ kind: "virus-infected", virusId: virus.id }, { value: virus.infectedImage, framing: virus.infectedImageFraming, children: infectedPicture }) : infectedPicture}<div className="classification-panel"><div className="section-kicker"><span>01</span>КЛАССИФИКАЦИЯ</div><div className="classification-grid">{classification.map(([key, label, value, tone]) => { const level = classificationLevel(key, value); const badge = classificationIconFor(value); if (key === "transmission") return <div className={`class-cell ${tone}`} key={label}><span>{label}</span>{live ? <strong>{live.choice({ kind: "virus-class", virusId: virus.id, axis: "transmission" }, value, { label })}</strong> : <TransmissionCell value={value} still={staticRoutes} />}</div>; return <div className={`class-cell ${tone}${level ? ` level-${level}` : ""}`} key={label}><span>{label}</span><strong>{badge && <PortiaIcon name={badge} className="class-badge" />}{live ? live.choice({ kind: "virus-class", virusId: virus.id, axis: key }, value, { label }) : plain(value)}</strong>{level && <small>УРОВЕНЬ {level}</small>}</div>; })}</div></div></section>
       <DossierSection index="02" title="ВНЕШНИЕ ХАРАКТЕРИСТИКИ">{live ? liveRich(live, "external", virus.external, "lead-copy") : <FormattedText className="lead-copy" text={virus.external} document={formattedText[portiaTextKey.virus(virus.id, "external")]} {...text} />}</DossierSection>
       <DossierSection index="03" title="ХАРАКТЕРИСТИКИ С PPU"><div className="metric-grid"><div><span>ЗДОРОВЬЕ</span>{live ? liveRich(live, "ppu-health", virus.ppu.health) : <FormattedText text={virus.ppu.health} document={formattedText[portiaTextKey.virus(virus.id, "ppu-health")]} {...text} />}</div><div><span>СКОРОСТЬ</span>{live ? liveRich(live, "ppu-speed", virus.ppu.speed) : <FormattedText text={virus.ppu.speed} document={formattedText[portiaTextKey.virus(virus.id, "ppu-speed")]} {...text} />}</div><div><span>СПОСОБНОСТИ</span>{live ? liveRich(live, "ppu-abilities", virus.ppu.abilities) : <FormattedText text={virus.ppu.abilities} document={formattedText[portiaTextKey.virus(virus.id, "ppu-abilities")]} {...text} />}</div></div></DossierSection>
       <DossierSection index="04" title="ФИЗИОЛОГИЯ">{live ? liveRich(live, "physiology", virus.physiology, "lead-copy") : <FormattedText className="lead-copy" text={virus.physiology} document={formattedText[portiaTextKey.virus(virus.id, "physiology")]} {...text} />}</DossierSection>
