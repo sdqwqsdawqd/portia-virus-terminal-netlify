@@ -514,12 +514,22 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   // At 900px and below a list + form layout shows either the list or the open record (D-01, D-02).
   // D-01: which cards are open. Component state only, never stored, so every visit starts collapsed.
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
-  const isOpen = (id: string) => expanded.has(id);
-  const setOpen = (ids: string[], open: boolean) => setExpanded((current) => {
-    const next = new Set(current);
-    for (const id of ids) { if (open) next.add(id); else next.delete(id); }
-    return next;
-  });
+  // Owner 2026-11-22: the sections and cards of «Справочник» start open; only the ones folded during this visit are closed.
+  const [guideFolded, setGuideFolded] = useState<Set<string>>(() => new Set());
+  const guideOpenByDefault = new Set(draft.guideSections.flatMap((section) => [section.id, ...section.cards.map((card) => card.id)]));
+  const isOpen = (id: string) => (guideOpenByDefault.has(id) ? !guideFolded.has(id) : expanded.has(id));
+  const setOpen = (ids: string[], open: boolean) => {
+    setGuideFolded((current) => {
+      const next = new Set(current);
+      for (const id of ids) { if (!guideOpenByDefault.has(id)) continue; if (open) next.delete(id); else next.add(id); }
+      return next;
+    });
+    setExpanded((current) => {
+      const next = new Set(current);
+      for (const id of ids) { if (guideOpenByDefault.has(id)) continue; if (open) next.add(id); else next.delete(id); }
+      return next;
+    });
+  };
   const [recordOpen, setRecordOpen] = useState(false);
   const layoutRef = useRef<HTMLDivElement>(null);
   const tabsRef = useRef<HTMLElement>(null);
