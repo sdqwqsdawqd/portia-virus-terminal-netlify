@@ -14,7 +14,7 @@ import { passesTarget, type Box } from "@/lib/sort-order";
 import { HOLD_MS, hasPlaceToGo, holdStep, holdTargetAllowed, idleHold, type HoldState, type HoldTarget } from "@/lib/hold-gesture";
 import { classificationIconFor, PortiaIcon } from "@/components/portia-icons";
 import { CardTabs, cardTabsCopy, useCardTabSelection } from "@/components/portia-editor-card-tabs";
-import { TRANSMISSION_CHOICES, formatTransmissionRoutes, parseTransmissionRoutes, toggleTransmissionRoute } from "@/lib/transmission-routes";
+import { TRANSMISSION_CHOICES, formatTransmissionRoutes, parseTransmissionRoutes, toggleTransmissionRoute, transmissionDescription } from "@/lib/transmission-routes";
 
 type ImagePlacement = "dossier" | "mutation" | "recycle" | "guide" | "employee";
 
@@ -409,9 +409,28 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
   const labelId = useId();
   const valueId = useId();
   const panelId = useId();
+  const hintId = useId();
+  const panel = useRef<HTMLDivElement>(null);
+  // Owner 2026-11-21, item 18: the panel is small, so it must fit the screen: it opens upwards when the room below is short and larger above.
+  const [placement, setPlacement] = useState<"down" | "up">("down");
+  // The one hint line: the description of the route under the pointer or in focus.
+  const [hint, setHint] = useState<string | null>(null);
   const selected = parseTransmissionRoutes(value);
   const known = new Set(TRANSMISSION_CHOICES.map((choice) => choice.name));
   const extras = selected.filter((item) => !known.has(item));
+  const hintText = transmissionDescription(hint ?? selected[0] ?? "") ?? "Наведите на путь";
+  // Measured before the paint, so the panel never flashes below the edge of the window.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const button = toggle.current?.getBoundingClientRect();
+    const height = panel.current?.offsetHeight;
+    if (!button || !height) return;
+    const viewport = window.visualViewport?.height ?? window.innerHeight;
+    const need = height + 8;
+    const below = viewport - button.bottom;
+    const above = button.top;
+    setPlacement(below < need && above > below ? "up" : "down");
+  }, [open]);
   // A press anywhere outside closes the panel; a press inside it never does.
   useEffect(() => {
     if (!open) return;
@@ -423,29 +442,32 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
     onKeyDown={(event) => { if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); setOpen(false); toggle.current?.focus(); } }}
     onBlur={(event) => { if (open && event.relatedTarget && !root.current?.contains(event.relatedTarget as Node)) setOpen(false); }}>
     <span className="route-dropdown-label" id={labelId}>{label}</span>
-    <button type="button" className="route-dropdown-toggle" ref={toggle} aria-haspopup="true" aria-expanded={open} aria-controls={open ? panelId : undefined} aria-labelledby={`${labelId} ${valueId}`} onClick={() => setOpen((was) => !was)}>
-      <span className="route-dropdown-value" id={valueId}>
-        {selected.length === 0 ? <em>Не указан</em> : selected.map((name) => {
-          const icon = classificationIconFor(name);
-          return <span className="route-dropdown-chosen" key={name}>{icon && <PortiaIcon name={icon} className="route-icon" />}{name}</span>;
+    <div className="route-dropdown-anchor">
+      <button type="button" className="route-dropdown-toggle" ref={toggle} aria-haspopup="true" aria-expanded={open} aria-controls={open ? panelId : undefined} aria-labelledby={`${labelId} ${valueId}`} onClick={() => { setHint(null); setOpen((was) => !was); }}>
+        <span className="route-dropdown-value" id={valueId}>
+          {selected.length === 0 ? <em>Не указан</em> : selected.map((name) => {
+            const icon = classificationIconFor(name);
+            return <span className="route-dropdown-chosen" key={name}>{icon && <PortiaIcon name={icon} className="route-icon" />}{name}</span>;
+          })}
+        </span>
+        <span className="route-dropdown-chevron" aria-hidden="true">{open ? "▴" : "▾"}</span>
+      </button>
+      {open && <div className="route-dropdown-panel" id={panelId} role="group" aria-labelledby={labelId} ref={panel} data-placement={placement} onMouseLeave={() => setHint(null)}>
+        {TRANSMISSION_CHOICES.map((choice) => {
+          const icon = classificationIconFor(choice.name);
+          return <label key={choice.name} className="route-option" onMouseEnter={() => setHint(choice.name)}>
+            <input type="checkbox" checked={selected.includes(choice.name)} aria-describedby={hintId} onFocus={() => setHint(choice.name)} onChange={() => onChange(toggleTransmissionRoute(value, choice.name))} />
+            {icon && <PortiaIcon name={icon} className="route-icon" />}
+            <span className="route-option-text"><strong>{choice.name}</strong></span>
+          </label>;
         })}
-      </span>
-      <span className="route-dropdown-chevron" aria-hidden="true">{open ? "▴" : "▾"}</span>
-    </button>
-    {open && <div className="route-dropdown-panel" id={panelId} role="group" aria-labelledby={labelId}>
-      {TRANSMISSION_CHOICES.map((choice) => {
-        const icon = classificationIconFor(choice.name);
-        return <label key={choice.name} className="route-option">
-          <input type="checkbox" checked={selected.includes(choice.name)} onChange={() => onChange(toggleTransmissionRoute(value, choice.name))} />
-          {icon && <PortiaIcon name={icon} className="route-icon" />}
-          <span className="route-option-text"><strong>{choice.name}</strong><small>{choice.description}</small></span>
-        </label>;
-      })}
-      {extras.map((extra) => <div key={extra} className="route-option route-extra">
-        <span className="route-option-text"><strong>{extra}</strong></span>
-        <button type="button" className="secondary-control" onClick={() => onChange(formatTransmissionRoutes(selected.filter((item) => item !== extra)))}>Убрать</button>
-      </div>)}
-    </div>}
+        {extras.map((extra) => <div key={extra} className="route-option route-extra">
+          <span className="route-option-text"><strong>{extra}</strong></span>
+          <button type="button" className="secondary-control" onClick={() => onChange(formatTransmissionRoutes(selected.filter((item) => item !== extra)))}>Убрать</button>
+        </div>)}
+        <p className="route-dropdown-hint" id={hintId}>{hintText}</p>
+      </div>}
+    </div>
   </div>;
 }
 
