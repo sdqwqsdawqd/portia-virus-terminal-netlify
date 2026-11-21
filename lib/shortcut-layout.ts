@@ -105,31 +105,122 @@ export function placeShortcuts(
   return { positions, contentHeight: Math.max(area.height, bottom + reserveBottom) };
 }
 
-/** How many cells of the shortcut grid fit across and down the area (at least one each): the same grid placeShortcuts fills, inset + n * (cell + gap). */
-function shortcutGridSize(cell: ShortcutCell, area: { width: number; height: number }, inset: number, gap: number): { columns: number; rows: number } {
-  return {
-    columns: Math.max(1, Math.floor((area.width - 2 * inset + gap) / (cell.width + gap))),
-    rows: Math.max(1, Math.floor((area.height - 2 * inset + gap) / (cell.height + gap))),
-  };
-}
-
 const finiteOr = (value: number, fallback: number) => (Number.isFinite(value) ? value : fallback);
 
 /**
- * The nearest cell of the shortcut grid for a position (owner 22, «Выровнять значки по сетке»), held inside the area.
- * The step is the cell plus the gap; pass the drop area (shortcutDropArea) on the tablet, the workspace on the PC. Pure.
+ * The one grid of the desktop (owner 2026-11-21 items 29, 31): cells of one even step over the whole area, from the top inset down to the
+ * taskbar, the bottom row included. As many cells of the shortcut's size as fit across and down, and what is left over is shared evenly
+ * between them (pitch = the room / the count), so no strip at the right or the bottom is left out of the grid. At least one cell each way.
+ * The cell and the area travel with the grid, so every rule below works on the same one.
  */
-export function snapShortcutPosition(
-  position: { x: number; y: number },
-  cell: ShortcutCell,
-  area: { width: number; height: number },
-  inset = 8,
-  gap = 8,
-): { x: number; y: number } {
-  const { columns, rows } = shortcutGridSize(cell, area, inset, gap);
-  const column = Math.min(columns - 1, Math.max(0, Math.round((finiteOr(position.x, inset) - inset) / (cell.width + gap))));
-  const row = Math.min(rows - 1, Math.max(0, Math.round((finiteOr(position.y, inset) - inset) / (cell.height + gap))));
-  return { x: inset + column * (cell.width + gap), y: inset + row * (cell.height + gap) };
+export type DesktopGrid = {
+  columns: number;
+  rows: number;
+  pitchX: number;
+  pitchY: number;
+  originX: number;
+  originY: number;
+  cell: ShortcutCell;
+  area: { width: number; height: number };
+};
+
+export function desktopGrid(area: { width: number; height: number }, cell: ShortcutCell, inset = 8): DesktopGrid {
+  const width = Math.max(0, finiteOr(area.width, 0) - 2 * inset);
+  const height = Math.max(0, finiteOr(area.height, 0) - 2 * inset);
+  const columns = Math.max(1, Math.floor(width / cell.width));
+  const rows = Math.max(1, Math.floor(height / cell.height));
+  return {
+    columns,
+    rows,
+    // A room narrower than one cell still gets one whole cell, so the shortcut is never squeezed.
+    pitchX: Math.max(cell.width, width / columns),
+    pitchY: Math.max(cell.height, height / rows),
+    originX: inset,
+    originY: inset,
+    cell: { width: cell.width, height: cell.height },
+    area: { width: Math.max(0, finiteOr(area.width, 0)), height: Math.max(0, finiteOr(area.height, 0)) },
+  };
+}
+
+/** Where a shortcut stands in the cell (column, row): centred in it, on whole px. A row past the last one is a row added below the area. */
+export function gridCellPosition(grid: DesktopGrid, column: number, row: number): { x: number; y: number } {
+  return {
+    x: Math.round(grid.originX + column * grid.pitchX + (grid.pitchX - grid.cell.width) / 2),
+    y: Math.round(grid.originY + row * grid.pitchY + (grid.pitchY - grid.cell.height) / 2),
+  };
+}
+
+/** The cell a position is nearest to, held inside the grid; junk counts as the first cell. */
+function gridCellIndex(grid: DesktopGrid, position: { x: number; y: number }): { column: number; row: number } {
+  const offsetX = grid.originX + (grid.pitchX - grid.cell.width) / 2;
+  const offsetY = grid.originY + (grid.pitchY - grid.cell.height) / 2;
+  return {
+    column: Math.min(grid.columns - 1, Math.max(0, Math.round((finiteOr(position.x, offsetX) - offsetX) / grid.pitchX))),
+    row: Math.min(grid.rows - 1, Math.max(0, Math.round((finiteOr(position.y, offsetY) - offsetY) / grid.pitchY))),
+  };
+}
+
+/** The nearest cell of the desktop grid for a position (owner 22, «Выровнять ярлыки по сетке»), held inside the grid. Pure. */
+export function snapShortcutPosition(position: { x: number; y: number }, grid: DesktopGrid): { x: number; y: number } {
+  const { column, row } = gridCellIndex(grid, position);
+  return gridCellPosition(grid, column, row);
+}
+
+/**
+ * The cell every shortcut starts in (owner 2026-11-21 item 29): a column and a row of desktopGrid; a negative index counts from the right or
+ * the bottom edge (-1 is the last column or row). Two columns from the top-left corner in the order of the shortcuts, «Устав» and «Таблица»
+ * in the bottom row of the first two columns, «Корзина» in the last column of the first row.
+ */
+export const desktopShortcutIds = ["search", "archive", "broadcasts", "info", "employees", "settings", "guide", "promotion", "template", "charter", "sheet", "trash"] as const;
+export type DesktopShortcutId = (typeof desktopShortcutIds)[number];
+export const homeShortcutCells: Readonly<Record<DesktopShortcutId, { column: number; row: number }>> = {
+  search: { column: 0, row: 0 },
+  archive: { column: 0, row: 1 },
+  broadcasts: { column: 0, row: 2 },
+  info: { column: 0, row: 3 },
+  employees: { column: 0, row: 4 },
+  settings: { column: 1, row: 0 },
+  guide: { column: 1, row: 1 },
+  promotion: { column: 1, row: 2 },
+  template: { column: 1, row: 3 },
+  charter: { column: 0, row: -1 },
+  sheet: { column: 1, row: -1 },
+  trash: { column: -1, row: 0 },
+};
+
+/**
+ * The starting place of every shortcut: its home cell (homeShortcutCells) of this grid. The ones pinned to the right or bottom edge pick
+ * first; a home cell that is outside the grid or already taken gives way to the next free cell down the column, then the next column
+ * (so on a low desktop a column that runs out goes on in the next one). With more shortcuts than cells, rows are added below the area,
+ * so two shortcuts never share a cell. Every result is a cell of the grid (snapShortcutPosition keeps it as it is). Pure.
+ */
+export function homeShortcutPositions(grid: DesktopGrid, ids: readonly DesktopShortcutId[] = desktopShortcutIds): Record<DesktopShortcutId, { x: number; y: number }> {
+  const { columns, rows } = grid;
+  const total = columns * rows;
+  const taken = new Set<number>();
+  const result = {} as Record<DesktopShortcutId, { x: number; y: number }>;
+  let extra = 0;
+  const pinned = ids.filter((id) => homeShortcutCells[id].column < 0 || homeShortcutCells[id].row < 0);
+  for (const id of [...pinned, ...ids.filter((id) => !pinned.includes(id))]) {
+    const home = homeShortcutCells[id];
+    const column = home.column < 0 ? columns + home.column : home.column;
+    const row = home.row < 0 ? rows + home.row : home.row;
+    // Cells are counted down a column, then across: index = column * rows + row. A home outside the grid starts from the nearest cell inside it.
+    const start = Math.min(columns - 1, Math.max(0, column)) * rows + Math.min(rows - 1, Math.max(0, row));
+    let index = taken.has(start) ? -1 : start;
+    for (let step = 1; index < 0 && step < total; step += 1) {
+      const next = (start + step) % total;
+      if (!taken.has(next)) index = next;
+    }
+    if (index < 0) {
+      result[id] = gridCellPosition(grid, extra % columns, rows + Math.floor(extra / columns));
+      extra += 1;
+      continue;
+    }
+    taken.add(index);
+    result[id] = gridCellPosition(grid, Math.floor(index / rows), index % rows);
+  }
+  return result;
 }
 
 const cellBlocked = (point: { x: number; y: number }, cell: ShortcutCell, blockers: readonly Rect[]) => blockers.some((blocker) => overlaps({ ...point, ...cell }, blocker));
@@ -139,22 +230,14 @@ const cellBlocked = (point: { x: number; y: number }, cell: ShortcutCell, blocke
  * and the result is always a cell of the grid (no clamp afterwards that could push it off the grid). `blockers` are the rectangles of the other shortcuts and of the assistant and
  * the format button, in the coordinates of the area; ties go to the upper row, then the left column. null when every cell is taken.
  */
-export function nearestFreeGridCell(
-  position: { x: number; y: number },
-  cell: ShortcutCell,
-  area: { width: number; height: number },
-  blockers: readonly Rect[],
-  inset = 8,
-  gap = 8,
-): { x: number; y: number } | null {
-  const { columns, rows } = shortcutGridSize(cell, area, inset, gap);
-  const x = finiteOr(position.x, inset);
-  const y = finiteOr(position.y, inset);
+export function nearestFreeGridCell(position: { x: number; y: number }, grid: DesktopGrid, blockers: readonly Rect[]): { x: number; y: number } | null {
+  const x = finiteOr(position.x, grid.originX);
+  const y = finiteOr(position.y, grid.originY);
   let best: { x: number; y: number } | null = null;
   let bestDistance = Infinity;
-  for (let row = 0; row < rows; row += 1) for (let column = 0; column < columns; column += 1) {
-    const point = { x: inset + column * (cell.width + gap), y: inset + row * (cell.height + gap) };
-    if (cellBlocked(point, cell, blockers)) continue;
+  for (let row = 0; row < grid.rows; row += 1) for (let column = 0; column < grid.columns; column += 1) {
+    const point = gridCellPosition(grid, column, row);
+    if (cellBlocked(point, grid.cell, blockers)) continue;
     const distance = Math.hypot(point.x - x, point.y - y);
     if (distance < bestDistance) { best = point; bestDistance = distance; }
   }
@@ -169,25 +252,20 @@ export function freeGridCellAlong(
   from: { x: number; y: number },
   step: { x: number; y: number },
   cells: number,
-  cell: ShortcutCell,
-  area: { width: number; height: number },
+  grid: DesktopGrid,
   blockers: readonly Rect[],
-  inset = 8,
-  gap = 8,
 ): { x: number; y: number } | null {
-  const { columns, rows } = shortcutGridSize(cell, area, inset, gap);
-  const origin = snapShortcutPosition(from, cell, area, inset, gap);
-  const column0 = Math.round((origin.x - inset) / (cell.width + gap));
-  const row0 = Math.round((origin.y - inset) / (cell.height + gap));
+  const { columns, rows } = grid;
+  const { column: column0, row: row0 } = gridCellIndex(grid, from);
   const start = Math.max(1, Math.floor(cells));
   const longest = Math.max(columns, rows);
-  const counts = [...Array.from({ length: longest - start + 1 }, (_, index) => start + index), ...Array.from({ length: start - 1 }, (_, index) => start - 1 - index)];
+  const counts = [...Array.from({ length: Math.max(0, longest - start + 1) }, (_, index) => start + index), ...Array.from({ length: start - 1 }, (_, index) => start - 1 - index)];
   for (const count of counts) {
     const column = column0 + Math.sign(step.x) * count;
     const row = row0 + Math.sign(step.y) * count;
     if (column < 0 || column >= columns || row < 0 || row >= rows) continue;
-    const point = { x: inset + column * (cell.width + gap), y: inset + row * (cell.height + gap) };
-    if (!cellBlocked(point, cell, blockers)) return point;
+    const point = gridCellPosition(grid, column, row);
+    if (!cellBlocked(point, grid.cell, blockers)) return point;
   }
   return null;
 }
@@ -195,22 +273,20 @@ export function freeGridCellAlong(
 /**
  * Puts every shortcut that has a position into its own cell of the grid: the nearest free one, the shortcuts in the given order
  * (the earlier one picks first, ties go to the upper row, then the left column). Shortcuts without a position are left out.
- * If the area has fewer cells than shortcuts, rows are added below, so nothing overlaps. Never mutates its arguments.
+ * If the area has fewer cells than shortcuts, rows are added below, so nothing overlaps. A layout already on the grid stays as it is
+ * (the home places of homeShortcutPositions included). Never mutates its arguments.
  */
 export function alignShortcutsToGrid(
   positions: Readonly<Record<string, { x: number; y: number } | undefined>>,
   order: readonly string[],
-  cell: ShortcutCell,
-  area: { width: number; height: number },
-  inset = 8,
-  gap = 8,
+  grid: DesktopGrid,
 ): Record<string, { x: number; y: number }> {
   const ids = order.filter((id) => positions[id] !== undefined);
-  const size = shortcutGridSize(cell, area, inset, gap);
-  const columns = size.columns;
-  const rows = Math.max(size.rows, Math.ceil(ids.length / columns));
+  const columns = grid.columns;
+  const rows = Math.max(grid.rows, Math.ceil(ids.length / columns));
+  const inset = grid.originX;
   const free: { x: number; y: number }[] = [];
-  for (let row = 0; row < rows; row += 1) for (let column = 0; column < columns; column += 1) free.push({ x: inset + column * (cell.width + gap), y: inset + row * (cell.height + gap) });
+  for (let row = 0; row < rows; row += 1) for (let column = 0; column < columns; column += 1) free.push(gridCellPosition(grid, column, row));
   const result: Record<string, { x: number; y: number }> = {};
   for (const id of ids) {
     const from = positions[id] as { x: number; y: number };

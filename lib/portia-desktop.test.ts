@@ -1409,7 +1409,8 @@ test("UI-09: at 521–900px drag and Alt+Arrow work again; only the ≤520px gri
   const move = /const handlePointerMove = [\s\S]*?\n  \};/.exec(shortcutsSource)?.[0] ?? "";
   const finish = /const finishDrag = [\s\S]*?\n  \};/.exec(shortcutsSource)?.[0] ?? "";
   for (const handler of [move, finish, key]) assert.ok(handler.includes("dropBounds("), "the handler clamps inside the placement area on 521–900px");
-  assert.match(shortcutsSource, /const dropBounds = [^\n]*placed \? \{ size: placed\.cell, area: shortcutDropArea\(placed\.area\) \}/);
+  // Owner 2026-11-21 items 29–31: the area is the one of the placement's desktop grid (the PC is placed too now; at 521–900px it is the old drop area).
+  assert.match(shortcutsSource, /const dropBounds = [^\n]*placed \? \{ size: placed\.cell, area: placed\.grid\.area \}/);
   assert.ok(finish.includes("shortcutObstacles(") && key.includes("shortcutObstacles("));
   // The move is saved where it always was and announced the same way.
   assert.match(key, /onAnnounce\?\.\(.Ярлык «\$\{label\}» перемещён.\);/);

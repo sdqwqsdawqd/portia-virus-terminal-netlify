@@ -471,7 +471,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
   const [desktopSettings, setDesktopSettings] = useState<DesktopSettings>(defaultDesktopSettings);
   const [shortcutPositions, setShortcutPositions] = useState<Partial<Record<DesktopShortcutId, ShortcutPosition>>>({});
   const [shortcutPositionsLoaded, setShortcutPositionsLoaded] = useState(false);
-  // UI-09: at 521–900px one JS rule places the shortcuts inside nav.desktop-icons (PC and ≤520px keep their own layouts).
+  // UI-09: at 521–900px one JS rule places the shortcuts inside nav.desktop-icons; on the PC (owner 2026-11-21 items 29, 31) a shortcut without
+  // a saved place stands in its home cell of the desktop grid (homeShortcutPositions), so «Вернуть…» puts every shortcut into its cell. ≤520px keeps its CSS grid.
   const desktopIconsRef = useRef<HTMLElement>(null);
   const shortcutPlacement = useShortcutPlacement(desktopIconsRef, desktopShortcutOrder, desktopSettings.iconSize, shortcutPositions);
   const [desktopSettingsLoaded, setDesktopSettingsLoaded] = useState(false);
