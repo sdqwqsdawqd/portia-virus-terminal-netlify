@@ -969,7 +969,7 @@ test("owner 2026-11-20 OWN-10: the card tab strip is a seam: tabs of the same ma
   assert.ok(cardTabsCode.includes("{onMove && <OrderDragHandle index={index} label={item.title || cardTabsCopy.item} onMove={onMove} />}"), "the order button only when the tabs can move");
   assert.ok(cardTabsCode.includes("data-sort-index={onMove ? index : undefined}"), "a tab that cannot move is no sort row");
   assert.ok(cardTabsCode.includes("item.title || cardTabsCopy.untitled"), "an empty title reads «Без названия»");
-  assert.ok(cardTabsCode.includes("if (items.length === 0) return null;"), "no strip without cards");
+  assert.ok(cardTabsCode.includes("if (items.length === 0 && !add) return null;"), "no strip without cards (26.1-20: unless the strip carries the add action)");
   assert.match(cardTabsCode, /import \{ resolveCardTab[^}]*\} from "@\/lib\/card-tab-selection"/, "the choice is the pure rule");
   assert.ok(cardTabsCode.includes("getBoundingClientRect") && !cardTabsCode.includes("scrollIntoView"), "only the strip scrolls sideways, the page does not jump");
   assert.doesNotMatch(cardTabsCode, /dangerouslySetInnerHTML|title=\{/, "T-26.1-19: titles are text through React, no tooltip (D-18)");
@@ -1099,4 +1099,34 @@ test("owner 2026-11-21 item 16: the recycle bin list fills the whole height of t
   assert.equal(declared(column, "overflow-y"), undefined);
   // «База вирусов» keeps the page-scroll list and detail: its long form scrolls the page, the column sticks (quick 261117-bi1), so no fixed-height row.
   assert.equal(declared(".content-editor > .virus-editor-layout:not(.recycle-editor-layout):not(.employee-editor-layout)", "flex", DESKTOP), undefined);
+});
+
+// ---- 26.1-20 (owner 2026-11-21, item 17): «+ ДОБАВИТЬ КАРТОЧКУ» — в конце полосы вкладок карточек ----
+test("owner 2026-11-21 item 17: the strip of card tabs ends with the add action: the button and the limit note in the seam, without `add` the strip is as before", () => {
+  assert.ok(cardTabsCode.includes('addCard: "+ ДОБАВИТЬ КАРТОЧКУ"'), "the label lives in the seam (D-58)");
+  assert.ok(cardTabsCode.includes("add?: { onAdd: () => void; disabled: boolean; note?: ReactNode }"), "the add action is optional data");
+  assert.ok(cardTabsCode.includes("if (items.length === 0 && !add) return null;"), "no strip without cards, unless there is the add action: an empty section shows the same button");
+  assert.ok(cardTabsCode.includes('className="editor-card-tab-add"') && cardTabsCode.includes("{cardTabsCopy.addCard}"), "button.editor-card-tab-add with the label of the seam");
+  assert.ok(cardTabsCode.includes("disabled={add.disabled}") && cardTabsCode.includes("onClick={add.onAdd}"), "the editor's action and its limit");
+  assert.ok(cardTabsCode.includes("aria-describedby={add.note ? noteId : undefined}") && cardTabsCode.includes("id={noteId}"), "the button is described by the limit note");
+  const navEnd = cardTabsCode.indexOf("</nav>");
+  const button = cardTabsCode.indexOf('className="editor-card-tab-add"');
+  assert.ok(navEnd > 0 && button > navEnd, "the action stands after the scrolling strip, at its end, so many tabs never push it out of sight");
+  assert.match(cardTabsCode.slice(button - 80, button + 40), /type="button"/, "a button of the strip submits nothing");
+  assert.equal(declared(".editor-card-tabs > .editor-card-tab-add-bar", "flex"), "none");
+  assert.equal(declared(".editor-card-tabs button.editor-card-tab-add", "min-height"), "32px", "as tall as a tab");
+  assert.equal(declared(".editor-card-tabs button.editor-card-tab-add", "min-height", PHONE), "var(--tap-target)");
+  assert.equal(declared(".editor-card-tabs", "flex-wrap", PHONE), "wrap", "a phone strip leaves the action its own row when it does not fit");
+  assert.ok(styles.indexOf(".editor-card-tab-add") < styles.indexOf("/* users-tab:start"), "the new rules stand before users-tab");
+  assert.ok(styles.trimEnd().endsWith("/* ui-unify:end */"), "the block of ui-unify stays the last");
+});
+
+test("owner 2026-11-21 item 17: the editor gives the strip of the guide cards its add action and no longer draws the button under the list", () => {
+  const guide = editorSlice('{tab === "guide" && (', '{tab === "recycle"');
+  const strip = guide.slice(guide.indexOf("<CardTabs label={cardTabsCopy.cards}"), guide.indexOf('<div className="info-subsection-list" data-sort-group="guide-cards"'));
+  assert.ok(strip.includes("add={{ onAdd: () => { const id = makeId(\"card\"); changeDraft((next) => { updateById(next.guideSections, section.id, (item) => { item.cards.push({ id, title: \"НОВАЯ КАРТОЧКА\", cover: \"\", blocks: [] }); }); }); setOpen([id], true); }, disabled: section.cards.length >= MAX_SUBSECTIONS, note: <LimitNote id={`limit-cards-${section.id}`} count={section.cards.length} max={MAX_SUBSECTIONS} /> }}"), "the same add action, the limit and the note");
+  assert.ok(!guide.includes("limit-add\" type=\"button\" disabled={section.cards.length >= MAX_SUBSECTIONS}"), "the old button under the list is gone");
+  assert.equal(guide.split("limit-cards-").length - 1, 1, "one limit note of the cards");
+  assert.ok(guide.includes("В разделе нет карточек. Добавьте первую кнопкой «+ ДОБАВИТЬ КАРТОЧКУ»."), "the empty section still names the button");
+  assert.ok(!stripComments(editor).includes("<button className=\"secondary-control limit-add\" type=\"button\" disabled={section.cards.length"), "no limit-add button of the cards left in the file");
 });

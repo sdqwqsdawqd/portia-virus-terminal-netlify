@@ -121,6 +121,9 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //      (applyLiveAccessHunk): менеджер аккаунтов редакторов остаётся содержимым вкладки, кнопка «ЖИВОЙ РЕЖИМ» и просмотр экранов ворот посетителя лежат в шве; плюс имя AccessLiveTab
 //      в строке импорта шва. Русских строк не добавлено (все тексты в шве, liveCopy.access). Источник одобрения: 26.1-OWNER-REQUEST, пункт 13 («Доступ» в живом режиме от лица того,
 //      кого проверяют) и пункт 25 (решение владельца 2026-11-21: вариант A, просмотр без правки текстов), план 26.1-19.
+//  25. PORTIA-26.1-ADDCARD (26.1-20; OWN-10, D-21) — «+ ДОБАВИТЬ КАРТОЧКУ» в конце полосы вкладок карточек раздела «Справочника» (applyGuideAddCardHunk): проп add у CardTabs
+//      (то же действие добавления, предел и заметка о нём) и удаление прежнего блока кнопки под списком. Подпись кнопки лежит в шве (cardTabsCopy.addCard), других русских строк не
+//      добавлено. Источник одобрения: 26.1-OWNER-REQUEST, пункт 17 (2026-11-21), план 26.1-20.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -1370,6 +1373,28 @@ function applyLiveAccessHunk(text: string): string {
   );
 }
 
+/**
+ * PORTIA-26.1-ADDCARD (26.1-20; OWN-10, D-21): «+ ДОБАВИТЬ КАРТОЧКУ» стоит в конце полосы вкладок карточек раздела «Справочника». Две замены: проп add у CardTabs (то же действие добавления,
+ * предел и заметка о нём) и удаление прежнего блока кнопки под списком карточек. Подпись кнопки переехала в шов (cardTabsCopy.addCard), других русских строк не добавлено.
+ */
+const GUIDE_ADD_CARD_ACTION = 'onClick={() => { const id = makeId("card"); changeDraft((next) => { updateById(next.guideSections, section.id, (item) => { item.cards.push({ id, title: "НОВАЯ КАРТОЧКА", cover: "", blocks: [] }); }); }); setOpen([id], true); }}';
+const GUIDE_ADD_CARD_UNDER_LIST = [
+  '              <div className="scientist-log-actions">',
+  '                <button className="secondary-control limit-add" type="button" disabled={section.cards.length >= MAX_SUBSECTIONS} aria-describedby={`limit-cards-${section.id}`} ' + GUIDE_ADD_CARD_ACTION + ">+ ДОБАВИТЬ КАРТОЧКУ</button>",
+  "                <LimitNote id={`limit-cards-${section.id}`} count={section.cards.length} max={MAX_SUBSECTIONS} />",
+  "              </div>",
+  "",
+].join("\n");
+function applyGuideAddCardHunk(text: string): string {
+  const next = replaceOnce(
+    text,
+    'if (target) moveArrayItem(target.cards, from, to); })} />\n              <div className="info-subsection-list" data-sort-group="guide-cards"',
+    'if (target) moveArrayItem(target.cards, from, to); })}\n                add={{ onAdd: () => { const id = makeId("card"); changeDraft((next) => { updateById(next.guideSections, section.id, (item) => { item.cards.push({ id, title: "НОВАЯ КАРТОЧКА", cover: "", blocks: [] }); }); }); setOpen([id], true); }, disabled: section.cards.length >= MAX_SUBSECTIONS, note: <LimitNote id={`limit-cards-${section.id}`} count={section.cards.length} max={MAX_SUBSECTIONS} /> }} />\n              <div className="info-subsection-list" data-sort-group="guide-cards"',
+    "guide add card: the add action of the strip",
+  );
+  return replaceOnce(next, GUIDE_ADD_CARD_UNDER_LIST, "", "guide add card: the button under the list is gone");
+}
+
 /** Реестр одобренных правок (D-64): `apply` — порядок применения к образцу; `normalizeActual` — что вырезается из текущего файла перед сравнением. */
 const approvedEditorEdits: readonly { id: string; apply: (text: string) => string; normalizeActual?: (text: string) => string }[] = [
   { id: "D-57", apply: applyLaunchButtonHunk },
@@ -1400,6 +1425,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26.1-TABS3", apply: applyVirusItemTabsHunk },
   { id: "PORTIA-26.1-LIVE", apply: applyLiveModeHunk },
   { id: "PORTIA-26.1-LIVE-ACCESS", apply: applyLiveAccessHunk },
+  { id: "PORTIA-26.1-ADDCARD", apply: applyGuideAddCardHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -1555,7 +1581,8 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.notEqual(firstDifference(expected, withoutColumnSwapSeam), null, "a file without the PORTIA-26.1-HOLD hunk is a difference");
   assert.throws(() => applyColumnSwapSeamHunk(expected), /exactly one approved anchor/, "the column swap seam hunk cannot be applied twice");
   assert.ok(!expected.includes("function ColumnSwapHandle"), "the approved editor no longer holds ColumnSwapHandle");
-  const withoutGuideCardTabs = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-TABS").reduce((text, edit) => edit.apply(text), sample);
+  // PORTIA-26.1-ADDCARD stands on the strip that PORTIA-26.1-TABS draws, so it leaves with it.
+  const withoutGuideCardTabs = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-TABS" && edit.id !== "PORTIA-26.1-ADDCARD").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutGuideCardTabs), null, "a file without the PORTIA-26.1-TABS hunk is a difference");
   assert.throws(() => applyGuideCardTabsHunk(expected), /exactly one approved anchor/, "the guide card tabs hunk cannot be applied twice");
   assert.ok(expected.includes("<CardTabs label={cardTabsCopy.cards}"), "the approved editor shows the card tabs of a «Справочник» section");
@@ -1575,6 +1602,11 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.notEqual(firstDifference(expected, withoutLiveAccess), null, "a file without the PORTIA-26.1-LIVE-ACCESS hunk is a difference");
   assert.throws(() => applyLiveAccessHunk(expected), /exactly one approved anchor/, "the live access hunk cannot be applied twice");
   assert.ok(expected.includes("<AccessLiveTab manager={<EditorAccessManager />} />") && !withoutLiveAccess.includes("<AccessLiveTab"), "the approved editor wraps the accounts of the editors in the live access tab");
+  const withoutAddCard = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-ADDCARD").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutAddCard), null, "a file without the PORTIA-26.1-ADDCARD hunk is a difference");
+  assert.throws(() => applyGuideAddCardHunk(expected), /exactly one approved anchor/, "the add card hunk cannot be applied twice");
+  assert.ok(expected.includes("add={{ onAdd:") && !expected.includes('limit-add" type="button" disabled={section.cards.length'), "the approved editor puts the add card action into the strip and has no button under the list");
+  assert.ok(withoutAddCard.includes('limit-add" type="button" disabled={section.cards.length'), "without the hunk the button stands under the list");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");
