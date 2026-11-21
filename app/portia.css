@@ -1658,8 +1658,9 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
 @media (520px < width <= 900px) {
   .workspace { min-height: max(calc(100svh - 82px), var(--shortcut-content-height, 0px)); padding: 0 0 56px; }
   .workspace.mobile-app-open { min-height: calc(100svh - 82px); }
-  /* The measured area keeps the natural workspace height, so a grown workspace never feeds back into the placement. */
-  .desktop-icons { position: absolute; inset: 0 0 auto; height: calc(100svh - 82px); width: auto; margin: 0; display: block; padding: 0; }
+  /* The measured area keeps the natural workspace height, so a grown workspace never feeds back into the placement.
+     Owner 2026-11-21 item 31: it ends at the top of the taskbar (100svh minus the 48px system bar and the 44px taskbar), so the bottom row of the grid is reachable. */
+  .desktop-icons { position: absolute; inset: 0 0 auto; height: calc(100svh - 92px); width: auto; margin: 0; display: block; padding: 0; }
   .desktop-icon { position: absolute; left: var(--shortcut-left); top: var(--shortcut-top); right: auto; bottom: auto; width: 94px; min-height: 86px; padding: 7px 5px; font-size: 12px; touch-action: pan-y pinch-zoom; }
   .desktop-icon-trash { position: absolute; }
   .desktop-icon-symbol { width: 52px; height: 52px; }

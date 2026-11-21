@@ -76,9 +76,8 @@ const order = ["search", "archive", "broadcasts", "info", "employees", "settings
 const widths = [521, 600, 768, 900] as const;
 const iconSizes = ["compact", "default", "large"] as const;
 const areas = [{ width: 521, height: 600 }, { width: 600, height: 700 }, { width: 768, height: 900 }, { width: 900, height: 600 }, { width: 521, height: 400 }];
-const gap = 8;
 
-type Placement = { positions: Record<string, { x: number; y: number }>; contentHeight: number };
+type Placement = { positions: Record<string, { x: number; y: number }>; contentHeight: number; grid: layout.DesktopGrid };
 type Cell = { width: number; height: number };
 const place = (...args: unknown[]): Placement => {
   assert.equal(typeof (layout as Record<string, unknown>).placeShortcuts, "function", "lib/shortcut-layout.ts exports placeShortcuts");
@@ -96,10 +95,13 @@ function assertClean(result: Placement, area: { width: number; height: number },
     return { id, x: point.x, y: point.y, width: cell.width, height: cell.height };
   });
   assert.ok(result.contentHeight >= area.height, `${label}: the content is never shorter than the area`);
+  // Owner 2026-11-21 item 31: the area (.desktop-icons) now ends at the top of the taskbar, so a shortcut that fits stays inside it, the bottom row
+  // included (no 56px reserve cut off it any more); only a grown content keeps the 56px scroll reserve below the last shortcut.
+  const grown = result.contentHeight > area.height;
   for (const rect of rects) {
     assert.ok(rect.x >= 8 && rect.x + rect.width <= area.width - 8, `${label}: ${rect.id} is cut by a side (x ${rect.x})`);
     assert.ok(rect.y >= 8, `${label}: ${rect.id} is cut by the top`);
-    assert.ok(rect.y + rect.height <= result.contentHeight - 56, `${label}: ${rect.id} reaches the taskbar reserve`);
+    assert.ok(rect.y + rect.height <= (grown ? result.contentHeight - 56 : area.height - 8), `${label}: ${rect.id} reaches the taskbar`);
   }
   for (let a = 0; a < rects.length; a += 1) for (let b = a + 1; b < rects.length; b += 1) {
     assert.ok(!overlaps(rects[a], rects[b]), `${label}: ${rects[a].id} overlaps ${rects[b].id}`);
@@ -139,42 +141,50 @@ test("UI-09 shortcutCell numbers are the ones the 521–900px stylesheet draws",
 test("UI-09 placeShortcuts: at 521/600/768/900px and every icon size no shortcut overlaps another, a side, the top or the taskbar reserve", () => {
   for (const area of areas) for (const size of iconSizes) {
     const cell = cellOf(size);
-    assertClean(place(order, area, cell, gap), area, cell, `${area.width}×${area.height} ${size}`);
+    assertClean(place(order, area, cell), area, cell, `${area.width}×${area.height} ${size}`);
   }
   assert.deepEqual([...new Set(areas.map((area) => area.width))].sort((a, b) => a - b), [...widths]);
 });
 
+// Owner 2026-11-21 item 31: the 521–900px placement fills the cells of desktopGrid (the one grid of the PC), not its own inset + n * (cell + 8px) steps.
 test("UI-09 placeShortcuts: columns fill from the top-left corner downwards, the next column starts when one is full", () => {
   const cell = cellOf("default");
   const area = { width: 768, height: 600 };
-  const result = place(order, area, cell, gap);
-  assert.deepEqual(result.positions.search, { x: 8, y: 8 });
-  assert.deepEqual(result.positions.archive, { x: 8, y: 8 + cell.height + gap });
-  const rows = Math.floor((area.height - 56 - 8 + gap) / (cell.height + gap));
-  const firstOfSecond = order[rows];
-  assert.deepEqual(result.positions[firstOfSecond], { x: 8 + cell.width + gap, y: 8 }, "the shortcut after a full column starts the next one at the top");
-  assert.equal(result.positions[order[rows - 1]].x, 8);
+  const result = place(order, area, cell);
+  const desktop = layout.desktopGrid(area, cell);
+  const at = (column: number, row: number) => layout.gridCellPosition(desktop, column, row);
+  assert.deepEqual(result.positions.search, at(0, 0));
+  assert.deepEqual(result.positions.archive, at(0, 1));
+  const firstOfSecond = order[desktop.rows];
+  assert.deepEqual(result.positions[firstOfSecond], at(1, 0), "the shortcut after a full column starts the next one at the top");
+  assert.deepEqual(result.positions[order[desktop.rows - 1]], at(0, desktop.rows - 1), "the first column reaches the bottom row");
   assert.equal(result.contentHeight, area.height, "everything fits, so the content is the area");
 });
 
 test("UI-09 placeShortcuts: when the width runs out the content grows downwards instead of cutting a shortcut off", () => {
   const cell = cellOf("large");
-  const area = { width: 521, height: 400 };
-  const result = place(order, area, cell, gap);
+  // Owner 2026-11-21 item 31: without the 56px reserve and the 8px gaps 521×400 now holds all eleven (4×3 cells), so a lower area runs out (4×2 cells).
+  const area = { width: 521, height: 300 };
+  const result = place(order, area, cell);
   assert.ok(result.contentHeight > area.height, `contentHeight ${result.contentHeight} grows past ${area.height}`);
-  assertClean(result, area, cell, "521×400 large");
+  assertClean(result, area, cell, "521×300 large");
+  assert.equal(result.contentHeight, Math.max(...Object.values(result.positions).map((point) => point.y + cell.height)) + 56, "the grown content keeps the 56px reserve under the last shortcut");
 });
 
 test("UI-09 placeShortcuts: a saved position outside the area is held inside and off the shortcuts already placed", () => {
   const cell = cellOf("default");
   const area = { width: 600, height: 700 };
   const saved = { trash: { x: 5000, y: 5000 }, info: { x: -40, y: -40 }, sheet: { x: 300, y: 200 } };
-  const result = place(order, area, cell, gap, saved);
+  const result = place(order, area, cell, saved);
   assertClean(result, area, cell, "saved");
   assert.deepEqual(result.positions.sheet, { x: 300, y: 200 }, "a saved spot inside the area is kept");
   assert.deepEqual(result.positions.info, { x: 8, y: 8 }, "a spot above-left of the area is pulled to the inset");
   const trash = result.positions.trash;
-  assert.ok(trash.x + cell.width <= area.width - 8 && trash.y + cell.height <= area.height - 56, "the far-away saved shortcut is pulled inside, above the taskbar reserve");
+  assert.ok(trash.x + cell.width <= area.width - 8 && trash.y + cell.height <= area.height - 8, "the far-away saved shortcut is pulled inside, above the taskbar");
+  // Two saved spots on each other: the second one moves next to the first one (item 30).
+  const piled = place(order, area, cell, { search: { x: 200, y: 200 }, archive: { x: 210, y: 205 } });
+  assertClean(piled, area, cell, "piled");
+  assert.deepEqual(piled.positions.search, { x: 200, y: 200 });
 });
 
 test("UI-09 placeShortcuts never mutates its arguments", () => {
@@ -183,22 +193,52 @@ test("UI-09 placeShortcuts never mutates its arguments", () => {
   const cell = cellOf("large");
   const saved = { trash: { x: 5000, y: 5000 } };
   const before = JSON.stringify([ids, area, cell, saved]);
-  place(ids, area, cell, gap, saved);
+  place(ids, area, cell, saved);
   assert.equal(JSON.stringify([ids, area, cell, saved]), before);
 });
 
 test("UI-09: a drop at 521–900px lands where placeShortcuts keeps it — the next placement does not move the released shortcut", () => {
   const cell = cellOf("default");
   const area = { width: 768, height: 700 };
-  const dropArea = (layout as unknown as { shortcutDropArea: (area: { width: number; height: number }) => { width: number; height: number } }).shortcutDropArea;
-  assert.equal(typeof dropArea, "function");
   const assistant: Rect = { x: 690, y: 560, width: 70, height: 100 };
-  // Inside the area, in the middle of the auto columns, past the bottom edge, and onto the assistant.
-  for (const raw of [{ x: 320, y: 240 }, { x: 8, y: 8 }, { x: 400, y: 5000 }, { x: 700, y: 560 }]) {
-    const dropped = clampShortcutPosition(raw, cell, dropArea(area), [assistant]);
-    const result = place(order, area, cell, gap, { trash: dropped });
+  const others = order.filter((id) => id !== "trash");
+  // Inside the area, in the middle of the auto columns, past the bottom edge, and onto the assistant; with the grid and without it.
+  for (const gridOn of [false, true]) for (const raw of [{ x: 320, y: 240 }, { x: 8, y: 8 }, { x: 400, y: 5000 }, { x: 700, y: 560 }]) {
+    const before = place(order, area, cell);
+    const current = Object.fromEntries(others.map((id) => [id, before.positions[id]]));
+    const { position: dropped } = layout.placeShortcutDrop("trash", raw, current, cell, before.grid, gridOn, [assistant]);
+    assert.ok(!overlaps({ ...dropped, ...cell }, assistant), "off the assistant");
+    const result = place(order, area, cell, { trash: dropped }, gridOn);
     assert.deepEqual(result.positions.trash, dropped, `drop ${JSON.stringify(raw)} stays where it was released`);
     assertClean(result, area, cell, `drop ${JSON.stringify(raw)}`);
+  }
+});
+
+test("owner 2026-11-21 item 31: нижний ряд над панелью задач — the bottom row of the grid lies whole above the taskbar and inside the area", () => {
+  const css = readFileSync(new URL("../app/portia.css", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  // PC: the workspace (and .desktop-icons, inset 0 in it) is the viewport without the 44px system bar and the 44px taskbar.
+  assert.match(css, /\n\.workspace \{\n  position: relative;\n  min-height: calc\(100svh - 88px\);/);
+  assert.match(css, /\n\.desktop-icons \{\n  position: absolute;\n  z-index: 2;\n  inset: 0;/);
+  assert.match(css, /\n\.system-bar \{[^}]*height: 44px;/);
+  assert.match(css, /\n\.taskbar \{[^}]*height: 44px;/);
+  // 521–900px: .desktop-icons ends at the top of the taskbar (48px system bar + 44px taskbar), no reserve under the bottom row.
+  const start = css.indexOf("@media (520px < width <= 900px) {");
+  const block = css.slice(start, css.indexOf("\n}\n", start));
+  assert.match(block, /\.desktop-icons \{[^}]*height: calc\(100svh - 92px\);/);
+  assert.match(css, /@media \(max-width: 900px\) \{[\s\S]*?\.system-bar \{ height: 48px;/);
+  for (const [viewport, systemBar] of [[{ width: 1366, height: 768 }, 44], [{ width: 1920, height: 1080 }, 44], [{ width: 768, height: 1024 }, 48], [{ width: 600, height: 800 }, 48]] as const) {
+    const area = { width: viewport.width, height: viewport.height - systemBar - 44 };
+    const taskbarTop = viewport.height - 44 - systemBar; // in the coordinates of the area
+    for (const size of iconSizes) {
+      const shortcut = cellOf(size);
+      const desktop = layout.desktopGrid(area, shortcut);
+      const bottom = layout.gridCellPosition(desktop, 0, desktop.rows - 1);
+      assert.ok(bottom.y + shortcut.height <= taskbarTop, `${viewport.width}×${viewport.height} ${size}: the bottom row is above the taskbar`);
+      assert.ok(taskbarTop - (bottom.y + shortcut.height) < shortcut.height, `${viewport.width}×${viewport.height} ${size}: no room for another row is left under it`);
+      // A drop at the very bottom lands in that row.
+      assert.deepEqual(layout.placeShortcutDrop("moved", { x: 8, y: area.height }, {}, shortcut, desktop, true).position, bottom);
+      assert.equal(layout.placeShortcutDrop("moved", { x: 8, y: area.height }, {}, shortcut, desktop, false).position.y + shortcut.height, area.height - 8, "without the grid: down to the inset above the taskbar");
+    }
   }
 });
 

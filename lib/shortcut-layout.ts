@@ -33,7 +33,7 @@ export function clampShortcutPosition(
 }
 
 export type ShortcutCell = { width: number; height: number };
-export type ShortcutPlacement = { positions: Record<string, { x: number; y: number }>; contentHeight: number };
+export type ShortcutPlacement = { positions: Record<string, { x: number; y: number }>; contentHeight: number; grid: DesktopGrid };
 
 // What app/portia.css draws at 521–900px for each icon size (the 521–900 rule and the base .desktop-icon rule); a test reads both back.
 export const shortcutCellMetrics = {
@@ -53,56 +53,47 @@ export function shortcutCell(size: string): ShortcutCell {
   return { width: metrics.width, height: Math.ceil(Math.max(metrics.minHeight, drawn)) };
 }
 
-/** The area a placed or dropped shortcut is held in: the measured area without the taskbar reserve at the bottom. */
-export function shortcutDropArea(area: { width: number; height: number }, inset = 8, reserveBottom = 56): { width: number; height: number } {
-  return { width: area.width, height: Math.max(0, area.height - reserveBottom + inset) };
-}
-
 /**
- * The one placement rule for the shortcuts at 521–900px (UI-09). Saved spots come first, each held inside the area above the
- * taskbar reserve and off the saved shortcuts placed before it (clampShortcutPosition); the rest fill free cells column by
- * column from the top-left corner, top to bottom, the next column when one is full. When the width runs out the columns get
- * longer and contentHeight grows past the area, so the page scrolls instead of cutting a shortcut off. Never mutates its arguments.
+ * The one placement rule for the shortcuts at 521–900px (UI-09), on the same desktop grid as the PC (owner 2026-11-21 item 31): the area is
+ * .desktop-icons, which ends at the top of the taskbar, and the grid reaches its bottom row. Saved spots come first, each held inside the
+ * area and off the saved shortcuts placed before it (resolveShortcutOverlaps, item 30); the rest fill the free cells column by column from
+ * the top-left corner, top to bottom, the next column when one is full. When the width runs out the columns get longer (rows below the
+ * area) and contentHeight grows past the area by the taskbar reserve, so the page scrolls instead of cutting a shortcut off. Nothing ever
+ * lies on another shortcut. Never mutates its arguments.
  */
 export function placeShortcuts(
   ids: readonly string[],
   area: { width: number; height: number },
   cell: ShortcutCell,
-  gap: number,
   saved: Readonly<Record<string, { x: number; y: number } | undefined>> = {},
+  gridOn = false,
   inset = 8,
   reserveBottom = 56,
 ): ShortcutPlacement {
-  const positions: Record<string, { x: number; y: number }> = {};
-  const taken: Rect[] = [];
-  const dropArea = shortcutDropArea(area, inset, reserveBottom);
-  for (const id of ids) {
+  const grid = desktopGrid(area, cell, inset);
+  const kept = ids.filter((id) => {
     const spot = saved[id];
-    if (!spot || !Number.isFinite(spot.x) || !Number.isFinite(spot.y)) continue;
-    const point = clampShortcutPosition(spot, cell, dropArea, taken, inset);
-    positions[id] = point;
-    taken.push({ ...point, ...cell });
-  }
+    return spot !== undefined && Number.isFinite(spot.x) && Number.isFinite(spot.y);
+  });
+  const positions: Record<string, { x: number; y: number }> = resolveShortcutOverlaps(saved, kept, cell, grid, gridOn);
+  const taken: Rect[] = Object.values(positions).map((point) => ({ ...point, ...cell }));
   const flowing = ids.filter((id) => !(id in positions));
-  const stepX = cell.width + gap;
-  const stepY = cell.height + gap;
-  const columns = Math.max(1, Math.floor((area.width - 2 * inset + gap) / stepX));
-  let rows = Math.max(1, Math.floor((area.height - reserveBottom - inset + gap) / stepY));
+  let rows = grid.rows;
   for (;;) {
     const cells: { x: number; y: number }[] = [];
-    for (let column = 0; column < columns; column += 1) for (let row = 0; row < rows; row += 1) {
-      const point = { x: inset + column * stepX, y: inset + row * stepY };
+    for (let column = 0; column < grid.columns; column += 1) for (let row = 0; row < rows; row += 1) {
+      const point = gridCellPosition(grid, column, row);
       if (!taken.some((rect) => overlaps({ ...point, ...cell }, rect))) cells.push(point);
     }
     // Every free cell costs one more row in the worst case, so this ends after at most flowing.length extra rows.
-    if (cells.length >= flowing.length || rows > ids.length + taken.length) {
-      flowing.forEach((id, index) => { positions[id] = cells[index] ?? { x: inset, y: inset + (rows + index) * stepY }; });
+    if (cells.length >= flowing.length || rows > ids.length + grid.rows) {
+      flowing.forEach((id, index) => { positions[id] = cells[index] ?? gridCellPosition(grid, 0, rows + index); });
       break;
     }
     rows += 1;
   }
   const bottom = Math.max(0, ...Object.values(positions).map((point) => point.y + cell.height));
-  return { positions, contentHeight: Math.max(area.height, bottom + reserveBottom) };
+  return { positions, contentHeight: bottom + inset > area.height ? bottom + reserveBottom : area.height, grid };
 }
 
 const finiteOr = (value: number, fallback: number) => (Number.isFinite(value) ? value : fallback);

@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { PortiaIcon, type PortiaIconName } from "@/components/portia-icons";
 import { appMeta, type AppId } from "@/components/portia-desktop-window";
 import { originOf, type OpenOrigin } from "@/lib/window-open";
-import { alignShortcutsToGrid, clampShortcutPosition, desktopGrid, freeGridCellAlong, homeShortcutPositions, placeShortcutDrop, placeShortcuts, resolveShortcutOverlaps, shortcutCell, shortcutDropArea, type DesktopGrid, type DesktopShortcutId, type Rect, type ShortcutCell } from "@/lib/shortcut-layout";
+import { alignShortcutsToGrid, clampShortcutPosition, desktopGrid, freeGridCellAlong, homeShortcutPositions, placeShortcutDrop, placeShortcuts, resolveShortcutOverlaps, shortcutCell, type DesktopGrid, type DesktopShortcutId, type Rect, type ShortcutCell } from "@/lib/shortcut-layout";
 
 export type { DesktopShortcutId } from "@/lib/shortcut-layout";
 export type ShortcutPosition = { x: number; y: number };
@@ -65,7 +65,6 @@ export const desktopShortcutOrder = Object.keys(defaultShortcutLayout) as Deskto
 // The stylesheet uses the same strings (app/portia.css: `(max-width: 520px)`, `(520px < width <= 900px)`, `(width > 900px)`).
 const phoneShortcutQuery = "(max-width: 520px)";
 const tabletShortcutQuery = "(520px < width <= 900px)";
-const shortcutGap = 8;
 // Which of the three bands the page is in: the phone grid, the tablet placement or the PC desktop.
 type ShortcutBand = "phone" | "tablet" | "pc";
 const subscribeShortcutBand = (notify: () => void) => {
@@ -110,7 +109,7 @@ export function useShortcutPlacement(
       const area = { width: nav.clientWidth, height: nav.clientHeight };
       let next: ShortcutPlacementState;
       if (band === "tablet") {
-        next = { ...placeShortcuts(ids, area, cell, shortcutGap, saved), area, cell, grid: desktopGrid(shortcutDropArea(area), cell) };
+        next = { ...placeShortcuts(ids, area, cell, saved, gridOn), area, cell };
       } else {
         const grid = desktopGrid(area, cell);
         const homes = homeShortcutPositions(grid);
