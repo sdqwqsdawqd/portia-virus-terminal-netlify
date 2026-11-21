@@ -477,20 +477,32 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
   // Owner items 18 and 32: placed before the paint by the button's rectangle (position: fixed), down or up, never past the edge of the screen.
   // Then it follows the button: any scroll (of any ancestor, heard in the capture phase) or resize asks for ONE animation frame; the frame reads the
   // button once and writes the panel's style once, with no render. A button scrolled out of its form closes the panel. The listeners leave with it.
+  // Review 3 WR-02: a resize of the button (one more chosen route wraps to a new line) or of the panel (a row of «Убрать» gone, a new width) asks
+  // for the same frame, and that frame measures the panel's own height again, so the panel never covers the grown button or picks a side by an old height.
   useLayoutEffect(() => {
     const node = panel.current;
     const button = toggle.current;
     if (!open || !node || !button) return;
-    const natural = node.offsetHeight;
+    // The panel's own height, without the cap written last time (the cap shrinks the list inside it).
+    const measure = () => { node.style.maxHeight = "none"; return node.offsetHeight; };
+    let natural = measure();
     const clips = scrollingAncestors(button);
     writeRoutePanelPlace(node, routePanelPlacement(button.getBoundingClientRect(), { width: ROUTE_PANEL_WIDTH, height: natural }, routeViewport()));
     let frame = 0;
+    let resized = false;
     const onFrame = () => {
       frame = 0;
       const anchor = button.getBoundingClientRect();
       if (!routeAnchorVisible(anchor, clips.map((clip) => clip.getBoundingClientRect()))) { setOpen(false); return; }
+      if (resized) { resized = false; natural = measure(); }
       writeRoutePanelPlace(node, routePanelPlacement(anchor, { width: ROUTE_PANEL_WIDTH, height: natural }, routeViewport()));
     };
+    const observer = new ResizeObserver(() => {
+      resized = true;
+      if (frame === 0) frame = requestAnimationFrame(onFrame);
+    });
+    observer.observe(button);
+    observer.observe(node);
     const schedule = (event: Event) => {
       if (event.target instanceof Node && node.contains(event.target)) return;
       if (frame === 0) frame = requestAnimationFrame(onFrame);
@@ -500,6 +512,7 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
     window.addEventListener("resize", schedule, options);
     window.visualViewport?.addEventListener("resize", schedule, options);
     return () => {
+      observer.disconnect();
       window.removeEventListener("scroll", schedule, options);
       window.removeEventListener("resize", schedule, options);
       window.visualViewport?.removeEventListener("resize", schedule, options);

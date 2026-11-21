@@ -175,7 +175,8 @@ test("OWN-03 item 32: the foot stands outside the scrolling list, so it never co
 });
 
 test("OWN-03 item 32 / T-26.1-55: the place follows the button once per frame on any scroll or resize; a button scrolled out of its form closes the panel; the listeners leave with it", () => {
-  const effect = sliceOf(field, /const natural = node\.offsetHeight;/, /\n {2}\}, \[open\]\);/);
+  const effect = sliceOf(field, /const measure = \(\) => \{ node\.style\.maxHeight = "none"; return node\.offsetHeight; \};/, /\n {2}\}, \[open\]\);/);
+  assert.match(effect, /let natural = measure\(\);/, "the panel's own height, measured on opening without the cap");
   assert.match(effect, /const clips = scrollingAncestors\(button\);/, "the clipping ancestors are found once, on opening");
   assert.match(effect, /if \(frame === 0\) frame = requestAnimationFrame\(onFrame\);/, "one frame per burst of events");
   assert.match(effect, /window\.addEventListener\("scroll", schedule, options\);/);
@@ -190,6 +191,11 @@ test("OWN-03 item 32 / T-26.1-55: the place follows the button once per frame on
   assert.match(effect, /writeRoutePanelPlace\(node, routePanelPlacement\(anchor, /, "one write of the style");
   assert.doesNotMatch(effect.slice(effect.indexOf("const onFrame")), /set(Host|Hint|Placement)\(/, "the frame renders nothing; only closing is a state change");
   assert.match(dossier, /function scrollingAncestors\(node: HTMLElement\): HTMLElement\[\]/);
+  // Review 3 WR-02: a button grown by a wrapped route or a panel of another size asks for the same frame, and that frame measures the panel again.
+  assert.match(effect, /const observer = new ResizeObserver\(\(\) => \{\s*resized = true;\s*if \(frame === 0\) frame = requestAnimationFrame\(onFrame\);\s*\}\);/, "a resize asks for the one frame");
+  assert.match(effect, /observer\.observe\(button\);\s*observer\.observe\(node\);/, "both the button and the panel are watched");
+  assert.match(effect, /if \(resized\) \{ resized = false; natural = measure\(\); \}/, "the height is measured again only after a resize, not on every scroll");
+  assert.match(effect, /return \(\) => \{\s*observer\.disconnect\(\);/, "the observer leaves with the panel");
 });
 
 test("OWN-03 items 18 and 32: on opening the room around the button is measured and the panel goes up when it is short below and larger above; the place is written, not rendered", () => {
