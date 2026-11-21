@@ -1038,6 +1038,7 @@ test("owner 2026-11-20 OWN-02: content columns fill the window (guide card, nest
   }
   assert.equal(lastDeclaration(portiaCss, ".guide-page .info-document-copy", "max-width"), "none", "the text of an open card takes the card width");
   assert.equal(lastDeclaration(portiaCss, ".guide-page .info-block-video", "max-width"), "none", "owner 2026-11-20: a video inside a card takes the card width");
+  assert.equal(lastDeclaration(portiaCss, ".guide-app", "scrollbar-gutter"), "stable", "owner 2026-11-22: opening a section that brings the scrollbar does not narrow the sections and tiles");
   // Kept on purpose, so that a later sweep does not lift them by mistake: «Информация» (owner: already fine there), a title, a lone media, a skeleton.
   assert.equal(lastDeclaration(portiaCss, ".info-document-copy", "max-width"), "82ch");
   assert.equal(lastDeclaration(portiaCss, ".info-document h1", "max-width"), "780px");
