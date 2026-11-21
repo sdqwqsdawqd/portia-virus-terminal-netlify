@@ -1019,6 +1019,11 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     if (shortcutOverlapsChecked.current || !shortcutPositionsLoaded || !desktopSettingsLoaded || !shortcutPlacement) return;
     const cell = shortcutCell(desktopSettings.iconSize);
     if (shortcutPlacement.cell.width !== cell.width || shortcutPlacement.cell.height !== cell.height) return;
+    // Only on the PC layout (>900px): a page opened narrow lays its shortcuts out on the fly and must not rewrite the places set on a PC.
+    if (!window.matchMedia("(min-width: 901px)").matches) {
+      shortcutOverlapsChecked.current = true;
+      return;
+    }
     const { grid } = shortcutPlacement;
     const gridOn = desktopSettings.iconGrid === "on";
     const timer = window.setTimeout(() => {
