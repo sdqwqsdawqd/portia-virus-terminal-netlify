@@ -49,8 +49,25 @@ export function useTaskbarPreview<T extends string>(canShow: () => boolean) {
   return { shown, show, hide };
 }
 
-/** The last picture of every window, so a minimized (hidden) window still has one. One detached node per app; dropped once the window is not minimized and not on the screen. */
+/** The last picture of every window, so a minimized (hidden) window still has one. One detached node per app, taken as the window is minimised; dropped when the window closes or the viewer changes. */
 const lastPreviewClone = new Map<string, { node: HTMLElement; width: number; height: number }>();
+
+/**
+ * 26.1-REVIEW-2 WR-04: the picture of a window is taken as the window is minimised (it is still on the screen then), not when a preview happens to close, so a minimised window
+ * shows what it showed when it left. A window that is closed forgets its picture, and the desktop forgets all of them when the viewer changes or it unmounts: a picture holds the
+ * data one viewer saw and must never be shown to the next one.
+ */
+export function rememberWindowPicture(app: string) {
+  try {
+    const source = document.querySelector<HTMLElement>(`.app-window[data-window-app="${app}"]`);
+    if (!source || source.offsetWidth <= 0 || source.offsetHeight <= 0) return;
+    lastPreviewClone.set(app, { node: previewCloneOf(source), width: source.offsetWidth, height: source.offsetHeight });
+  } catch {
+    lastPreviewClone.delete(app);
+  }
+}
+export function forgetWindowPicture(app: string) { lastPreviewClone.delete(app); }
+export function forgetWindowPictures() { lastPreviewClone.clear(); }
 
 /**
  * A picture-only copy of a window (OWN-06, owner 21): `cloneNode(true)` of the window, then made harmless. Nothing is loaded again:
@@ -125,10 +142,8 @@ export function TaskbarPreview({ app, label, icon, geometry, bounds, minimized, 
     const thumb = thumbRef.current;
     const canvas = canvasRef.current;
     if (!thumb || !canvas) return;
-    let size: { width: number; height: number } | null = null;
     const show = (node: HTMLElement, width: number, height: number) => {
       const scale = Math.min(THUMB_MAX_WIDTH / width, THUMB_MAX_HEIGHT / height);
-      size = { width, height };
       thumb.style.width = `${Math.round(width * scale)}px`;
       thumb.style.height = `${Math.round(height * scale)}px`;
       canvas.style.width = `${width}px`;
@@ -142,7 +157,6 @@ export function TaskbarPreview({ app, label, icon, geometry, bounds, minimized, 
       });
     };
     const empty = () => {
-      size = null;
       canvas.replaceChildren();
       thumb.removeAttribute("data-live");
       thumb.style.width = "";
@@ -167,9 +181,7 @@ export function TaskbarPreview({ app, label, icon, geometry, bounds, minimized, 
     const timer = window.setInterval(paint, PREVIEW_REFRESH_MS);
     return () => {
       window.clearInterval(timer);
-      // The copy on show becomes the last picture of the window; the node itself leaves the document with the preview.
-      const last = canvas.firstElementChild;
-      if (last && size) lastPreviewClone.set(app, { node: last as HTMLElement, width: size.width, height: size.height });
+      // The copy on show leaves the document with the preview; the last picture of a window is the one taken as it was minimised (rememberWindowPicture).
       canvas.replaceChildren();
     };
   }, [app, minimized]);

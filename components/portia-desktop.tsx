@@ -21,7 +21,7 @@ import { RedactedPlaceholder } from "@/components/portia-redacted";
 import { splitEmbeddedMedia } from "@/lib/rich-text-media";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, type BroadcastTab } from "@/lib/broadcasts";
 import { AppWindow, appMeta, minimumWindowSize, nodWindow, type AppId } from "@/components/portia-desktop-window";
-import { PREVIEW_HIDE_MS, PREVIEW_SHOW_MS, TaskbarPreview, useTaskbarPreview } from "@/components/portia-desktop-taskbar";
+import { PREVIEW_HIDE_MS, PREVIEW_SHOW_MS, TaskbarPreview, forgetWindowPicture, forgetWindowPictures, rememberWindowPicture, useTaskbarPreview } from "@/components/portia-desktop-taskbar";
 import { DesktopIcon, ShortcutGridContext, StartPanelButton, alignedShortcutPositions, desktopShortcutOrder, placedShortcut, useShortcutPlacement, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
 import { PortiaPromotion } from "@/components/portia-promotion";
 import { PortiaTemplateBuilder } from "@/components/portia-template-builder";
@@ -918,6 +918,12 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     }
   }, [viewerKey, viewerPerson]);
 
+  // The pictures of the minimised windows hold what one viewer saw: another viewer (or another person) in the same tab, or the end of the desktop, drops them (26.1-REVIEW-2 WR-04).
+  useEffect(() => {
+    forgetWindowPictures();
+    return forgetWindowPictures;
+  }, [viewerKey, viewerPerson]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const signature = broadcastSignature(content);
@@ -1448,6 +1454,9 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     const motion = document.documentElement.dataset.motion;
     const duration = motion === "off" ? 0 : motion === "reduced" ? WINDOW_FADE_OUT_MS : kind === "close" ? WINDOW_CLOSE_MS : WINDOW_MINIMIZE_MS;
     preview.hide();
+    // The picture a minimised window shows in the taskbar preview is taken now, while the window is still on the screen; a closed window keeps none (26.1-REVIEW-2 WR-04).
+    if (kind === "minimize") rememberWindowPicture(appId);
+    else forgetWindowPicture(appId);
     setWindows((state) => ({ ...state, [appId]: { ...state[appId], exiting: kind } }));
     // A timer, not animationend: in a hidden tab the animation event may never fire.
     exitTimers.current[appId] = window.setTimeout(() => {

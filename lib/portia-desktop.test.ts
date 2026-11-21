@@ -1505,3 +1505,16 @@ test("LIVE-05 (26.1-13): no component of the visitor and no live surface of the 
   assert.match(seam, /<FormattedText\b[^>]*eagerMedia/, "a text at rest is the visitor's FormattedText, loaded at once");
   assert.match(seam, /<EmbeddedMediaStrip text=\{text\} eager \/>/, "the GIFs of a text under edit stay on show");
 });
+
+// 26.1-REVIEW-2 WR-04: the picture of a minimised window is taken when it is minimised, and does not outlive the window or the viewer.
+// No DOM here, so this reads the sources (a structural check; the picture itself is UAT).
+test("WR-04 (26.1-REVIEW-2): the last picture of a window is taken at minimise, dropped at close, and dropped when the viewer changes", () => {
+  const seam = desktopFamily.find((part) => part.file === "portia-desktop-taskbar.tsx")?.text ?? "";
+  assert.match(seam, /export function rememberWindowPicture\(app: string\)/);
+  assert.match(seam, /export function forgetWindowPicture\(app: string\)/);
+  assert.match(seam, /export function forgetWindowPictures\(\)\s*\{\s*lastPreviewClone\.clear\(\);/);
+  const cleanup = seam.slice(seam.indexOf("window.clearInterval(timer);"), seam.indexOf("}, [app, minimized]);"));
+  assert.doesNotMatch(cleanup, /lastPreviewClone\.set/, "closing a preview no longer stores a picture (it could be an hour old)");
+  assert.match(source, /if \(kind === "minimize"\) rememberWindowPicture\(appId\);\s*else forgetWindowPicture\(appId\);/, "minimise takes the picture, close drops it");
+  assert.match(source, /forgetWindowPictures\(\);\s*return forgetWindowPictures;\s*\}, \[viewerKey, viewerPerson\]\)/, "a change of the viewer and the end of the desktop drop every picture");
+});
