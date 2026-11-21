@@ -303,3 +303,97 @@ export function alignShortcutsToGrid(
   }
   return result;
 }
+
+// ---- Owner 2026-11-21 item 30: shortcuts never lie on each other, with the grid or without it ----
+
+/** A position held inside the area of the grid (the inset on every side); junk counts as the top-left corner. */
+function insideGrid(position: { x: number; y: number }, cell: ShortcutCell, grid: DesktopGrid): { x: number; y: number } {
+  return clampShortcutPosition({ x: finiteOr(position.x, grid.originX), y: finiteOr(position.y, grid.originY) }, cell, grid.area, [], grid.originX);
+}
+
+/**
+ * The nearest place to `position` where a shortcut covers none of the blockers, without the grid: every place inside the area on an 8px
+ * lattice through the position (and the edges of the area) is tried, the nearest free one wins (ties: the upper, then the left). The area
+ * is finite and so is the lattice, so this always ends. null when no place is free.
+ */
+export function nearestFreeShortcutSpot(position: { x: number; y: number }, cell: ShortcutCell, grid: DesktopGrid, blockers: readonly Rect[], step = 8): { x: number; y: number } | null {
+  const from = insideGrid(position, cell, grid);
+  const maxX = Math.max(grid.originX, grid.area.width - cell.width - grid.originX);
+  const maxY = Math.max(grid.originY, grid.area.height - cell.height - grid.originY);
+  const axis = (start: number, min: number, max: number) => {
+    const values = new Set<number>([min, max]);
+    for (let value = start; value >= min; value -= step) values.add(value);
+    for (let value = start + step; value <= max; value += step) values.add(value);
+    return [...values].sort((a, b) => a - b);
+  };
+  const xs = axis(from.x, grid.originX, maxX);
+  const ys = axis(from.y, grid.originY, maxY);
+  let best: { x: number; y: number } | null = null;
+  let bestDistance = Infinity;
+  for (const y of ys) for (const x of xs) {
+    const distance = Math.hypot(x - from.x, y - from.y);
+    if (distance >= bestDistance || cellBlocked({ x, y }, cell, blockers)) continue;
+    best = { x, y };
+    bestDistance = distance;
+  }
+  return best;
+}
+
+/** Where a shortcut goes when `wanted` is taken: with the grid the nearest free cell, without it the nearest free place; then the other one; null when the area is full. */
+function nearestFree(wanted: { x: number; y: number }, cell: ShortcutCell, grid: DesktopGrid, blockers: readonly Rect[], gridOn: boolean): { x: number; y: number } | null {
+  return gridOn
+    ? nearestFreeGridCell(wanted, grid, blockers) ?? nearestFreeShortcutSpot(wanted, cell, grid, blockers)
+    : nearestFreeShortcutSpot(wanted, cell, grid, blockers) ?? nearestFreeGridCell(wanted, grid, blockers);
+}
+
+/**
+ * The saved places checked once they are read back (item 30, T-26.1-53): a place outside the area is held inside it; a place that covers a
+ * shortcut placed before it (in `order`) goes to the nearest free place (with the grid on, the nearest free cell). A place that is inside and
+ * covers nobody is kept as it is. Shortcuts that are not in `order` or have no place are left out. With no room left at all, the shortcut
+ * goes to a row added below the area. Never mutates its arguments.
+ */
+export function resolveShortcutOverlaps(
+  positions: Readonly<Record<string, { x: number; y: number } | undefined>>,
+  order: readonly string[],
+  cell: ShortcutCell,
+  grid: DesktopGrid,
+  gridOn = false,
+): Record<string, { x: number; y: number }> {
+  const result: Record<string, { x: number; y: number }> = {};
+  const taken: Rect[] = [];
+  let extra = 0;
+  for (const id of order) {
+    const spot = positions[id];
+    if (!spot) continue;
+    const inside = insideGrid(spot, cell, grid);
+    let point = cellBlocked(inside, cell, taken) ? nearestFree(inside, cell, grid, taken, gridOn) : inside;
+    if (!point) {
+      point = gridCellPosition(grid, extra % grid.columns, grid.rows + Math.floor(extra / grid.columns));
+      extra += 1;
+    }
+    result[id] = point;
+    taken.push({ ...point, ...cell });
+  }
+  return result;
+}
+
+/**
+ * Where a released (or Alt+Arrow moved) shortcut lands (item 30): with the grid the cell under the point, without it the point held inside the
+ * area; if another shortcut (`positions`, the own place left out) or an obstacle is there, the nearest free cell or place instead (`displaced`).
+ * The result is inside the area and covers nothing, unless the whole area is full (then the wanted place stays). Pure.
+ */
+export function placeShortcutDrop(
+  id: string,
+  point: { x: number; y: number },
+  positions: Readonly<Record<string, { x: number; y: number } | undefined>>,
+  cell: ShortcutCell,
+  grid: DesktopGrid,
+  gridOn: boolean,
+  obstacles: readonly Rect[] = [],
+): { position: { x: number; y: number }; displaced: boolean } {
+  const blockers: Rect[] = [...obstacles];
+  for (const [other, spot] of Object.entries(positions)) if (other !== id && spot) blockers.push({ ...spot, ...cell });
+  const wanted = gridOn ? snapShortcutPosition(point, grid) : insideGrid(point, cell, grid);
+  if (!cellBlocked(wanted, cell, blockers)) return { position: wanted, displaced: false };
+  return { position: nearestFree(gridOn ? point : wanted, cell, grid, blockers, gridOn) ?? wanted, displaced: true };
+}

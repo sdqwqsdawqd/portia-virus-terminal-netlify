@@ -38,6 +38,7 @@ import { PortiaImage } from "@/components/portia-desktop-media";
 import { newRecommendationSeed, pickSearchRecommendations, seededRandom } from "@/lib/search-recommendations";
 import { infoCurrentTitle, infoNextTarget, infoOverviewVisible, infoSectionsButtonLabel, infoSectionsHitCount, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";
 import { startMenuCloseReason, type StartMenuEvent } from "@/lib/start-menu";
+import { resolveShortcutOverlaps, shortcutCell } from "@/lib/shortcut-layout";
 import { buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, searchKeyAction, searchKeyContext, searchFirstPage, searchMaxShown, searchShownCount, type SearchItem } from "@/lib/search-index";
 
 // Phase 24, D-20/D-22: a record window whose record became closed keeps its place and shows the block; the slot of the placeholder
@@ -474,7 +475,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
   // UI-09: at 521–900px one JS rule places the shortcuts inside nav.desktop-icons; on the PC (owner 2026-11-21 items 29, 31) a shortcut without
   // a saved place stands in its home cell of the desktop grid (homeShortcutPositions), so «Вернуть…» puts every shortcut into its cell. ≤520px keeps its CSS grid.
   const desktopIconsRef = useRef<HTMLElement>(null);
-  const shortcutPlacement = useShortcutPlacement(desktopIconsRef, desktopShortcutOrder, desktopSettings.iconSize, shortcutPositions);
+  const shortcutPlacement = useShortcutPlacement(desktopIconsRef, desktopShortcutOrder, desktopSettings.iconSize, shortcutPositions, desktopSettings.iconGrid === "on");
+  const shortcutOverlapsChecked = useRef(false);
   const [desktopSettingsLoaded, setDesktopSettingsLoaded] = useState(false);
   const [taskbarOrder, setTaskbarOrder] = useState<AppId[]>(() => Object.keys(appMeta) as AppId[]);
   const [taskbarOrderLoaded, setTaskbarOrderLoaded] = useState(false);
@@ -1010,6 +1012,25 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     if (!shortcutPositionsLoaded) return;
     try { window.localStorage.setItem(shortcutPositionsStorageKey, JSON.stringify(shortcutPositions)); } catch {}
   }, [shortcutPositions, shortcutPositionsLoaded]);
+
+  // Owner 2026-11-21 item 30: once per page load, after the saved places and the settings are read back and the desktop is measured with the chosen
+  // icon size, saved places that lie on each other or outside the area move to the nearest free ones. The same key is rewritten only if one moved.
+  useEffect(() => {
+    if (shortcutOverlapsChecked.current || !shortcutPositionsLoaded || !desktopSettingsLoaded || !shortcutPlacement) return;
+    const cell = shortcutCell(desktopSettings.iconSize);
+    if (shortcutPlacement.cell.width !== cell.width || shortcutPlacement.cell.height !== cell.height) return;
+    const { grid } = shortcutPlacement;
+    const gridOn = desktopSettings.iconGrid === "on";
+    const timer = window.setTimeout(() => {
+      shortcutOverlapsChecked.current = true;
+      setShortcutPositions((current) => {
+        const resolved = resolveShortcutOverlaps(current, desktopShortcutOrder, cell, grid, gridOn);
+        const moved = desktopShortcutOrder.some((id) => current[id] && (resolved[id]?.x !== current[id]?.x || resolved[id]?.y !== current[id]?.y));
+        return moved ? resolved : current;
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [shortcutPositionsLoaded, desktopSettingsLoaded, shortcutPlacement, desktopSettings.iconSize, desktopSettings.iconGrid]);
 
   useEffect(() => () => {
     if (assistantTipTimer.current) window.clearTimeout(assistantTipTimer.current);

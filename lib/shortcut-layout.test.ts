@@ -353,7 +353,8 @@ test("alignShortcutsToGrid does not touch its arguments and keeps an aligned lay
 });
 
 test("the shortcut seam snaps a drop and an Alt+Arrow step to the grid only while the setting is on", () => {
-  assert.ok(shortcuts.includes("snapShortcutPosition("));
+  // Owner 2026-11-21 item 30: the drop goes through placeShortcutDrop, which snaps with the grid on (snapShortcutPosition lives inside it).
+  assert.ok(shortcuts.includes("placeShortcutDrop("));
   assert.ok(shortcuts.includes("export function alignedShortcutPositions"));
   assert.ok(shortcuts.includes("ShortcutGridContext"));
   assert.ok(/const grid = useContext\(ShortcutGridContext\)/.test(shortcuts));
@@ -400,4 +401,107 @@ test("freeGridCellAlong: one step goes to the next cell, a taken cell is jumped 
   assert.deepEqual(layout.freeGridCellAlong(cellAt(0, 0), right, 4, grid, []), cellAt(4, 0), "a long step is four cells");
   assert.deepEqual(layout.freeGridCellAlong({ x: cellAt(1, 1).x + 12, y: cellAt(1, 1).y - 9 }, right, 1, grid, []), cellAt(2, 1), "counted from the cell the shortcut is in now");
   assert.deepEqual(layout.freeGridCellAlong(cellAt(2, maxRowIndex - 1), { x: 0, y: 1 }, 1, grid, []), cellAt(2, maxRowIndex), "a step down reaches the bottom row");
+});
+
+// ---- Owner 2026-11-21 item 30: shortcuts never lie on each other, with the grid or without it ----
+const pcCell = { width: 94, height: 104 };
+const pcGrid = layout.desktopGrid({ width: 1366, height: 680 }, pcCell);
+const pcHomes = layout.homeShortcutPositions(pcGrid);
+
+function assertNoOverlap(positions: Record<string, { x: number; y: number }>, label: string, size = pcCell, area = pcGrid.area) {
+  const rects = Object.entries(positions).map(([id, point]) => ({ id, ...point, ...size }));
+  for (const rect of rects) {
+    assert.ok(Number.isFinite(rect.x) && Number.isFinite(rect.y), `${label}: ${rect.id} has a finite place`);
+    assert.ok(rect.x >= 8 - 0.5 && rect.y >= 8 - 0.5 && rect.x + rect.width <= area.width - 8 + 0.5 && rect.y + rect.height <= area.height - 8 + 0.5, `${label}: ${rect.id} is inside the area (${rect.x}, ${rect.y})`);
+  }
+  rects.forEach((one, i) => rects.forEach((two, j) => { if (i < j) assert.ok(!overlaps(one, two), `${label}: ${one.id} lies on ${two.id}`); }));
+}
+
+test("placeShortcutDrop: a drop on a free place stays where it was released; with the grid it is the cell under the point", () => {
+  const free = { x: 600, y: 300 };
+  assert.deepEqual(layout.placeShortcutDrop("search", free, pcHomes, pcCell, pcGrid, false), { position: free, displaced: false });
+  const onGrid = layout.placeShortcutDrop("search", free, pcHomes, pcCell, pcGrid, true);
+  assert.deepEqual(onGrid, { position: layout.snapShortcutPosition(free, pcGrid), displaced: false });
+  // Its own place is never in the way.
+  assert.deepEqual(layout.placeShortcutDrop("search", pcHomes.search, pcHomes, pcCell, pcGrid, false), { position: pcHomes.search, displaced: false });
+});
+
+test("placeShortcutDrop: every shortcut dropped on every other one lands next to it, inside the area and on nobody, with and without the grid", () => {
+  for (const gridOn of [false, true]) for (const id of layout.desktopShortcutIds) for (const target of ["search", "employees", "charter", "trash", "template"] as const) {
+    if (id === target) continue;
+    const point = { x: pcHomes[target].x + 10, y: pcHomes[target].y + 6 };
+    const { position, displaced } = layout.placeShortcutDrop(id, point, pcHomes, pcCell, pcGrid, gridOn);
+    assert.equal(displaced, true, `${id} on ${target}: the place is taken`);
+    assertNoOverlap({ ...pcHomes, [id]: position }, `${gridOn ? "grid" : "free"}: ${id} dropped on ${target}`);
+    if (gridOn) assert.deepEqual(layout.snapShortcutPosition(position, pcGrid), position, "with the grid: a cell");
+    else assert.ok(Math.hypot(position.x - point.x, position.y - point.y) <= Math.hypot(pcGrid.pitchX, pcGrid.pitchY) * 2, `${id} on ${target}: nearby, not far away`);
+  }
+});
+
+test("placeShortcutDrop: in a tight group and in the corner the drop finds the nearest free place", () => {
+  // A dense block of shortcuts in the top-left corner, free place only around it.
+  const group: Record<string, { x: number; y: number }> = {};
+  ["a", "b", "c", "d", "e", "f"].forEach((id, index) => { group[id] = { x: 8 + (index % 3) * pcCell.width, y: 8 + Math.floor(index / 3) * pcCell.height }; });
+  for (const gridOn of [false, true]) for (const point of [{ x: 8, y: 8 }, { x: -200, y: -200 }, { x: 8 + pcCell.width, y: 8 + pcCell.height / 2 }]) {
+    const { position, displaced } = layout.placeShortcutDrop("moved", point, group, pcCell, pcGrid, gridOn);
+    assert.equal(displaced, true);
+    assertNoOverlap({ ...group, moved: position }, `${gridOn ? "grid" : "free"} corner ${JSON.stringify(point)}`);
+  }
+  const corner = layout.placeShortcutDrop("moved", { x: 8, y: 8 }, group, pcCell, pcGrid, false).position;
+  assert.deepEqual(corner, { x: 8, y: 8 + 2 * pcCell.height }, "the nearest free place: under the block (208px), nearer than right of it (282px)");
+  // An obstacle (the assistant) is kept free as well.
+  const assistant: Rect = { x: 1200, y: 520, width: 104, height: 150 };
+  const away = layout.placeShortcutDrop("moved", { x: 1220, y: 540 }, {}, pcCell, pcGrid, false, [assistant]);
+  assert.ok(away.displaced && !overlaps({ ...away.position, ...pcCell }, assistant));
+});
+
+test("resolveShortcutOverlaps: places inside and on nobody stay, a place outside is held inside, places on each other move to the nearest free ones", () => {
+  const order = [...layout.desktopShortcutIds];
+  assert.deepEqual(layout.resolveShortcutOverlaps(pcHomes, order, pcCell, pcGrid), pcHomes, "nothing to do");
+  const free = { search: { x: 300, y: 200 }, archive: { x: 500, y: 200 } };
+  assert.deepEqual(layout.resolveShortcutOverlaps(free, order, pcCell, pcGrid), free, "free places off the grid are kept");
+  const out = layout.resolveShortcutOverlaps({ trash: { x: 5000, y: -40 } }, order, pcCell, pcGrid);
+  assert.deepEqual(out.trash, { x: 1366 - pcCell.width - 8, y: 8 });
+  const piled = Object.fromEntries(order.map((id) => [id, { x: 400, y: 300 }]));
+  for (const gridOn of [false, true]) {
+    const resolved = layout.resolveShortcutOverlaps(piled, order, pcCell, pcGrid, gridOn);
+    assert.deepEqual(Object.keys(resolved).sort(), [...order].sort());
+    assert.deepEqual(resolved.search, gridOn ? { x: 400, y: 300 } : { x: 400, y: 300 }, "the first in the order keeps its place");
+    assertNoOverlap(resolved, `twelve on one spot, grid ${gridOn}`);
+  }
+  const junk = layout.resolveShortcutOverlaps({ search: { x: Number.NaN, y: Infinity }, archive: { x: 8, y: 8 } }, order, pcCell, pcGrid);
+  assertNoOverlap(junk, "junk");
+});
+
+test("resolveShortcutOverlaps never mutates its arguments and leaves out what is not in the order", () => {
+  const positions = { search: { x: 400, y: 300 }, archive: { x: 400, y: 300 }, stranger: { x: 1, y: 1 } };
+  const copy = JSON.parse(JSON.stringify(positions));
+  const resolved = layout.resolveShortcutOverlaps(positions, ["search", "archive"], pcCell, pcGrid);
+  assert.deepEqual(positions, copy);
+  assert.deepEqual(Object.keys(resolved), ["search", "archive"]);
+});
+
+test("owner 2026-11-21 item 30: the seam drops and steps through placeShortcutDrop, draws a dragged shortcut on its own and says when the place was taken", () => {
+  const finish = /const finishDrag = [\s\S]*?\n  \};/.exec(shortcuts)?.[0] ?? "";
+  const key = /const handleKeyDown = [\s\S]*?\n  \};/.exec(shortcuts)?.[0] ?? "";
+  const move = /const handlePointerMove = [\s\S]*?\n  \};/.exec(shortcuts)?.[0] ?? "";
+  assert.ok(finish.includes("placeShortcutDrop(shortcutId, operation.last, placed?.positions ?? {}, bounds.size, desktop, grid, obstacles)"), "drop: with the grid and without it");
+  assert.ok(key.includes("placeShortcutDrop(shortcutId, target,"), "Alt+Arrow without the grid");
+  assert.ok(key.includes("freeGridCellAlong(") && key.includes("neighbourRects(workspace)"), "Alt+Arrow with the grid jumps over the taken cells of the placement");
+  for (const handler of [finish, key]) assert.ok(handler.includes("Место занято — ярлык «${label}» рядом"), "a screen reader hears that the place was taken");
+  assert.ok(move.includes("setDragPosition(operation.last)") && !move.includes("onMove("), "the saved places change on the drop only, so the others do not move under the dragged one");
+  assert.ok(shortcuts.includes("style: dragPosition ? placedShortcutLayout(dragPosition) : placed ? "));
+  const hook = /export function useShortcutPlacement\([\s\S]*?\n\}/.exec(shortcuts)?.[0] ?? "";
+  assert.ok(hook.includes("resolveShortcutOverlaps(wanted, order, cell, grid, gridOn)"), "PC: nothing is drawn on another shortcut");
+});
+
+test("owner 2026-11-21 item 30: the desktop checks the saved places once after load, in the same key, written only when one moved", () => {
+  const desktop = readFileSync(new URL("../components/portia-desktop.tsx", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  const anchor = desktop.indexOf("const timer = window.setTimeout(() => {\n      shortcutOverlapsChecked.current = true;");
+  assert.ok(anchor > 0, "the check runs in a timer after the measurement");
+  const effect = desktop.slice(anchor - 700, anchor + 700);
+  assert.ok(effect.includes("resolveShortcutOverlaps(current, desktopShortcutOrder, cell, grid, gridOn)"));
+  assert.ok(effect.includes("return moved ? resolved : current;"), "the key is rewritten only if a place moved");
+  assert.ok(effect.includes("if (shortcutOverlapsChecked.current || !shortcutPositionsLoaded || !desktopSettingsLoaded || !shortcutPlacement) return;"), "once, after load and measurement");
+  assert.ok(desktop.includes('const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v3"'), "the same key (STAB-DESK-07)");
 });
