@@ -162,8 +162,9 @@ test("D-14/LVL-06 a new virus has no scientist records, and an empty list says i
   assert.ok(editor.includes('<p className="editor-guidance">{levelCopy.logsEmptyEditor}</p>'));
   assert.ok(dossier.includes('<p className="editor-guidance">{levelCopy.logsEmptyEditor}</p>'));
   assert.equal(levelCopy.logsEmptyEditor, "Записей учёных нет. Карточку можно сохранить без них.");
-  // The add button keeps its label and the limit.
-  assert.ok(editor.includes("+ ДОБАВИТЬ ЗАПИСЬ") && editor.includes("scientistLogs.length >= MAX_SCIENTIST_LOGS"));
+  // The add button keeps its label and the limit. 26.1-26 (owner item 34): in the editor it ends the strip of the records, its label lives in the card tabs seam.
+  assert.ok(source("components/portia-editor-card-tabs.tsx").includes('addLog: "+ ДОБАВИТЬ ЗАПИСЬ"'));
+  assert.ok(editor.includes("label: cardTabsCopy.addLog") && editor.includes("scientistLogs.length >= MAX_SCIENTIST_LOGS"));
   assert.ok(dossier.includes("+ ДОБАВИТЬ ЗАПИСЬ") && dossier.includes("scientistLogs.length >= MAX_SCIENTIST_LOGS"));
 });
 

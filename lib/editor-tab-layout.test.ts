@@ -1104,9 +1104,9 @@ test("owner 2026-11-21 item 16: the recycle bin list fills the whole height of t
 // ---- 26.1-20 (owner 2026-11-21, item 17): «+ ДОБАВИТЬ КАРТОЧКУ» — в конце полосы вкладок карточек ----
 test("owner 2026-11-21 item 17: the strip of card tabs ends with the add action: the button and the limit note in the seam, without `add` the strip is as before", () => {
   assert.ok(cardTabsCode.includes('addCard: "+ ДОБАВИТЬ КАРТОЧКУ"'), "the label lives in the seam (D-58)");
-  assert.ok(cardTabsCode.includes("add?: { onAdd: () => void; disabled: boolean; note?: ReactNode }"), "the add action is optional data");
+  assert.ok(cardTabsCode.includes("add?: { onAdd: () => void; disabled: boolean; note?: ReactNode; label?: string }"), "the add action is optional data (26.1-26: with the label of what is added)");
   assert.ok(cardTabsCode.includes("if (items.length === 0 && !add) return null;"), "no strip without cards, unless there is the add action: an empty section shows the same button");
-  assert.ok(cardTabsCode.includes('className="editor-card-tab-add"') && cardTabsCode.includes("{cardTabsCopy.addCard}"), "button.editor-card-tab-add with the label of the seam");
+  assert.ok(cardTabsCode.includes('className="editor-card-tab-add"') && cardTabsCode.includes("const addLabel = add?.label ?? cardTabsCopy.addCard;") && cardTabsCode.includes("{addLabel}"), "button.editor-card-tab-add with the label of the seam, the card by default");
   assert.ok(cardTabsCode.includes("disabled={add.disabled}") && cardTabsCode.includes("onClick={add.onAdd}"), "the editor's action and its limit");
   assert.ok(cardTabsCode.includes("aria-describedby={add.note ? noteId : undefined}") && cardTabsCode.includes("id={noteId}"), "the button is described by the limit note");
   const navEnd = cardTabsCode.indexOf("</nav>");
@@ -1116,9 +1116,48 @@ test("owner 2026-11-21 item 17: the strip of card tabs ends with the add action:
   assert.equal(declared(".editor-card-tabs > .editor-card-tab-add-bar", "flex"), "none");
   assert.equal(declared(".editor-card-tabs button.editor-card-tab-add", "min-height"), "32px", "as tall as a tab");
   assert.equal(declared(".editor-card-tabs button.editor-card-tab-add", "min-height", PHONE), "var(--tap-target)");
-  assert.equal(declared(".editor-card-tabs", "flex-wrap", PHONE), "wrap", "a phone strip leaves the action its own row when it does not fit");
+  assert.equal(declared(".editor-card-tabs", "flex-wrap", PHONE), "nowrap", "26.1-26: a phone strip keeps the action in the same row; the tabs scroll");
   assert.ok(styles.indexOf(".editor-card-tab-add") < styles.indexOf("/* users-tab:start"), "the new rules stand before users-tab");
   assert.ok(styles.trimEnd().endsWith("/* ui-unify:end */"), "the block of ui-unify stays the last");
+});
+
+// ---- 26.1-26 (owner 2026-11-21, item 34): «+ Добавить…» — в конце каждой полосы вкладок, без наложений ----
+test("owner 2026-11-21 item 34: the seam holds the labels of every strip; the strip is one row of scrolling tabs and a fixed add button; a narrow phone shows only «+»", () => {
+  for (const [key, text] of [["addCard", "+ ДОБАВИТЬ КАРТОЧКУ"], ["addSubsection", "+ ПОДРАЗДЕЛ"], ["addMutation", "+ ДОБАВИТЬ МУТАЦИЮ"], ["addLog", "+ ДОБАВИТЬ ЗАПИСЬ"]]) {
+    assert.ok(cardTabsCode.includes(`${key}: "${text}"`), `${key} is the label of the old button, word for word (D-58)`);
+  }
+  assert.ok(cardTabsCode.includes("aria-label={addLabel}"), "the name of the button is the whole label, also when only «+» is seen");
+  assert.ok(cardTabsCode.includes('<span className="editor-card-tab-add-full" aria-hidden="true">{addLabel}</span><span className="editor-card-tab-add-short" aria-hidden="true">{cardTabsCopy.addShort}</span>'), "the full and the short label");
+  // One row: the tabs take what is left and scroll, the button and the note never shrink and never wrap.
+  assert.equal(declared(".editor-card-tabs", "display"), "flex");
+  assert.equal(declared(".editor-card-tabs", "align-items"), "center");
+  assert.equal(declared(".editor-card-tabs", "gap"), "8px");
+  assert.equal(declared(".editor-card-tabs", "flex-wrap"), "nowrap");
+  assert.equal(declared(".editor-card-tabs", "flex-wrap", PHONE), "nowrap", "no second row on a phone either");
+  assert.equal(declared(".editor-card-tabs nav", "flex"), "1 1 auto");
+  assert.equal(declared(".editor-card-tabs nav", "min-width"), "0");
+  assert.equal(declared(".editor-card-tabs nav", "overflow-x"), "auto");
+  assert.equal(declared(".editor-card-tabs > nav", "flex", PHONE), undefined, "the phone rule that pushed the button under the tabs is gone");
+  assert.equal(declared(".editor-card-tabs > .editor-card-tab-add-bar", "flex"), "none");
+  assert.equal(declared(".editor-card-tabs > .editor-card-tab-add-bar", "flex", PHONE), "none");
+  assert.equal(declared(".editor-card-tab-add > .editor-card-tab-add-short", "display"), "none", "the full label on a PC");
+  assert.equal(declared(".editor-card-tab-add > .editor-card-tab-add-full", "display", "max-width: 520px"), "none");
+  assert.equal(declared(".editor-card-tab-add > .editor-card-tab-add-short", "display", "max-width: 520px"), "inline");
+  assert.equal(declared(".editor-card-tabs button.editor-card-tab-add", "min-width", "max-width: 520px"), "var(--tap-target)", "the «+» is a whole tap target");
+  // The tail of the sheet keeps fonts of 11px or more.
+  const tail = styles.slice(styles.indexOf("/* 26.1-26 (owner item 34)"), styles.indexOf("/* users-tab:start"));
+  for (const size of tail.matchAll(/(?:font-size:|font:[^;]*?)\s*(\d+)px/g)) assert.ok(Number(size[1]) >= 11, `font ${size[1]}px in the 26.1-26 rules`);
+  assert.ok(styles.indexOf("/* 26.1-26 (owner item 34)") < styles.indexOf("/* users-tab:start"), "the new rules stand before users-tab");
+  assert.ok(styles.trimEnd().endsWith("/* ui-unify:end */"), "the block of ui-unify stays the last");
+});
+
+test("owner 2026-11-21 item 34: the strip of the scientist records of a virus ends with «+ ДОБАВИТЬ ЗАПИСЬ»; the button under the records is gone", () => {
+  const logsGroup = editorSlice('{dossierTab === "logs" && <EditorGroup title="Записи учёных" stack>', '{tab === "info" && (');
+  const strip = logsGroup.slice(logsGroup.indexOf("<CardTabs label={cardTabsCopy.logs}"), logsGroup.indexOf("\n                {selectedVirus.scientistLogs.map("));
+  assert.ok(strip.includes("add={{ onAdd: () => { setFormatTarget(null); setFormatterOpen(false); updateVirus((virus) => virus.scientistLogs.push({ id: makeId(\"log\")"), "the same add action; the format panel closes as on a switch");
+  assert.ok(strip.includes("disabled: selectedVirus.scientistLogs.length >= MAX_SCIENTIST_LOGS, label: cardTabsCopy.addLog, note: `${selectedVirus.scientistLogs.length} / ${MAX_SCIENTIST_LOGS}` }}"), "the limit, the label of the seam and the count");
+  const records = logsGroup.slice(0, logsGroup.indexOf("</EditorGroup>}"));
+  assert.ok(!records.includes("scientist-log-actions") && !records.includes("+ ДОБАВИТЬ ЗАПИСЬ"), "no button under the records");
 });
 
 test("owner 2026-11-21 item 17: the editor gives the strip of the guide cards its add action and no longer draws the button under the list", () => {

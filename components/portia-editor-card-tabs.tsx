@@ -14,6 +14,11 @@ export const cardTabsCopy = {
   untitled: "Без названия",
   item: "карточка",
   addCard: "+ ДОБАВИТЬ КАРТОЧКУ",
+  // 26.1-26 (owner 2026-11-21, item 34): the labels of the old buttons under the lists, word for word; every strip ends with its own add button.
+  addSubsection: "+ ПОДРАЗДЕЛ",
+  addMutation: "+ ДОБАВИТЬ МУТАЦИЮ",
+  addLog: "+ ДОБАВИТЬ ЗАПИСЬ",
+  addShort: "+",
 } as const;
 
 /**
@@ -41,16 +46,19 @@ export type CardTabItem = { id: string; title: string };
 // The strip repeats the section tabs of the editor (SectionTabs): the selected tab is `aria-current`, it is scrolled into view, and with `onMove` a tab is held to drag
 // (the hold of 26.1-08) and has the order button for the keyboard. Without `onMove` the tabs only switch (mutations: their texts are bound to the number).
 // 26.1-20 (owner 2026-11-21): with `add` the strip ends with the button that adds a card and the note of its limit; they stand after the scrolling tabs, so many tabs never push them out of sight.
+// 26.1-26 (owner item 34): every strip of tabs adds the same way, through `add`; `add.label` names what is added (a label of cardTabsCopy, the card by default).
+// The strip is one row: the tabs scroll inside it, the button and the note never scroll and never wrap under it; on a narrow phone the button shows only «+», its name stays whole.
 export function CardTabs({ label, items, activeId, onSelect, onMove, add }: {
   label: string;
   items: readonly CardTabItem[];
   activeId: string;
   onSelect: (id: string) => void;
   onMove?: (from: number, to: number) => void;
-  add?: { onAdd: () => void; disabled: boolean; note?: ReactNode };
+  add?: { onAdd: () => void; disabled: boolean; note?: ReactNode; label?: string };
 }) {
   const navRef = useRef<HTMLElement>(null);
   const noteId = useId();
+  const addLabel = add?.label ?? cardTabsCopy.addCard;
   // The selected tab stays in view of the strip. Only the strip scrolls sideways: the page never jumps (so no scrollIntoView, which moves the page too); instant unless the house motion switch is on.
   useEffect(() => {
     const nav = navRef.current;
@@ -71,7 +79,9 @@ export function CardTabs({ label, items, activeId, onSelect, onMove, add }: {
       </span>)}
     </nav>}
     {add && <div className="editor-card-tab-add-bar">
-      <button type="button" className="editor-card-tab-add" disabled={add.disabled} aria-describedby={add.note ? noteId : undefined} onClick={add.onAdd}>{cardTabsCopy.addCard}</button>
+      <button type="button" className="editor-card-tab-add" disabled={add.disabled} aria-label={addLabel} aria-describedby={add.note ? noteId : undefined} onClick={add.onAdd}>
+        <span className="editor-card-tab-add-full" aria-hidden="true">{addLabel}</span><span className="editor-card-tab-add-short" aria-hidden="true">{cardTabsCopy.addShort}</span>
+      </button>
       {add.note && <span className="editor-card-tab-add-note" id={noteId}>{add.note}</span>}
     </div>}
   </div>;

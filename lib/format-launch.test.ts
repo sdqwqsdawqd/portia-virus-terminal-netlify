@@ -124,6 +124,9 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //  25. PORTIA-26.1-ADDCARD (26.1-20; OWN-10, D-21) — «+ ДОБАВИТЬ КАРТОЧКУ» в конце полосы вкладок карточек раздела «Справочника» (applyGuideAddCardHunk): проп add у CardTabs
 //      (то же действие добавления, предел и заметка о нём) и удаление прежнего блока кнопки под списком. Подпись кнопки лежит в шве (cardTabsCopy.addCard), других русских строк не
 //      добавлено. Источник одобрения: 26.1-OWNER-REQUEST, пункт 17 (2026-11-21), план 26.1-20.
+//  26. PORTIA-26.1-ADDTABS (26.1-26; OWN-10, D-21) — «+ Добавить…» в конце каждой полосы вкладок (applyAddTabsHunk): проп add у полос записей учёных, мутаций вкладки вирусов
+//      и подразделов «Информации» (те же действия добавления, пределы и заметки), удаление прежних кнопок под списками. Подписи кнопок лежат в шве (cardTabsCopy.addLog,
+//      addMutation, addSubsection), других русских строк не добавлено. Источник одобрения: 26.1-OWNER-REQUEST, пункт 34 (2026-11-21), план 26.1-26.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -1395,6 +1398,25 @@ function applyGuideAddCardHunk(text: string): string {
   return replaceOnce(next, GUIDE_ADD_CARD_UNDER_LIST, "", "guide add card: the button under the list is gone");
 }
 
+/**
+ * PORTIA-26.1-ADDTABS (26.1-26; OWN-10, D-21): «+ Добавить…» стоит в конце каждой полосы вкладок, как у карточек «Справочника». По полосе: проп add у CardTabs (то же действие
+ * добавления, тот же предел и заметка; при добавлении панель оформления закрывается, как при переключении вкладки) и удаление прежней кнопки под списком. Подписи лежат в шве
+ * (cardTabsCopy), других русских строк не добавлено.
+ */
+const VIRUS_LOGS_SELECT_END = "                  onSelect={(id) => { setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:logs`, id); }}";
+const VIRUS_LOG_PUSH = 'updateVirus((virus) => virus.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 1, content: [""], richContent: { runs: [{ text: "" }] } }))';
+const VIRUS_LOG_ADD_UNDER_LIST = '                <div className="scientist-log-actions"><button className="secondary-control" type="button" disabled={selectedVirus.scientistLogs.length >= MAX_SCIENTIST_LOGS} onClick={() => ' + VIRUS_LOG_PUSH + "}>+ ДОБАВИТЬ ЗАПИСЬ</button><span>{selectedVirus.scientistLogs.length} / {MAX_SCIENTIST_LOGS}</span></div>\n";
+function applyAddTabsHunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    `${VIRUS_LOGS_SELECT_END} />\n`,
+    `${VIRUS_LOGS_SELECT_END}\n                  add={{ onAdd: () => { setFormatTarget(null); setFormatterOpen(false); ${VIRUS_LOG_PUSH}; }, disabled: selectedVirus.scientistLogs.length >= MAX_SCIENTIST_LOGS, label: cardTabsCopy.addLog, note: \`\${selectedVirus.scientistLogs.length} / \${MAX_SCIENTIST_LOGS}\` }} />\n`,
+    "add tabs: the add action of the scientist records strip",
+  );
+  next = replaceOnce(next, VIRUS_LOG_ADD_UNDER_LIST, "", "add tabs: the record button under the list is gone");
+  return next;
+}
+
 /** Реестр одобренных правок (D-64): `apply` — порядок применения к образцу; `normalizeActual` — что вырезается из текущего файла перед сравнением. */
 const approvedEditorEdits: readonly { id: string; apply: (text: string) => string; normalizeActual?: (text: string) => string }[] = [
   { id: "D-57", apply: applyLaunchButtonHunk },
@@ -1426,6 +1448,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26.1-LIVE", apply: applyLiveModeHunk },
   { id: "PORTIA-26.1-LIVE-ACCESS", apply: applyLiveAccessHunk },
   { id: "PORTIA-26.1-ADDCARD", apply: applyGuideAddCardHunk },
+  { id: "PORTIA-26.1-ADDTABS", apply: applyAddTabsHunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -1590,7 +1613,8 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.notEqual(firstDifference(expected, withoutInfoSubsectionTabs), null, "a file without the PORTIA-26.1-TABS2 hunk is a difference");
   assert.throws(() => applyInfoSubsectionTabsHunk(expected), /exactly one approved anchor/, "the info subsection tabs hunk cannot be applied twice");
   assert.ok(expected.includes("<CardTabs label={cardTabsCopy.subsections}"), "the approved editor shows the subsection tabs of an «Информация» section");
-  const withoutVirusItemTabs = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-TABS3").reduce((text, edit) => edit.apply(text), sample);
+  // PORTIA-26.1-ADDTABS stands on the strips that PORTIA-26.1-TABS2 and TABS3 draw, so it leaves with them.
+  const withoutVirusItemTabs = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-TABS3" && edit.id !== "PORTIA-26.1-ADDTABS").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutVirusItemTabs), null, "a file without the PORTIA-26.1-TABS3 hunk is a difference");
   assert.throws(() => applyVirusItemTabsHunk(expected), /exactly one approved anchor/, "the virus item tabs hunk cannot be applied twice");
   assert.ok(expected.includes("<CardTabs label={cardTabsCopy.mutations}") && expected.includes("<CardTabs label={cardTabsCopy.logs}"), "the approved editor shows the tabs of the mutations and the scientist records");
@@ -1607,6 +1631,11 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.throws(() => applyGuideAddCardHunk(expected), /exactly one approved anchor/, "the add card hunk cannot be applied twice");
   assert.ok(expected.includes("add={{ onAdd:") && !expected.includes('limit-add" type="button" disabled={section.cards.length'), "the approved editor puts the add card action into the strip and has no button under the list");
   assert.ok(withoutAddCard.includes('limit-add" type="button" disabled={section.cards.length'), "without the hunk the button stands under the list");
+  const withoutAddTabs = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-ADDTABS").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutAddTabs), null, "a file without the PORTIA-26.1-ADDTABS hunk is a difference");
+  assert.throws(() => applyAddTabsHunk(expected), /exactly one approved anchor/, "the add tabs hunk cannot be applied twice");
+  assert.ok(expected.includes("label: cardTabsCopy.addLog") && !expected.includes(">+ ДОБАВИТЬ ЗАПИСЬ</button>"), "the approved editor puts the add record action into the strip and has no button under the list");
+  assert.ok(withoutAddTabs.includes(">+ ДОБАВИТЬ ЗАПИСЬ</button>"), "without the hunk the record button stands under the list");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");
