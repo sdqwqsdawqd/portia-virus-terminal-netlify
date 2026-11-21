@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { dossierTabs, type DossierTab } from "@/lib/editor-changes";
 import { makeId } from "@/lib/editor-items";
 import { classificationOptions, scientistLogPlainText, type Virus } from "@/lib/portia-content";
@@ -15,6 +16,7 @@ import { HOLD_MS, hasPlaceToGo, holdStep, holdTargetAllowed, idleHold, type Hold
 import { classificationIconFor, PortiaIcon } from "@/components/portia-icons";
 import { CardTabs, cardTabsCopy, useCardTabSelection } from "@/components/portia-editor-card-tabs";
 import { TRANSMISSION_CHOICES, formatTransmissionRoutes, parseTransmissionRoutes, toggleTransmissionRoute, transmissionDescription } from "@/lib/transmission-routes";
+import { ROUTE_PANEL_WIDTH, routePanelPlacement, type RoutePanelPlace } from "@/lib/route-dropdown-position";
 
 type ImagePlacement = "dossier" | "mutation" | "recycle" | "guide" | "employee";
 
@@ -399,6 +401,36 @@ export function DossierTabs({ active, changed, onSelect, tabs }: { active: Dossi
   </nav>;
 }
 
+// Owner 2026-11-21, item 32: the panel of the routes is a layer over the page. A modal dialog is the top layer, so a field inside one keeps its panel
+// inside that dialog; everywhere else the panel goes to document.body, above the windows of the desktop.
+function routePanelHost(button: HTMLElement | null): Element {
+  return button?.closest("dialog") ?? document.body;
+}
+
+// The visible screen, with the phone keyboard accounted for.
+function routeViewport() {
+  return { width: window.visualViewport?.width ?? window.innerWidth, height: window.visualViewport?.height ?? window.innerHeight };
+}
+
+// One write of the panel's place: an upward panel hangs by its bottom edge, so a longer description grows away from the button.
+function writeRoutePanelPlace(node: HTMLElement, place: RoutePanelPlace) {
+  node.style.top = place.bottom === null ? `${place.top}px` : "auto";
+  node.style.bottom = place.bottom === null ? "auto" : `${place.bottom}px`;
+  node.style.left = `${place.left}px`;
+  node.style.width = `${place.width}px`;
+  node.style.maxHeight = `min(280px, 45svh, ${place.maxHeight}px)`;
+  node.dataset.side = place.side;
+}
+
+// The focusable element that follows the button in the page, the panel's own checkboxes left out.
+function nextTabStop(button: HTMLElement, panel: HTMLElement, host: Element | null): HTMLElement | null {
+  const scope = host instanceof HTMLDialogElement ? host : document;
+  const stops = [...scope.querySelectorAll<HTMLElement>("a[href], button, input, select, textarea, [tabindex]")]
+    .filter((node) => node.tabIndex >= 0 && !(node as HTMLButtonElement).disabled && !panel.contains(node) && node.getClientRects().length > 0);
+  const at = stops.indexOf(button);
+  return at < 0 ? null : stops[at + 1] ?? null;
+}
+
 // OWN-03 (owner 2026-11-20; clarification 12, 26.1-15): the routes of transmission are several, so the field is a compact drop-down: one line with the chosen routes,
 // and on a press a panel of checkboxes. The value stays the one canonical string of lib/transmission-routes.ts; the choices, their exclusive «Неизвестно» and
 // the string itself are that module's, not ours.
@@ -411,39 +443,54 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
   const panelId = useId();
   const hintId = useId();
   const panel = useRef<HTMLDivElement>(null);
-  // Owner 2026-11-21, item 18: the panel is small, so it must fit the screen: it opens upwards when the room below is short and larger above.
-  const [placement, setPlacement] = useState<"down" | "up">("down");
+  // Owner 2026-11-21, item 32: the panel is a layer over the page, drawn into document.body (or the open dialog the field stands in), never a child of
+  // the scrolling form, so opening it changes neither the layout nor the scroll bars of the window. The host is chosen on the press that opens it.
+  const [host, setHost] = useState<Element | null>(null);
   // The one hint line: the description of the route under the pointer or in focus.
   const [hint, setHint] = useState<string | null>(null);
   const selected = parseTransmissionRoutes(value);
   const known = new Set(TRANSMISSION_CHOICES.map((choice) => choice.name));
   const extras = selected.filter((item) => !known.has(item));
   const hintText = transmissionDescription(hint ?? selected[0] ?? "") ?? "Наведите на путь";
-  // Measured before the paint, so the panel never flashes below the edge of the window.
+  // The button and the panel are one drop-down for the press and the focus, though the panel lives elsewhere in the page.
+  const inside = (node: Node | null) => !!node && (!!root.current?.contains(node) || !!panel.current?.contains(node));
+  // Owner item 18 and 32: placed before the paint by the button's rectangle (position: fixed), down or up, never past the edge of the screen;
+  // the style is written into the panel directly, so the place costs no render.
   useLayoutEffect(() => {
-    if (!open) return;
-    const button = toggle.current?.getBoundingClientRect();
-    const height = panel.current?.offsetHeight;
-    if (!button || !height) return;
-    const viewport = window.visualViewport?.height ?? window.innerHeight;
-    const need = height + 8;
-    const below = viewport - button.bottom;
-    const above = button.top;
-    setPlacement(below < need && above > below ? "up" : "down");
+    const node = panel.current;
+    const button = toggle.current;
+    if (!open || !node || !button) return;
+    const natural = node.offsetHeight;
+    writeRoutePanelPlace(node, routePanelPlacement(button.getBoundingClientRect(), { width: ROUTE_PANEL_WIDTH, height: natural }, routeViewport()));
   }, [open]);
-  // A press anywhere outside closes the panel; a press inside it never does.
+  // A press anywhere outside closes the panel; a press inside it (on the button or in the panel) never does.
   useEffect(() => {
     if (!open) return;
-    const onOutside = (event: PointerEvent) => { if (!root.current?.contains(event.target as Node)) setOpen(false); };
+    const onOutside = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (!root.current?.contains(target) && !panel.current?.contains(target)) setOpen(false);
+    };
     document.addEventListener("pointerdown", onOutside);
     return () => document.removeEventListener("pointerdown", onOutside);
   }, [open]);
+  // The panel stands at the end of its host, so Tab is carried by hand: from the button into the first checkbox, from the first back to the button,
+  // and from the last on to whatever follows the button in the page, closing the panel on the way out.
+  const carryTab = (event: ReactKeyboardEvent) => {
+    const box = panel.current;
+    const button = toggle.current;
+    if (!box || !button) return;
+    const stops = [...box.querySelectorAll<HTMLElement>("input, button")];
+    if (stops.length === 0) return;
+    if (event.target === button && !event.shiftKey) { event.preventDefault(); stops[0].focus(); }
+    else if (event.target === stops[0] && event.shiftKey) { event.preventDefault(); button.focus(); }
+    else if (event.target === stops[stops.length - 1] && !event.shiftKey) { event.preventDefault(); setOpen(false); (nextTabStop(button, box, host) ?? button).focus(); }
+  };
   return <div className="route-dropdown classification-editor-field" ref={root}
-    onKeyDown={(event) => { if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); setOpen(false); toggle.current?.focus(); } }}
-    onBlur={(event) => { if (open && event.relatedTarget && !root.current?.contains(event.relatedTarget as Node)) setOpen(false); }}>
+    onKeyDown={(event) => { if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); setOpen(false); toggle.current?.focus(); } else if (event.key === "Tab" && open) carryTab(event); }}
+    onBlur={(event) => { if (open && event.relatedTarget && !inside(event.relatedTarget as Node)) setOpen(false); }}>
     <span className="route-dropdown-label" id={labelId}>{label}</span>
     <div className="route-dropdown-anchor">
-      <button type="button" className="route-dropdown-toggle" ref={toggle} aria-haspopup="true" aria-expanded={open} aria-controls={open ? panelId : undefined} aria-labelledby={`${labelId} ${valueId}`} onClick={() => { setHint(null); setOpen((was) => !was); }}>
+      <button type="button" className="route-dropdown-toggle" ref={toggle} aria-haspopup="true" aria-expanded={open} aria-controls={open ? panelId : undefined} aria-labelledby={`${labelId} ${valueId}`} onClick={() => { setHint(null); setHost(routePanelHost(toggle.current)); setOpen((was) => !was); }}>
         <span className="route-dropdown-value" id={valueId}>
           {selected.length === 0 ? <em>Не указан</em> : selected.map((name) => {
             const icon = classificationIconFor(name);
@@ -452,7 +499,7 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
         </span>
         <span className="route-dropdown-chevron" aria-hidden="true">{open ? "▴" : "▾"}</span>
       </button>
-      {open && <div className="route-dropdown-panel" id={panelId} role="group" aria-labelledby={labelId} ref={panel} data-placement={placement} onMouseLeave={() => setHint(null)}>
+      {open && host && createPortal(<div className="route-dropdown-panel" id={panelId} role="group" aria-labelledby={labelId} ref={panel} onMouseLeave={() => setHint(null)}>
         {TRANSMISSION_CHOICES.map((choice) => {
           const icon = classificationIconFor(choice.name);
           return <label key={choice.name} className="route-option" onMouseEnter={() => setHint(choice.name)}>
@@ -466,7 +513,7 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
           <button type="button" className="secondary-control" onClick={() => onChange(formatTransmissionRoutes(selected.filter((item) => item !== extra)))}>Убрать</button>
         </div>)}
         <p className="route-dropdown-hint" id={hintId}>{hintText}</p>
-      </div>}
+      </div>, host)}
     </div>
   </div>;
 }

@@ -38,7 +38,7 @@ test("OWN-03 the route picker is a compact drop-down: one button with the chosen
   assert.match(field, /aria-controls=\{open \? panelId : undefined\}/);
   assert.match(field, /aria-labelledby=\{`\$\{labelId\} \$\{valueId\}`\}/, "the visible label and the chosen routes name the button");
   assert.match(field, /<span className="route-dropdown-label" id=\{labelId\}>\{label\}<\/span>/, "the visible label of the field");
-  assert.match(field, /\{open && <div className="route-dropdown-panel" id=\{panelId\} role="group" aria-labelledby=\{labelId\} ref=\{panel\} data-placement=\{placement\}/, "the panel is drawn only while open");
+  assert.match(field, /\{open && host && createPortal\(<div className="route-dropdown-panel" id=\{panelId\} role="group" aria-labelledby=\{labelId\} ref=\{panel\}/, "the panel is drawn only while open, as a layer of its host (item 32)");
   assert.doesNotMatch(field, /fieldset|legend/, "the big group of checkboxes is gone");
   assert.match(field, /TRANSMISSION_CHOICES\.map\(/);
   assert.match(field, /<label key=\{choice\.name\} className="route-option"/);
@@ -54,10 +54,12 @@ test("OWN-03 the drop-down: Escape closes and returns the focus to the button; a
   assert.match(field, /const \[open, setOpen\] = useState\(false\)/, "closed by default");
   assert.match(field, /event\.key === "Escape" && open\) \{ event\.preventDefault\(\); event\.stopPropagation\(\); setOpen\(false\); toggle\.current\?\.focus\(\);/);
   assert.match(field, /document\.addEventListener\("pointerdown", [a-zA-Z]+\)/, "a press outside is heard on the document while open");
-  assert.match(field, /root\.current\?\.contains\(event\.target as Node\)/);
+  // Item 32: the panel lives in a portal, outside the field's own markup, so «outside» means outside the button's field AND outside the panel.
+  assert.match(field, /const target = event\.target as Node;\s*if \(!root\.current\?\.contains\(target\) && !panel\.current\?\.contains\(target\)\) setOpen\(false\);/, "a press in the panel does not close it");
   assert.match(field, /document\.removeEventListener\("pointerdown", [a-zA-Z]+\)/, "and it is taken off");
-  assert.match(field, /onBlur=\{\(event\) => \{[^}]*event\.relatedTarget[^}]*root\.current\?\.contains\(event\.relatedTarget as Node\)[^}]*setOpen\(false\)/, "focus that leaves the whole drop-down closes it; a null target is a press, the document handles that");
-  assert.match(field, /onClick=\{\(\) => \{ setHint\(null\); setOpen\(\(was\) => !was\); \}\}/, "a press on the button toggles, with a fresh hint");
+  assert.match(field, /const inside = \(node: Node \| null\) => !!node && \(!!root\.current\?\.contains\(node\) \|\| !!panel\.current\?\.contains\(node\)\)/);
+  assert.match(field, /onBlur=\{\(event\) => \{[^}]*event\.relatedTarget[^}]*!inside\(event\.relatedTarget as Node\)[^}]*setOpen\(false\)/, "focus that leaves the whole drop-down closes it; a null target is a press, the document handles that");
+  assert.match(field, /onClick=\{\(\) => \{ setHint\(null\); setHost\(routePanelHost\(toggle\.current\)\); setOpen\(\(was\) => !was\); \}\}/, "a press on the button toggles, with a fresh hint and the host of the layer");
   assert.doesNotMatch(field, /"Enter"|" "|"Space"/, "Enter and Space open the button natively");
 });
 
@@ -122,7 +124,7 @@ test("OWN-03 the styles: drop-down, toggle, panel, option, list, item, descripti
   assert.match(css, /\.route-dropdown-toggle \{[^}]*min-height: 32px/, "32px on a PC");
   assert.doesNotMatch(css.match(/\.route-dropdown-toggle \{[^}]*\}/)?.[0] ?? "", /text-overflow|white-space: nowrap/, "the chosen routes wrap, never an ellipsis");
   assert.match(css, /\.route-dropdown-value \{[^}]*flex-wrap: wrap/);
-  assert.match(css, /\.route-dropdown-panel \{[^}]*position: absolute/);
+  assert.match(css, /\.route-dropdown-panel \{[^}]*position: fixed/, "item 32: a layer over the page, not a part of the form's layout");
   assert.match(css, /\.route-dropdown-panel \{[^}]*width: min\(320px, calc\(100vw - 32px\)\)/, "owner 2026-11-21 item 18: a compact panel");
   assert.match(css, /\.route-dropdown-panel \{[^}]*z-index: \d+/, "above the neighbours");
   assert.match(css, /\.route-dropdown-panel \{[^}]*overflow-y: auto/, "scrolls when the room is short");
@@ -149,20 +151,44 @@ test("OWN-03 item 18: the rows carry no description; one hint line under the lis
   assert.match(field, /transmissionDescription\(/, "the text is read from the model, not retyped");
 });
 
-test("OWN-03 item 18: on opening the room under the button is measured and the panel goes up when it is short below and larger above", () => {
-  assert.match(field, /data-placement=\{placement\}/);
-  assert.match(field, /useState<"down" \| "up">\("down"\)/, "down by default");
+test("OWN-03 items 18 and 32: on opening the room around the button is measured and the panel goes up when it is short below and larger above; the place is written, not rendered", () => {
   assert.match(field, /useLayoutEffect\(\(\) => \{/, "measured before the paint, so the panel never flashes below the edge");
   assert.match(field, /getBoundingClientRect\(\)/);
-  assert.match(field, /window\.visualViewport\?\.height \?\? window\.innerHeight/, "the visible height, with the phone keyboard accounted for");
-  assert.match(field, /setPlacement\(below < need && above > below \? "up" : "down"\)/);
+  assert.match(field, /routePanelPlacement\(button\.getBoundingClientRect\(\), \{ width: ROUTE_PANEL_WIDTH, height: natural \}, routeViewport\(\)\)/, "the pure placement of lib/route-dropdown-position.ts");
+  assert.match(dossier, /window\.visualViewport\?\.height \?\? window\.innerHeight/, "the visible height, with the phone keyboard accounted for");
+  assert.match(dossier, /from "@\/lib\/route-dropdown-position"/);
+  assert.doesNotMatch(field, /setPlacement|data-placement|useState<"down" \| "up">/, "no render per measurement: the measure, setState, measure loop is gone");
+  // The one write: top or bottom, left, width and max-height straight into the panel's style.
+  const write = sliceOf(dossier, /function writeRoutePanelPlace/, /\n\}\n/);
+  for (const property of ["top", "bottom", "left", "width", "maxHeight"]) assert.match(write, new RegExp(`node\\.style\\.${property} = `), `${property} is written`);
+  assert.match(write, /node\.dataset\.side = place\.side/);
+});
+
+test("OWN-03 item 32: the panel is a layer over the page: a portal into document.body, or into the open dialog the field stands in; never inside the form", () => {
+  assert.match(dossier, /import \{ createPortal \} from "react-dom"/);
+  assert.match(dossier, /function routePanelHost\(button: HTMLElement \| null\): Element \{\s*return button\?\.closest\("dialog"\) \?\? document\.body;/);
+  assert.equal(field.split('className="route-dropdown-panel"').length - 1, 1, "one panel in the field's source");
+  assert.match(field, /createPortal\(<div className="route-dropdown-panel"/, "and it is the portal's content, not a child of the field's markup");
+  assert.match(field, /<\/div>, host\)\}/, "drawn into the chosen host");
+  assert.match(field, /aria-controls=\{open \? panelId : undefined\}/);
+  assert.match(field, /className="route-dropdown-panel" id=\{panelId\}/, "the button's aria-controls names the panel");
+  assert.doesNotMatch(css.match(/\.route-dropdown-panel \{[^}]*\}/)?.[0] ?? "", /position: absolute|calc\(100% \+ 4px\)/, "nothing hangs on the field's box any more");
+  assert.ok(!css.includes("[data-placement="), "the old up rule is gone");
+  const z = Number(css.match(/\.route-dropdown-panel \{[^}]*z-index: (\d+)/)?.[1]);
+  assert.ok(z > 950, "above the floating windows of the desktop (the format panel is 950)");
+});
+
+test("OWN-03 item 32: the panel stands at the end of its host, so Tab is carried: button to the first checkbox, first back to the button, last on past the button", () => {
+  assert.match(field, /else if \(event\.key === "Tab" && open\) carryTab\(event\);/);
+  assert.match(field, /if \(event\.target === button && !event\.shiftKey\) \{ event\.preventDefault\(\); stops\[0\]\.focus\(\); \}/);
+  assert.match(field, /else if \(event\.target === stops\[0\] && event\.shiftKey\) \{ event\.preventDefault\(\); button\.focus\(\); \}/);
+  assert.match(field, /else if \(event\.target === stops\[stops\.length - 1\] && !event\.shiftKey\) \{ event\.preventDefault\(\); setOpen\(false\); \(nextTabStop\(button, box, host\) \?\? button\)\.focus\(\); \}/);
+  assert.match(dossier, /function nextTabStop\(button: HTMLElement, panel: HTMLElement, host: Element \| null\)/);
 });
 
 test("OWN-03 item 18: the compact panel — 320px wide, no taller than 280px or 45svh and scrolling inside, 4px from the button, up on request; 28px rows of 13px names", () => {
   assert.match(css, /\.route-dropdown-anchor \{[^}]*position: relative/, "the panel hangs on the button, not on the label above it");
   assert.match(css, /\.route-dropdown-panel \{[^}]*max-height: min\(280px, 45svh\)/);
-  assert.match(css, /\.route-dropdown-panel \{[^}]*top: calc\(100% \+ 4px\)/);
-  assert.match(css, /\.route-dropdown-panel\[data-placement="up"\] \{[^}]*bottom: calc\(100% \+ 4px\)[^}]*top: auto/);
   assert.match(css, /\.route-option \{[^}]*min-height: 28px/, "28px rows on a PC");
   assert.match(css, /\.route-option-text strong \{[^}]*font: 700 13px/);
   assert.match(css, /\.route-dropdown-hint \{[^}]*position: sticky[^}]*bottom: 0/, "the hint stays at the bottom of the panel while the rows scroll");

@@ -807,10 +807,11 @@ html[data-motion="full"] [data-sort-index][data-lifted="true"], html[data-motion
 .route-dropdown-value em { color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font-style: normal; }
 .route-dropdown-chosen { display: inline-flex; align-items: center; gap: 6px; }
 .route-dropdown-chevron { flex: none; color: var(--teal); font-size: 11px; }
-/* Owner 2026-11-21, item 18: a compact panel that fits the screen: 320px wide, at most 280px / 45svh tall and scrolling inside, 4px from the button, upwards when the room below is short. */
+/* Owner 2026-11-21, item 18: a compact panel that fits the screen: 320px wide, at most 280px / 45svh tall and scrolling inside, 4px from the button, upwards when the room below is short.
+   Item 32 (26.1-25): the panel is a layer over the page, drawn into document.body and fixed by the button's rectangle (lib/route-dropdown-position.ts writes
+   top / bottom / left / width / max-height), so it never widens the scrolling form or changes the window's scroll bars. Above the windows of the desktop. */
 .route-dropdown-anchor { position: relative; }
-.route-dropdown-panel { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; width: min(320px, calc(100vw - 32px)); max-height: min(280px, 45svh); overflow-y: auto; display: grid; gap: 2px; padding: 4px; border: 1px solid var(--teal-dim); border-radius: var(--radius-field); background: oklch(.168 calc(.014 * var(--accent-chroma)) var(--accent-hue)); box-shadow: 0 12px 28px rgba(0,0,0,.45); }
-.route-dropdown-panel[data-placement="up"] { bottom: calc(100% + 4px); top: auto; }
+.route-dropdown-panel { position: fixed; z-index: 975; top: 0; left: 0; width: min(320px, calc(100vw - 32px)); max-height: min(280px, 45svh); overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 2px; padding: 4px; border: 1px solid var(--teal-dim); border-radius: var(--radius-field); background: oklch(.168 calc(.014 * var(--accent-chroma)) var(--accent-hue)); box-shadow: 0 12px 28px rgba(0,0,0,.45); color: oklch(.912 calc(.013 * var(--accent-chroma)) var(--accent-hue)); font: 13px/1.35 var(--sans); }
 .route-dropdown-hint { position: sticky; bottom: 0; margin: 2px 0 0; padding: 5px 8px; min-height: 2.9em; border-top: 1px solid oklch(.383 calc(.033 * var(--accent-chroma)) var(--accent-hue)); background: oklch(.168 calc(.014 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.658 calc(.026 * var(--accent-chroma)) var(--accent-hue)); font: 11px/1.4 var(--sans); overflow-wrap: anywhere; }
 .route-option { min-width: 0; min-height: 28px; display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 2px 8px; border: 1px solid oklch(.383 calc(.033 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-field); background: rgba(255,255,255,.015); cursor: pointer; }
 .route-option:hover { border-color: var(--teal-dim); }
