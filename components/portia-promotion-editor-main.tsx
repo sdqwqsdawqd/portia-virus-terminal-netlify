@@ -6,7 +6,7 @@ import { requestForActiveQueue } from "@/lib/portia-promotion-editor-state";
 import { validateQuestionDraft } from "@/lib/portia-promotion-reviewer";
 import { builderDraftPayload, draftFromItem, qualificationTestQuotas, type BuilderDraft } from "@/lib/portia-qualification-builder";
 import { QUALIFICATION_RULES_MAX_LENGTH, qualificationPreStartLines } from "@/lib/portia-qualification-rules";
-import { PROMO_NEW_TASK_TEXT, promoMoveId, promoNewQuestion, promoNextOrder, promoOrderChanges, promoQuestionEdit, type LiveTarget, type PromoQuestionType } from "@/lib/live-edit";
+import { PROMO_NEW_TASK_TEXT, createLiveCommandQueue, runLivePayloads, promoMoveId, promoNewQuestion, promoNextOrder, promoOrderChanges, promoQuestionEdit, type LiveTarget, type PromoQuestionType } from "@/lib/live-edit";
 import { EditorActionBar } from "@/components/portia-editor-tab-shell";
 import { OrderDragHandle } from "@/components/portia-editor-dossier";
 import { LiveCommitText, LiveModeToggle, liveCopy } from "@/components/portia-editor-live";
@@ -140,7 +140,12 @@ function PromotionLiveSurface({ kind, banks, busy, post, requestConfirm }: { kin
   const [targetTitleId, setTargetTitleId] = useState<string>(ordinaryPromotionTransitions[0].targetTitleId);
   const [command, setCommand] = useState<LiveCommand>({ phase: "idle", message: "" });
   const [dialog, setDialog] = useState<{ itemId: string; draft: BuilderDraft; opener: HTMLElement | null } | null>(null);
-  const savingRef = useRef(false);
+  // The commands go one at a time, in the order asked (T-26.1-40, 26.1-REVIEW-2 CR-02): a second edit waits for the first, it is not dropped.
+  const [queue] = useState(createLiveCommandQueue);
+  const failureRef = useRef<string | null>(null);
+  // The banks as the last answer of the server left them: what a waiting command is built from when its turn comes, so two edits of one question do not overwrite each other.
+  const latestBanksRef = useRef(banks);
+  useEffect(() => { if (queue.pending === 0) latestBanksRef.current = banks; });
   const qualification = kind === "qualification";
   const transition = qualificationPromotionTransitions.find((item) => item.transitionId === transitionId) ?? qualificationPromotionTransitions[0];
   const ordinary = ordinaryPromotionTransitions.find((item) => item.targetTitleId === targetTitleId) ?? ordinaryPromotionTransitions[0];
@@ -148,43 +153,56 @@ function PromotionLiveSurface({ kind, banks, busy, post, requestConfirm }: { kin
   const items = bank?.items ?? [];
   const refuse = (message: string) => setCommand({ phase: "error", message });
 
-  // One command at a time (T-26.1-40): a second one does not start while one is saving. A list of commands (a changed order) runs as one.
-  const runCommands = async (payloads: Record<string, unknown>[], message: string) => {
-    if (savingRef.current || payloads.length === 0) return null;
-    savingRef.current = true;
-    setCommand({ phase: "saving", message: liveCopy.promo.saving });
-    try {
-      let last: Record<string, unknown> | null = null;
-      for (const payload of payloads) {
-        last = await post(payload);
-        if (!last?.state) { refuse(liveCopy.promo.notSaved); return null; }
-      }
-      setCommand({ phase: "saved", message });
-      return last;
-    } finally {
-      savingRef.current = false;
-    }
+  const bankNow = (bankId: string) => [...latestBanksRef.current.qualificationBanks, ...latestBanksRef.current.taskBanks].find((entry) => entry.id === bankId) ?? null;
+  const itemNow = (bankId: string, itemId: string) => bankNow(bankId)?.items.find((entry) => entry.id === itemId) ?? null;
+  const itemsNow = (bankId: string) => bankNow(bankId)?.items ?? [];
+
+  // A command is built when its turn comes (from the banks the commands before it left), as the commands or as the words of its refusal.
+  // The state line tells the truth: «saving» while any waits, the message of the last one only when all went through, the first refusal until the next batch.
+  const runCommands = async (build: () => Record<string, unknown>[] | string, message: string): Promise<Record<string, unknown> | null> => {
+    if (queue.pending === 0) failureRef.current = null;
+    if (!failureRef.current) setCommand({ phase: "saving", message: liveCopy.promo.saving });
+    const outcome = await queue.enqueue(async () => {
+      const built = build();
+      if (typeof built === "string") return { ok: false, empty: false, last: null, why: built };
+      const sent = await runLivePayloads(built, async (payload) => {
+        const answer = await post(payload);
+        if (answer?.state) latestBanksRef.current = answer.state as BankState;
+        return answer;
+      });
+      return { ok: sent.ok, empty: built.length === 0, last: sent.last, why: sent.ok ? "" : liveCopy.promo.notSaved };
+    }).catch(() => ({ ok: false, empty: false, last: null as Record<string, unknown> | null, why: liveCopy.promo.notSaved }));
+    if (!outcome.ok) { failureRef.current = outcome.why; refuse(outcome.why); return null; }
+    if (queue.pending === 0 && !failureRef.current) setCommand(outcome.empty ? { phase: "idle", message: "" } : { phase: "saved", message });
+    return outcome.last;
   };
-  const run = (payload: Record<string, unknown>, message: string) => runCommands([payload], message);
+  const run = (payload: Record<string, unknown>, message: string) => runCommands(() => [payload], message);
 
   const taskBody = (bankId: string, item: BankItem, patch: { text?: string; active?: boolean; sortOrder?: number }) => ({ action: "save-task-item", bankId, itemId: item.id, text: patch.text ?? item.text, active: patch.active ?? item.active, sortOrder: patch.sortOrder ?? item.sortOrder });
+  // The edit of a question as the command that writes it: its other fields are the ones the banks hold when the command's turn comes.
+  const questionCommand = (bankId: string, questionId: string, edit: Parameters<typeof promoQuestionEdit>[1]): Record<string, unknown>[] | string => {
+    const question = itemNow(bankId, questionId);
+    if (!question) return [];
+    const body = promoQuestionEdit(question, edit, validateQuestionDraft);
+    return body ? [{ action: "save-question", bankId, questionId, ...body }] : liveCopy.promo.refused;
+  };
 
   const commitText = async (target: LiveTarget, raw: string) => {
     if (!bank) return;
+    const bankId = bank.id;
     if (target.kind === "promo-rules") { await run({ action: "save-qualification-rules", transitionId: transition.transitionId, rulesText: raw }, "Правила сохранены."); return; }
     if (target.kind === "promo-task-text") {
-      const task = items.find((entry) => entry.id === target.taskId);
-      if (!task) return;
+      const taskId = target.taskId;
+      if (!items.some((entry) => entry.id === taskId)) return;
       if (!raw.trim()) { refuse(liveCopy.promo.refusedTask); return; }
-      await run(taskBody(bank.id, task, { text: raw }), "Задание обновлено.");
+      await runCommands(() => { const task = itemNow(bankId, taskId); return task ? [taskBody(bankId, task, { text: raw })] : []; }, "Задание обновлено.");
       return;
     }
     if (target.kind !== "promo-question-text" && target.kind !== "promo-question-option") return;
-    const question = items.find((entry) => entry.id === target.questionId);
-    if (!question) return;
-    const body = promoQuestionEdit(question, target.kind === "promo-question-text" ? { text: raw } : { option: target.index, text: raw }, validateQuestionDraft);
-    if (!body) { refuse(liveCopy.promo.refused); return; }
-    await run({ action: "save-question", bankId: bank.id, questionId: question.id, ...body }, "Вопрос обновлён.");
+    const questionId = target.questionId;
+    if (!items.some((entry) => entry.id === questionId)) return;
+    const edit = target.kind === "promo-question-text" ? { text: raw } : { option: target.index, text: raw };
+    await runCommands(() => questionCommand(bankId, questionId, edit), "Вопрос обновлён.");
   };
 
   const rulesAvailable = Boolean(bank) && typeof bank?.rulesText === "string";
@@ -208,24 +226,31 @@ function PromotionLiveSurface({ kind, banks, busy, post, requestConfirm }: { kin
   };
 
   const persistOrder = (changes: LiveRowChange[]) => {
-    if (!bank) return Promise.resolve(null);
-    const payloads = changes.flatMap((change): Record<string, unknown>[] => {
-      const item = items.find((entry) => entry.id === change.id);
-      if (!item) return [];
-      if (!qualification) return [taskBody(bank.id, item, { sortOrder: change.sortOrder })];
-      const body = promoQuestionEdit(item, { sortOrder: change.sortOrder }, validateQuestionDraft);
-      return body ? [{ action: "save-question", bankId: bank.id, questionId: item.id, ...body }] : [];
-    });
-    return runCommands(payloads, liveCopy.promo.orderSaved);
+    if (!bank || changes.length === 0) return Promise.resolve(null);
+    const bankId = bank.id;
+    return runCommands(() => {
+      const built: Record<string, unknown>[] = [];
+      for (const change of changes) {
+        if (!qualification) {
+          const task = itemNow(bankId, change.id);
+          if (task) built.push(taskBody(bankId, task, { sortOrder: change.sortOrder }));
+          continue;
+        }
+        const one = questionCommand(bankId, change.id, { sortOrder: change.sortOrder });
+        if (typeof one === "string") return one;
+        built.push(...one);
+      }
+      return built;
+    }, liveCopy.promo.orderSaved);
   };
   const ordering = useLiveOrder(items, persistOrder);
 
   const switchItem = (item: BankItem) => {
     if (!bank) return;
-    if (!qualification) { void run(taskBody(bank.id, item, { active: !item.active }), "Задание обновлено."); return; }
-    const body = promoQuestionEdit(item, { active: !item.active }, validateQuestionDraft);
-    if (!body) { refuse(liveCopy.promo.refused); return; }
-    void run({ action: "save-question", bankId: bank.id, questionId: item.id, ...body }, "Вопрос обновлён.");
+    const bankId = bank.id;
+    const active = !item.active;
+    if (!qualification) { void runCommands(() => { const task = itemNow(bankId, item.id); return task ? [taskBody(bankId, task, { active })] : []; }, "Задание обновлено."); return; }
+    void runCommands(() => questionCommand(bankId, item.id, { active }), "Вопрос обновлён.");
   };
   const removeItem = (item: BankItem, opener: HTMLElement) => {
     if (!bank) return;
@@ -243,7 +268,8 @@ function PromotionLiveSurface({ kind, banks, busy, post, requestConfirm }: { kin
       bankId = (created?.state as { qualificationBanks?: Bank[] } | undefined)?.qualificationBanks?.find((item) => item.transitionId === transition.transitionId)?.id ?? null;
       if (!bankId) { if (created) refuse(liveCopy.promo.bankError); return; }
     }
-    await run({ action: "save-question", bankId, question: promoNewQuestion(type), active: true, sortOrder: promoNextOrder(items) }, "Вопрос добавлен.");
+    const newBankId = bankId;
+    await runCommands(() => [{ action: "save-question", bankId: newBankId, question: promoNewQuestion(type), active: true, sortOrder: promoNextOrder(itemsNow(newBankId)) }], "Вопрос добавлен.");
   };
   const addTask = async () => {
     let bankId = bank?.id ?? null;
@@ -252,7 +278,8 @@ function PromotionLiveSurface({ kind, banks, busy, post, requestConfirm }: { kin
       bankId = (created?.state as { taskBanks?: Bank[] } | undefined)?.taskBanks?.find((item) => item.targetTitleId === ordinary.targetTitleId)?.id ?? null;
       if (!bankId) { if (created) refuse(liveCopy.promo.bankError); return; }
     }
-    await run({ action: "save-task-item", bankId, text: PROMO_NEW_TASK_TEXT, active: true, sortOrder: promoNextOrder(items) }, "Задание добавлено.");
+    const newBankId = bankId;
+    await runCommands(() => [{ action: "save-task-item", bankId: newBankId, text: PROMO_NEW_TASK_TEXT, active: true, sortOrder: promoNextOrder(itemsNow(newBankId)) }], "Задание добавлено.");
   };
   // The correct answer and the type are not in the view of the candidate: they are edited in the dialog of the ordinary tab.
   const saveAnswer = async () => {
@@ -261,16 +288,17 @@ function PromotionLiveSurface({ kind, banks, busy, post, requestConfirm }: { kin
     const question = validateQuestionDraft(builderDraftPayload(dialog.draft));
     if (!item) { setDialog(null); return; }
     if (!question) { refuse(liveCopy.promo.answerError); return; }
-    const result = await run({ action: "save-question", bankId: bank.id, questionId: item.id, question, active: item.active, sortOrder: item.sortOrder }, "Вопрос обновлён.");
+    const bankId = bank.id;
+    const result = await runCommands(() => { const now = itemNow(bankId, item.id); return now ? [{ action: "save-question", bankId, questionId: item.id, question, active: now.active, sortOrder: now.sortOrder }] : []; }, "Вопрос обновлён.");
     if (result) setDialog(null);
   };
 
   const rowTools = (item: BankItem, index: number) => <div className="promo-live-tools live-tools">
     <OrderDragHandle index={index} label={shortName(item.text)} onMove={ordering.move} />
     {!item.active && <em className="live-draft-badge">{liveCopy.promo.off}</em>}
-    <button type="button" className="secondary-control live-button" disabled={busy} onClick={() => switchItem(item)}>{item.active ? liveCopy.promo.switchOff : liveCopy.promo.switchOn}</button>
-    {qualification && <button type="button" className="secondary-control live-button" disabled={busy} onClick={(event) => { setCommand({ phase: "idle", message: "" }); setDialog({ itemId: item.id, draft: draftFromItem(item), opener: event.currentTarget }); }}>{liveCopy.promo.answer}</button>}
-    <button type="button" className="danger-control live-button live-remove" disabled={busy} aria-label={`${qualification ? liveCopy.promo.removeQuestion : liveCopy.promo.removeTask}: ${shortName(item.text)}`} onClick={(event) => removeItem(item, event.currentTarget)}>×</button>
+    <button type="button" className="secondary-control live-button" onClick={() => switchItem(item)}>{item.active ? liveCopy.promo.switchOff : liveCopy.promo.switchOn}</button>
+    {qualification && <button type="button" className="secondary-control live-button" onClick={(event) => { setCommand({ phase: "idle", message: "" }); setDialog({ itemId: item.id, draft: draftFromItem(item), opener: event.currentTarget }); }}>{liveCopy.promo.answer}</button>}
+    <button type="button" className="danger-control live-button live-remove" aria-label={`${qualification ? liveCopy.promo.removeQuestion : liveCopy.promo.removeTask}: ${shortName(item.text)}`} onClick={(event) => removeItem(item, event.currentTarget)}>×</button>
   </div>;
 
   const transitionButton = (title: string, label: string, active: boolean, pick: () => void) => <button key={title} type="button" className={active ? "active" : ""} aria-current={active ? "true" : undefined} onKeyDown={moveButtonTab} onClick={() => { pick(); setCommand({ phase: "idle", message: "" }); }}>{label}</button>;
@@ -300,7 +328,7 @@ function PromotionLiveSurface({ kind, banks, busy, post, requestConfirm }: { kin
           </div>
           <div className="live-add-bar live-tools" role="toolbar" aria-label={liveCopy.addGroup}>
             <span className="live-add-label">{liveCopy.promo.addQuestionLabel}</span>
-            {(["single", "multiple", "free-text"] as const).map((type) => <button key={type} type="button" className="secondary-control live-button" disabled={busy} onClick={() => void addQuestion(type)}>{liveCopy.promo.addQuestion[type]}</button>)}
+            {(["single", "multiple", "free-text"] as const).map((type) => <button key={type} type="button" className="secondary-control live-button" onClick={() => void addQuestion(type)}>{liveCopy.promo.addQuestion[type]}</button>)}
           </div>
         </section>
         : <section className="promotion-card promotion-ordinary-card">
@@ -309,7 +337,7 @@ function PromotionLiveSurface({ kind, banks, busy, post, requestConfirm }: { kin
           {items.length === 0 && <p className="promo-live-empty">{liveCopy.promo.tasksEmpty}</p>}
           <div className="live-add-bar live-tools" role="toolbar" aria-label={liveCopy.addGroup}>
             <span className="live-add-label">{liveCopy.addLabel}</span>
-            <button type="button" className="secondary-control live-button" disabled={busy} onClick={() => void addTask()}>{liveCopy.promo.addTask}</button>
+            <button type="button" className="secondary-control live-button" onClick={() => void addTask()}>{liveCopy.promo.addTask}</button>
           </div>
         </section>}
     </LiveEditContext.Provider>

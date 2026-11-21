@@ -1029,3 +1029,39 @@ export function liveCommitDecision(input: { raw: string; saved: string; cancelle
   if (input.cancelled) return "skip";
   return input.raw.trim() === input.saved.trim() ? "skip" : "commit";
 }
+
+/** One command of the banks at a time, in the order they were asked for (26.1-REVIEW-2 CR-02): a task starts when the one before it is done, whether that one worked or not. */
+export type LiveCommandQueue = {
+  /** Runs `task` after every task queued before it. The result is the task's own; a task that throws rejects only its own promise. */
+  enqueue<T>(task: () => Promise<T>): Promise<T>;
+  /** Tasks queued or running; already counted out when the promise of the last of them settles. */
+  readonly pending: number;
+};
+
+export function createLiveCommandQueue(): LiveCommandQueue {
+  let tail: Promise<unknown> = Promise.resolve();
+  let pending = 0;
+  return {
+    get pending() { return pending; },
+    enqueue<T>(task: () => Promise<T>): Promise<T> {
+      pending += 1;
+      const result = tail.then(async () => { try { return await task(); } finally { pending -= 1; } });
+      tail = result.then(() => undefined, () => undefined);
+      return result;
+    },
+  };
+}
+
+/**
+ * A list of commands (a changed order is many) sent one after the other. It stops at the first one the server did not take (no answer, or an answer without the state),
+ * and says how many went through, so the caller can tell «saved» from «saved in part».
+ */
+export async function runLivePayloads<R extends { state?: unknown }>(payloads: readonly Record<string, unknown>[], post: (payload: Record<string, unknown>) => Promise<R | null>): Promise<{ ok: boolean; done: number; last: R | null }> {
+  let last: R | null = null;
+  for (let at = 0; at < payloads.length; at += 1) {
+    const answer = await post(payloads[at]);
+    if (!answer?.state) return { ok: false, done: at, last };
+    last = answer;
+  }
+  return { ok: true, done: payloads.length, last };
+}

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS } from "./content-limits.ts";
-import { accessPreviewStates, LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText, liveRecycleKeys, applyLivePhrase, liveFormatKey, livePhraseLines, livePhraseSlice, applyLiveSettings, liveSettingsOk, LIVE_SEAM_TABS, PROMO_NEW_TASK_TEXT, promoMoveId, promoNewQuestion, promoNextOrder, promoOrderChanges, promoQuestionEdit, liveCommitDecision } from "./live-edit.ts";
+import { accessPreviewStates, LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText, liveRecycleKeys, applyLivePhrase, liveFormatKey, livePhraseLines, livePhraseSlice, applyLiveSettings, liveSettingsOk, LIVE_SEAM_TABS, PROMO_NEW_TASK_TEXT, promoMoveId, promoNewQuestion, promoNextOrder, promoOrderChanges, promoQuestionEdit, liveCommitDecision, createLiveCommandQueue, runLivePayloads } from "./live-edit.ts";
 import { broadcastFeed } from "./broadcasts.ts";
 import { accessGateLayout } from "./access-gate-view.ts";
 import { validateQuestionDraft } from "./portia-promotion-reviewer.ts";
@@ -1396,7 +1396,8 @@ test("LIVE-03 (26.1-16): the live edits go through the commands of the banks, on
   assert.match(promo, /data-live-app="promo"/);
   for (const action of ["save-qualification-rules", "save-question", "save-task-item", "delete-question", "delete-task-item", "save-qualification-bank", "save-task-bank"]) assert.ok(promo.includes(`"${action}"`), action);
   assert.match(promo, /promoQuestionEdit\(/);
-  assert.match(promo, /savingRef/, "a second command does not start while one is saving");
+  assert.match(promo, /createLiveCommandQueue/, "a second command waits for the one that is saving, it is not dropped (CR-02)");
+  assert.doesNotMatch(promo, /savingRef/, "no flag that drops the second command");
   assert.match(promo, /<LiveCommitText\b/);
   assert.match(promo, /<PortiaQualificationQuestionDialog\b/, "the correct answer is edited in the ordinary dialog");
   const seam = read("components/portia-editor-live.tsx");
@@ -1535,4 +1536,37 @@ test("CR-01 (26.1-REVIEW-2): a cancelled edit never commits, however much was ty
   assert.equal(liveCommitDecision({ raw: "новый текст", saved: "старый", cancelled: false }), "commit", "a plain blur commits what was typed");
   assert.equal(liveCommitDecision({ raw: "  старый ", saved: "старый", cancelled: false }), "skip", "the same text but for the ends: no command");
   assert.equal(liveCommitDecision({ raw: "", saved: "старый", cancelled: false }), "commit", "a cleared text is a real edit (the caller refuses what it must)");
+});
+
+// 26.1-REVIEW-2 CR-02: a second edit while one is saving is queued, never dropped.
+test("CR-02 (26.1-REVIEW-2): the command queue runs the commands one at a time, in the order asked, and a failure does not drop the next", async () => {
+  const queue = createLiveCommandQueue();
+  const log: string[] = [];
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const first = queue.enqueue(async () => { log.push("first:start"); await gate; log.push("first:end"); return 1; });
+  const second = queue.enqueue(async () => { log.push("second:start"); throw new Error("refused"); });
+  const third = queue.enqueue(async () => { log.push("third:start"); return 3; });
+  assert.equal(queue.pending, 3, "all three are counted: none is dropped");
+  await Promise.resolve();
+  assert.deepEqual(log, ["first:start"], "the second does not start while the first runs");
+  release();
+  assert.equal(await first, 1);
+  await assert.rejects(second, /refused/, "a task that throws rejects only its own promise");
+  assert.equal(await third, 3, "the task after a failed one still runs");
+  assert.deepEqual(log, ["first:start", "first:end", "second:start", "third:start"]);
+  assert.equal(queue.pending, 0, "the queue is empty when the last one settles");
+});
+
+test("CR-02 (26.1-REVIEW-2): the commands of a changed order are sent in turn and stop at the first one the server did not take", async () => {
+  const sent: string[] = [];
+  const takes = (refuse: string | null) => async (payload: Record<string, unknown>) => { sent.push(String(payload.id)); return payload.id === refuse ? null : { state: {} }; };
+  const all = await runLivePayloads([{ id: "a" }, { id: "b" }, { id: "c" }], takes(null));
+  assert.deepEqual({ ok: all.ok, done: all.done }, { ok: true, done: 3 });
+  sent.length = 0;
+  const part = await runLivePayloads([{ id: "a" }, { id: "b" }, { id: "c" }], takes("b"));
+  assert.deepEqual({ ok: part.ok, done: part.done }, { ok: false, done: 1 }, "one went through, the second was refused: not «saved»");
+  assert.deepEqual(sent, ["a", "b"], "nothing is sent after the refusal");
+  assert.equal((await runLivePayloads([{ id: "a" }], async () => ({ }))).ok, false, "an answer without the state is not a save");
+  assert.deepEqual(await runLivePayloads([], takes(null)), { ok: true, done: 0, last: null });
 });
