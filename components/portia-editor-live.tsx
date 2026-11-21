@@ -681,7 +681,7 @@ export function LiveCommitText({ value, onCommit, label, placeholder, className,
     return <textarea
       className={`live-editable live-textarea${className ? ` ${className}` : ""}`}
       value={shown}
-      rows={Math.max(3, shown.split("\n").length)}
+      rows={shown.split("\n").length}
       maxLength={maxLength}
       aria-label={label}
       aria-invalid={failed || undefined}
@@ -715,7 +715,7 @@ export function LiveTextarea({ bridge, target, value }: { bridge: LiveEditorBrid
   return <textarea
     className="live-editable live-textarea"
     value={value}
-    rows={Math.max(2, value.split("\n").length)}
+    rows={value.split("\n").length}
     aria-label={liveCopy.targets[target.kind]}
     placeholder={liveCopy.placeholders[target.kind]}
     onChange={(event) => { const raw = event.target.value; bridge.changeDraft((next) => { applyLiveText(next, target, raw); }); }}

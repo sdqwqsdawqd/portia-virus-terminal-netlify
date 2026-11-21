@@ -2892,6 +2892,12 @@ html[data-motion="off"] .assistant-button:hover + .assistant-items, html[data-mo
 span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55; }
 .live-rich { display: block; min-height: 1.6em; }
 .live-rich-edit { display: grid; gap: 8px; min-width: 0; }
+/* 26.1-27 (владелец, п. 33): нажатый текст с оформлением — поле редактора на месте текста участника: без строки подписи (она остаётся именем поля для чтения с экрана), без шага 11px сверху,
+   без рамки, отступа, фона и высоты 205px; шрифт поля — шрифт места (data-area), обводка — как у прочих мест. Размер при входе в правку и при фокусе не меняется. */
+.live-surface .live-rich-edit .formatted-text-field { margin: 0; gap: 0; }
+.live-surface .live-rich-edit .formatted-text-field-head { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.live-surface .live-rich-edit .formatted-rich-input { min-height: 1.6em; max-height: none; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; overflow: visible; outline: 1px dashed var(--teal); outline-offset: 2px; }
+.live-surface .live-rich-edit .formatted-rich-input:focus, .live-surface .live-rich-edit .formatted-rich-input.is-editor-active { border: 0; box-shadow: none; outline: 1px dashed var(--teal); outline-offset: 2px; }
 .embedded-media-strip { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
 .embedded-media-strip .embedded-rich-media { margin: 0; }
 .live-surface [data-sort-index] { position: relative; min-width: 0; }
@@ -2949,8 +2955,8 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 .live-date > span { font: 700 11px var(--sans); letter-spacing: .08em; text-transform: uppercase; }
 .live-date input { width: 150px; min-height: 28px; }
 .live-date small { color: var(--danger); font: 11px var(--sans); }
-.live-surface .broadcast-conditions .live-textarea { display: block; width: 100%; min-height: 52px; padding: 6px 8px; border: 1px dashed var(--line); background: transparent; color: inherit; font: inherit; line-height: 1.5; resize: vertical; }
-.live-surface .broadcast-conditions .live-textarea:hover, .live-surface .broadcast-conditions .live-textarea:focus { border-color: var(--teal); }
+/* 26.1-27 (п. 33): условия — абзац участника: без рамки и отступов, высота по тексту (field-sizing; без него — строки по числу абзацев), угла изменения размера нет. */
+.live-surface .broadcast-conditions .live-textarea { display: block; width: 100%; box-sizing: border-box; resize: none; field-sizing: content; overflow-wrap: anywhere; }
 .live-card-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
 .live-card-tools .live-remove-wrap { position: static; margin-left: auto; }
 .live-flag { display: inline-flex; align-items: center; gap: 6px; font: 12px var(--sans); cursor: pointer; }
@@ -2961,7 +2967,6 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 .live-surface .virus-list .live-index-row { position: relative; min-width: 0; }
 .live-surface .virus-list .order-drag-handle { grid-template-columns: none; }
 .live-surface .record-view { max-height: none; }
-.live-surface .record-header .live-editable { display: inline-block; min-width: 3ch; }
 /* 26.1-27 (владелец, п. 33): плашка состояния растёт по набранному тексту — ширина по тексту (без предела 140px телефона), длинный текст переносится, высота растёт; точка стоит у первой строки и не сжимается.
    Правило участника `.record-status span` (красная точка 7px) задевает и место правки — оно возвращается к обычному тексту. */
 .live-surface .record-status { width: fit-content; max-width: 100%; height: auto; align-items: flex-start; white-space: normal; }
@@ -2978,14 +2983,12 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 .live-surface .record-document .live-add-bar { margin: 18px 0 8px; }
 .live-log-row { position: relative; }
 .live-log-row .live-remove-wrap { top: 50%; right: 8px; transform: translateY(-50%); }
-.live-surface .archive-document-view .live-editable { display: inline-block; min-width: 4ch; }
 /* 26.1-12: «Корзина» — те же колонки, строки и просмотрщик, что у участника; просмотрщик лежит поверх списка и прокручивается внутри. */
 .live-surface .trash-app { height: auto; min-height: 520px; overflow: visible; }
 .live-surface .trash-layout { flex: none; height: min(76vh, 860px); min-height: 440px; max-height: none; }
 .live-surface .trash-files .live-index-row { position: relative; min-width: 0; }
 .live-surface .trash-files .order-drag-handle { grid-template-columns: none; }
 .live-surface .trash-viewer-head .live-remove-wrap { position: static; margin-left: auto; }
-.live-surface .trash-viewer-head .live-editable { display: inline-block; min-width: 6ch; }
 .live-surface .trash-document-meta .live-choice-button { min-height: 22px; }
 .live-trash-link { margin: 0 0 14px; font: 12px var(--sans); }
 .live-surface .trash-image-document .live-image { min-width: 0; }
@@ -3009,6 +3012,12 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 .live-surface .assistant-live-bubble .assistant-formatted-text, .live-surface .assistant-live-bubble .assistant-formatted-text * { font-family: var(--assistant-font) !important; font-size: 12px !important; font-weight: 700 !important; letter-spacing: .099em; line-height: 1.4; overflow-wrap: anywhere; }
 .live-surface .assistant-live-bubble .live-rich { min-height: 0; }
 .live-surface .assistant-live-bubble .live-rich-edit { gap: 6px; }
+/* 26.1-27 (п. 33): нажатая фраза — та же плашка фразы участника (.assistant-formatted-text: отступ 7px 8px, рамка, фон) и тот же кегль 12px, что и в покое, а не 10px поля редактора. */
+.live-surface .assistant-live-bubble .live-rich-edit .formatted-rich-input { padding: 7px 8px; border: 1px solid oklch(.756 calc(.071 * var(--accent-chroma)) var(--accent-hue) / .24); border-radius: var(--radius-card); background: rgba(0,0,0,.34); color: oklch(.97 calc(.012 * var(--accent-chroma)) var(--accent-hue)); font-size: 12px; line-height: 1.4; letter-spacing: .099em; }
+.live-surface .assistant-live-bubble .live-rich-edit .formatted-rich-input:focus, .live-surface .assistant-live-bubble .live-rich-edit .formatted-rich-input.is-editor-active { border: 1px solid oklch(.756 calc(.071 * var(--accent-chroma)) var(--accent-hue) / .24); box-shadow: none; }
+@media (max-width: 520px) {
+  .live-surface .assistant-live-bubble .live-rich-edit .formatted-rich-input { padding: 8px 9px; }
+}
 .assistant-live-group[data-group="offended"] .assistant-live-bubble { border-color: #a76d34; }
 .assistant-live-group[data-group="offended"] .assistant-live-bubble > span:not(.assistant-formatted-text) { color: #efb84e; }
 .assistant-live-group[data-group="offended"] .assistant-formatted-text > span { color: #ffd98c !important; }
@@ -3037,10 +3046,8 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 .promo-live-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .promo-live-tools .live-button, .promo-live-tools .live-remove { min-height: 28px; font-size: 11px; }
 .promo-live-tools .live-remove { width: auto; padding: 0 10px; line-height: 26px; }
-.promo-live .promotion-question .live-editable, .promo-live .promotion-task-list .live-editable { min-width: 6ch; }
-.promo-live .promotion-question label .live-editable { flex: 1 1 auto; }
-.promo-live textarea.live-textarea { display: block; width: 100%; box-sizing: border-box; min-height: 64px; padding: 8px 10px; border: 1px dashed var(--line-bright); border-radius: var(--radius-field); background: rgba(0,0,0,.16); color: inherit; font: inherit; line-height: 1.55; resize: vertical; }
-.promo-live textarea.live-textarea:hover, .promo-live textarea.live-textarea:focus { border-color: var(--teal); }
+/* 26.1-27 (п. 33): правила и задания — абзац кандидата (его шрифт 14–15px/1.6–1.65): без рамки, отступов и фона, высота по тексту, угла изменения размера нет. */
+.promo-live textarea.live-textarea { display: block; width: 100%; box-sizing: border-box; resize: none; field-sizing: content; white-space: pre-wrap; overflow-wrap: anywhere; }
 .promo-live .promotion-free-answer textarea:disabled, .promo-live .promotion-question input:disabled { cursor: default; }
 .promo-live-readonly { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
 .promo-live-empty { margin: 0; color: var(--muted); font: 400 13px/1.5 var(--doc); }

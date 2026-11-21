@@ -40,6 +40,8 @@ const sliceOf = (source: string, from: string, to: string) => {
   assert.ok(end > start, `${to} follows ${from}`);
   return source.slice(start, end);
 };
+/** The subject of a selector: its last compound, the element the declarations land on. */
+const subjectOf = (selector: string) => selector.split(/\s*[\s>+~]\s*/).filter(Boolean).at(-1) ?? "";
 
 test("26.1-27 (owner 33): the live status plaque follows its text: as wide as the text, wraps a long one and grows in height", () => {
   const plaque = declarationsOf(".live-surface .record-status");
@@ -82,10 +84,74 @@ test("26.1-27 (owner 33): a typed letter is in the view at once — LiveText wri
   assert.match(commit, /onChange=\{\(event\) => setTyped\(event\.target\.value\)\}/);
 });
 
+test("26.1-27 (owner 33): no live text place has its own font, padding, margin, border, line height or minimum size", () => {
+  const checked: string[] = [];
+  const neutral = new Set(["inherit", "0", "none", "auto", "transparent", "0 0"]);
+  const own = /^(font|padding|margin|border|line-height|min-width|min-height)/;
+  for (const rule of rules) {
+    const targets = rule.selectors.filter((selector) => /\.live-(editable|textarea)\b/.test(subjectOf(selector)) && !selector.includes("::"));
+    if (targets.length === 0) continue;
+    checked.push(...targets);
+    for (const [property, value] of rule.declarations) {
+      if (own.test(property)) assert.ok(neutral.has(value), `${targets.join(", ")} { ${property}: ${value} } — a live place takes the visitor's ${property}`);
+      if (property === "display") assert.notEqual(value, "inline-block", `${targets.join(", ")}: no inline-block box around the visitor's text`);
+      if (property === "outline-offset") assert.ok(/^[0-2]px$/.test(value), `${targets.join(", ")}: the outline sits next to the text (${value})`);
+    }
+  }
+  for (const selector of [".live-editable", ".live-surface .record-status .live-editable", ".live-surface .broadcast-conditions .live-textarea", ".promo-live textarea.live-textarea"]) {
+    assert.ok(checked.includes(selector), `${selector} is among the checked rules`);
+  }
+  for (const gone of [".live-surface .record-header .live-editable", ".live-surface .archive-document-view .live-editable", ".live-surface .trash-viewer-head .live-editable"]) {
+    assert.equal(rulesOf(gone).length, 0, `${gone}: the inline-block box with its own minimum width is gone`);
+  }
+  assert.equal(/\.live-(editable|textarea)[^{,]*\{[^}]*\bborder(-[a-z]+)?:\s*1px/.test(styles), false, "the frame of a place is an outline, never a border");
+  assert.equal(declarationsOf(".live-editable").get("outline-offset"), "2px");
+});
+
+test("26.1-27 (owner 33): a multi-line place is the visitor's text block: no frame, no inner padding, its height follows the text", () => {
+  for (const selector of [".live-surface .broadcast-conditions .live-textarea", ".promo-live textarea.live-textarea"]) {
+    const place = declarationsOf(selector);
+    assert.equal(place.get("display"), "block", `${selector}: a block like the visitor's paragraph`);
+    assert.equal(place.get("width"), "100%");
+    assert.equal(place.get("resize"), "none", `${selector}: the corner handle would change the size`);
+    assert.equal(place.get("field-sizing"), "content", `${selector}: the height is the text's`);
+    assert.equal(place.has("background"), false, `${selector}: no own background (the base rule clears it)`);
+  }
+  // without field-sizing the rows are the text's own lines: no floor of two or three rows that the visitor's paragraph does not have
+  assert.match(sliceOf(seam, "export function LiveCommitText(", "export function LiveTextarea("), /rows=\{shown\.split\("\\n"\)\.length\}/);
+  assert.match(sliceOf(seam, "export function LiveTextarea(", "export function LiveDate("), /rows=\{value\.split\("\\n"\)\.length\}/);
+  // the formatted text: pressed, it is the editor's field; in the live mode the field drops its frame, padding, label row and tall minimum
+  const field = declarationsOf(".live-surface .live-rich-edit .formatted-rich-input");
+  for (const [property, value] of [["min-height", "1.6em"], ["max-height", "none"], ["padding", "0"], ["border", "0"], ["border-radius", "0"], ["background", "transparent"], ["box-shadow", "none"], ["overflow", "visible"]] as const) {
+    assert.equal(field.get(property), value, `the live rich field ${property}: ${value}`);
+  }
+  assert.match(field.get("outline") ?? "", /^1px dashed var\(--teal\)$/, "the field is marked like the other places, with an outline");
+  assert.equal(field.get("outline-offset"), "2px");
+  assert.ok(rulesOf(".live-surface .live-rich-edit .formatted-rich-input:focus").length > 0 && rulesOf(".live-surface .live-rich-edit .formatted-rich-input.is-editor-active").length > 0, "the focused and active field keep the same box");
+  const wrap = declarationsOf(".live-surface .live-rich-edit .formatted-text-field");
+  assert.equal(wrap.get("margin"), "0", "no 11px step above the field");
+  assert.equal(wrap.get("gap"), "0");
+  const label = declarationsOf(".live-surface .live-rich-edit .formatted-text-field-head");
+  assert.equal(label.get("position"), "absolute", "the label row leaves the flow (it still names the field for a screen reader)");
+  assert.equal(label.get("clip-path"), "inset(50%)");
+  assert.equal(declarationsOf(".live-rich").get("min-height"), "1.6em", "the field at rest and pressed has the same minimum height");
+  // a phrase of Vivian at rest is its plate (.assistant-formatted-text) at 12px; pressed, the field is the same plate at the same size, not the editor's 10px field
+  const first = (selector: string) => rulesOf(selector)[0]?.declarations ?? new Map<string, string>();
+  const phrase = first(".live-surface .assistant-live-bubble .live-rich-edit .formatted-rich-input");
+  const plate = first(".assistant-formatted-text");
+  for (const property of ["padding", "border", "border-radius", "background"]) assert.equal(phrase.get(property), plate.get(property), `the pressed phrase keeps the plate's ${property}`);
+  // the phone plate (max-width 520px) is 8px 9px; so is the pressed phrase there
+  assert.equal(rulesOf(".assistant-formatted-text").find((rule) => rule.declarations.get("padding") === "8px 9px") !== undefined, true);
+  assert.equal(rulesOf(".live-surface .assistant-live-bubble .live-rich-edit .formatted-rich-input").some((rule) => rule.declarations.get("padding") === "8px 9px"), true);
+  assert.equal(phrase.get("font-size"), "12px");
+  assert.equal(phrase.get("line-height"), "1.4");
+  assert.ok(rulesOf(".live-surface .assistant-live-bubble .live-rich-edit .formatted-rich-input.is-editor-active").length > 0);
+});
+
 test("26.1-27: the new live rules stand before the users-tab block, ui-unify stays last, no font under 11px", () => {
   const raw = read("app/portia.css");
   const usersTab = raw.indexOf("/* users-tab:start");
-  for (const selector of [".live-surface .record-status {", ".live-surface .record-status > span:first-child"]) {
+  for (const selector of [".live-surface .record-status {", ".live-surface .live-rich-edit .formatted-rich-input", ".live-surface .record-status > span:first-child"]) {
     const at = raw.indexOf(selector);
     assert.ok(at > 0 && at < usersTab, `${selector} stands before users-tab`);
   }
