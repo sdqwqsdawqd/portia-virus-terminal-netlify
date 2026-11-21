@@ -38,7 +38,7 @@ test("OWN-03 the route picker is a compact drop-down: one button with the chosen
   assert.match(field, /aria-controls=\{open \? panelId : undefined\}/);
   assert.match(field, /aria-labelledby=\{`\$\{labelId\} \$\{valueId\}`\}/, "the visible label and the chosen routes name the button");
   assert.match(field, /<span className="route-dropdown-label" id=\{labelId\}>\{label\}<\/span>/, "the visible label of the field");
-  assert.match(field, /\{open && host && createPortal\(<div className="route-dropdown-panel" id=\{panelId\} role="group" aria-labelledby=\{labelId\} ref=\{panel\}/, "the panel is drawn only while open, as a layer of its host (item 32)");
+  assert.match(field, /\{open && createPortal\(<div className="route-dropdown-panel" id=\{panelId\} role="group" aria-labelledby=\{labelId\} ref=\{panel\}/, "the panel is drawn only while open, as a layer of document.body (item 32)");
   assert.doesNotMatch(field, /fieldset|legend/, "the big group of checkboxes is gone");
   assert.match(field, /TRANSMISSION_CHOICES\.map\(/);
   assert.match(field, /<label key=\{choice\.name\} className="route-option"/);
@@ -59,7 +59,7 @@ test("OWN-03 the drop-down: Escape closes and returns the focus to the button; a
   assert.match(field, /document\.removeEventListener\("pointerdown", [a-zA-Z]+\)/, "and it is taken off");
   assert.match(field, /const inside = \(node: Node \| null\) => !!node && \(!!root\.current\?\.contains\(node\) \|\| !!panel\.current\?\.contains\(node\)\)/);
   assert.match(field, /onBlur=\{\(event\) => \{[^}]*event\.relatedTarget[^}]*!inside\(event\.relatedTarget as Node\)[^}]*setOpen\(false\)/, "focus that leaves the whole drop-down closes it; a null target is a press, the document handles that");
-  assert.match(field, /onClick=\{\(\) => \{ pointed\.current = null; setHost\(routePanelHost\(toggle\.current\)\); setOpen\(\(was\) => !was\); \}\}/, "a press on the button toggles, with a fresh hint and the host of the layer");
+  assert.match(field, /onClick=\{\(\) => \{ pointed\.current = null; setOpen\(\(was\) => !was\); \}\}/, "a press on the button toggles, with a fresh hint");
   assert.doesNotMatch(field, /"Enter"|" "|"Space"/, "Enter and Space open the button natively");
 });
 
@@ -158,7 +158,7 @@ test("OWN-03 items 18 and 32: the rows carry no description; the foot under the 
 
 test("OWN-03 item 32: the foot stands outside the scrolling list, so it never covers a row; its text changes without a render of the rows", () => {
   assert.match(field, /createPortal\(<div className="route-dropdown-panel"[^\n]*\n\s*<div className="route-dropdown-list">/, "the panel is a column: the list first");
-  assert.match(field, /<\/div>\s*<p className="route-dropdown-foot" id=\{footId\} ref=\{foot\} \/>\s*<\/div>, host\)\}/, "then the foot, after the list is closed, as the panel's last child");
+  assert.match(field, /<\/div>\s*<p className="route-dropdown-foot" id=\{footId\} ref=\{foot\} \/>\s*<\/div>, document\.body\)\}/, "then the foot, after the list is closed, as the panel's last child");
   assert.match(field, /TRANSMISSION_CHOICES\.map\(/);
   assert.ok(field.indexOf('<div className="route-dropdown-list">') < field.lastIndexOf("TRANSMISSION_CHOICES.map(") && field.indexOf("extras.map(") < field.indexOf('<p className="route-dropdown-foot"'), "every row and every extra is in the list");
   assert.doesNotMatch(field, /route-dropdown-hint|setHint|hintId/, "the old hint line and its state are gone");
@@ -166,7 +166,7 @@ test("OWN-03 item 32: the foot stands outside the scrolling list, so it never co
   assert.match(field, /const pointed = useRef<string \| null>\(null\)/, "the pointed route is a ref");
   assert.match(field, /foot\.current\.textContent = hintFor\(/, "the text is written into the foot, as plain text");
   assert.match(field, /const hintFor = \(name: string \| null\) => transmissionDescription\(name \?\? ""\) \?\? "Наведите на путь"/);
-  assert.match(field, /pointed\.current = null; setHost\(routePanelHost\(toggle\.current\)\); setOpen\(\(was\) => !was\);/, "a fresh hint on every press of the button");
+  assert.match(field, /pointed\.current = null; setOpen\(\(was\) => !was\);/, "a fresh hint on every press of the button");
   assert.ok(!css.includes(".route-dropdown-hint"), "its rule is removed");
   assert.match(css, /\.route-dropdown-panel \{[^}]*display: flex; flex-direction: column/);
   assert.match(css, /\.route-dropdown-list \{[^}]*flex: 1 1 auto; min-height: 0;[^}]*overflow-y: auto/);
@@ -214,12 +214,15 @@ test("OWN-03 items 18 and 32: on opening the room around the button is measured 
   assert.match(write, /node\.dataset\.side = place\.side/);
 });
 
-test("OWN-03 item 32: the panel is a layer over the page: a portal into document.body, or into the open dialog the field stands in; never inside the form", () => {
+test("OWN-03 item 32: the panel is a layer over the page: a portal into document.body; never inside the form", () => {
   assert.match(dossier, /import \{ createPortal \} from "react-dom"/);
-  assert.match(dossier, /function routePanelHost\(button: HTMLElement \| null\): Element \{\s*return button\?\.closest\("dialog"\) \?\? document\.body;/);
+  // Review 3 WR-05 (owner's choice): no caller of the field stands in a <dialog>, so the unused dialog host is gone.
+  assert.doesNotMatch(dossier, /routePanelHost|closest\("dialog"\)|setHost/, "no dialog host and no host state");
+  assert.doesNotMatch(sliceOf(dossier, /function nextTabStop/, /\n\}\n/), /HTMLDialogElement/, "Tab is carried in the page, not in a dialog");
+  assert.doesNotMatch(field, /HTMLDialogElement|\.closest\(/, "the field looks for no dialog");
   assert.equal(field.split('className="route-dropdown-panel"').length - 1, 1, "one panel in the field's source");
   assert.match(field, /createPortal\(<div className="route-dropdown-panel"/, "and it is the portal's content, not a child of the field's markup");
-  assert.match(field, /<\/div>, host\)\}/, "drawn into the chosen host");
+  assert.match(field, /<\/div>, document\.body\)\}/, "drawn into document.body");
   assert.match(field, /aria-controls=\{open \? panelId : undefined\}/);
   assert.match(field, /className="route-dropdown-panel" id=\{panelId\}/, "the button's aria-controls names the panel");
   assert.doesNotMatch(css.match(/\.route-dropdown-panel \{[^}]*\}/)?.[0] ?? "", /position: absolute|calc\(100% \+ 4px\)/, "nothing hangs on the field's box any more");
@@ -232,8 +235,8 @@ test("OWN-03 item 32: the panel stands at the end of its host, so Tab is carried
   assert.match(field, /else if \(event\.key === "Tab" && open\) carryTab\(event\);/);
   assert.match(field, /if \(event\.target === button && !event\.shiftKey\) \{ event\.preventDefault\(\); stops\[0\]\.focus\(\); \}/);
   assert.match(field, /else if \(event\.target === stops\[0\] && event\.shiftKey\) \{ event\.preventDefault\(\); button\.focus\(\); \}/);
-  assert.match(field, /else if \(event\.target === stops\[stops\.length - 1\] && !event\.shiftKey\) \{ event\.preventDefault\(\); setOpen\(false\); \(nextTabStop\(button, box, host\) \?\? button\)\.focus\(\); \}/);
-  assert.match(dossier, /function nextTabStop\(button: HTMLElement, panel: HTMLElement, host: Element \| null\)/);
+  assert.match(field, /else if \(event\.target === stops\[stops\.length - 1\] && !event\.shiftKey\) \{ event\.preventDefault\(\); setOpen\(false\); \(nextTabStop\(button, box\) \?\? button\)\.focus\(\); \}/);
+  assert.match(dossier, /function nextTabStop\(button: HTMLElement, panel: HTMLElement\): HTMLElement \| null \{\s*const stops = \[\.\.\.document\.querySelectorAll<HTMLElement>\(/, "the next stop is looked for in the whole page");
 });
 
 test("OWN-03 item 18: the compact panel — 320px wide, no taller than 280px or 45svh and scrolling inside, 4px from the button, up on request; 28px rows of 13px names", () => {
