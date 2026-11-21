@@ -13,16 +13,19 @@ const MIN_HEIGHT = 120;
 export type RouteAnchor = { top: number; bottom: number; left: number; width: number };
 export type RouteClip = { top: number; bottom: number; left: number; right: number; width: number; height: number };
 export type RoutePanelPlace = {
-  /** The top edge on the screen; for an upward panel this is where its full height would start. */
+  /**
+   * The top edge, in the coordinates of the layout viewport (those of getBoundingClientRect and position: fixed), for both sides. Review 3 WR-03:
+   * an upward panel is no longer hung by its bottom edge: CSS `bottom` counts from the layout viewport's bottom, a size taken from the visual
+   * viewport put the panel over the button under zoom or the phone keyboard. The foot has a fixed height, so the panel does not grow on hover.
+   */
   top: number;
-  /** An upward panel is anchored by its bottom edge (distance from the screen's bottom), so a longer description grows away from the button. */
-  bottom: number | null;
   left: number;
   width: number;
   maxHeight: number;
   side: "down" | "up";
 };
 
+/** `viewport` is the room in layout-viewport coordinates: its width, and the bottom edge of what is visible (the phone keyboard left out). */
 export function routePanelPlacement(
   anchor: RouteAnchor,
   panel: { width: number; height: number },
@@ -38,9 +41,8 @@ export function routePanelPlacement(
   const maxHeight = Math.max(MIN_HEIGHT, room - FAR_END);
   const height = Math.min(panel.height, maxHeight);
   const top = side === "down" ? anchor.bottom + gap : anchor.top - gap - height;
-  const bottom = side === "up" ? viewport.height - anchor.top + gap : null;
   const left = Math.max(EDGE, Math.min(anchor.left, viewport.width - EDGE - width));
-  return { top, bottom, left, width, maxHeight, side };
+  return { top, left, width, maxHeight, side };
 }
 
 /** The button is visible while some part of it stands inside every clipping box (the scrolling ancestors); a button without a box (display: none) is not. */

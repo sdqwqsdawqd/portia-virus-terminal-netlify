@@ -407,15 +407,19 @@ function routePanelHost(button: HTMLElement | null): Element {
   return button?.closest("dialog") ?? document.body;
 }
 
-// The visible screen, with the phone keyboard accounted for.
+// Review 3 WR-03: the room in the coordinates of the layout viewport, the ones getBoundingClientRect and position: fixed use. The width is the
+// layout viewport's; the height ends at the bottom of what is visible (visualViewport.offsetTop + height, in the same coordinates), so a panel
+// opening down stops above the phone keyboard. Pinch zoom no longer shifts the panel onto the button.
 function routeViewport() {
-  return { width: window.visualViewport?.width ?? window.innerWidth, height: window.visualViewport?.height ?? window.innerHeight };
+  const page = document.documentElement;
+  const visual = window.visualViewport;
+  return { width: page.clientWidth, height: visual ? Math.min(page.clientHeight, visual.offsetTop + visual.height) : page.clientHeight };
 }
 
-// One write of the panel's place: an upward panel hangs by its bottom edge, so a longer description grows away from the button.
+// One write of the panel's place: the top edge for both sides (review 3 WR-03), never a CSS bottom.
 function writeRoutePanelPlace(node: HTMLElement, place: RoutePanelPlace) {
-  node.style.top = place.bottom === null ? `${place.top}px` : "auto";
-  node.style.bottom = place.bottom === null ? "auto" : `${place.bottom}px`;
+  node.style.top = `${place.top}px`;
+  node.style.bottom = "auto";
   node.style.left = `${place.left}px`;
   node.style.width = `${place.width}px`;
   node.style.maxHeight = `${place.maxHeight}px`;

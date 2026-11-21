@@ -202,12 +202,15 @@ test("OWN-03 items 18 and 32: on opening the room around the button is measured 
   assert.match(field, /useLayoutEffect\(\(\) => \{/, "measured before the paint, so the panel never flashes below the edge");
   assert.match(field, /getBoundingClientRect\(\)/);
   assert.match(field, /routePanelPlacement\(button\.getBoundingClientRect\(\), \{ width: ROUTE_PANEL_WIDTH, height: natural \}, routeViewport\(\)\)/, "the pure placement of lib/route-dropdown-position.ts");
-  assert.match(dossier, /window\.visualViewport\?\.height \?\? window\.innerHeight/, "the visible height, with the phone keyboard accounted for");
+  // Review 3 WR-03: the room is in layout-viewport coordinates (those of getBoundingClientRect and position: fixed); the visible bottom keeps the keyboard out.
+  assert.match(dossier, /return \{ width: page\.clientWidth, height: visual \? Math\.min\(page\.clientHeight, visual\.offsetTop \+ visual\.height\) : page\.clientHeight \};/, "the layout viewport, ending at the visible bottom");
+  assert.doesNotMatch(dossier, /visualViewport\?\.width|visualViewport\?\.height/, "no size of the visual viewport is used as layout coordinates");
   assert.match(dossier, /from "@\/lib\/route-dropdown-position"/);
   assert.doesNotMatch(field, /setPlacement|data-placement|useState<"down" \| "up">/, "no render per measurement: the measure, setState, measure loop is gone");
-  // The one write: top or bottom, left, width and max-height straight into the panel's style.
+  // The one write: top (for both sides, review 3 WR-03), left, width and max-height straight into the panel's style.
   const write = sliceOf(dossier, /function writeRoutePanelPlace/, /\n\}\n/);
-  for (const property of ["top", "bottom", "left", "width", "maxHeight"]) assert.match(write, new RegExp(`node\\.style\\.${property} = `), `${property} is written`);
+  for (const property of ["top", "left", "width", "maxHeight"]) assert.match(write, new RegExp(`node\\.style\\.${property} = `), `${property} is written`);
+  assert.match(write, /node\.style\.top = `\$\{place\.top\}px`;\s*node\.style\.bottom = "auto";/, "an upward panel is placed by its top edge too");
   assert.match(write, /node\.dataset\.side = place\.side/);
 });
 
