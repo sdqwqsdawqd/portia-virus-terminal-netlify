@@ -221,3 +221,63 @@ test("WR-02: phone, tablet and PC queries cover every width exactly once, in the
   assert.doesNotMatch(css, /@media \(min-width: 521px\)|@media \(min-width: 901px\)|min-width: 521px\) and|\(min-width: 901px\)/, "no min-width border that pairs with a max-width one and leaves a gap");
   assert.ok(css.includes("@media (width > 900px) {"), "the PC blocks start where the phone blocks (max-width: 900px) end");
 });
+
+// Owner 22: «Выровнять значки по сетке». The grid is the one placeShortcuts fills: inset + n * (cell + gap).
+const cell = { width: 94, height: 86 };
+const gridArea = { width: 800, height: 600 };
+const stepX = cell.width + 8;
+const stepY = cell.height + 8;
+
+test("snapShortcutPosition puts a position into the nearest cell of the grid", () => {
+  assert.deepEqual(layout.snapShortcutPosition({ x: 8, y: 8 }, cell, gridArea), { x: 8, y: 8 });
+  assert.deepEqual(layout.snapShortcutPosition({ x: 8 + stepX * 2 + 20, y: 8 + stepY + 30 }, cell, gridArea), { x: 8 + stepX * 2, y: 8 + stepY });
+  assert.deepEqual(layout.snapShortcutPosition({ x: 8 + stepX * 2 + 60, y: 8 + stepY + 60 }, cell, gridArea), { x: 8 + stepX * 3, y: 8 + stepY * 2 });
+});
+
+test("snapShortcutPosition holds the cell inside the area and survives junk", () => {
+  const maxColumn = Math.floor((gridArea.width - 16 + 8) / stepX) - 1;
+  const maxRow = Math.floor((gridArea.height - 16 + 8) / stepY) - 1;
+  assert.deepEqual(layout.snapShortcutPosition({ x: -500, y: -500 }, cell, gridArea), { x: 8, y: 8 });
+  assert.deepEqual(layout.snapShortcutPosition({ x: 9000, y: 9000 }, cell, gridArea), { x: 8 + maxColumn * stepX, y: 8 + maxRow * stepY });
+  assert.deepEqual(layout.snapShortcutPosition({ x: Number.NaN, y: Infinity }, cell, gridArea).x, 8);
+  assert.deepEqual(layout.snapShortcutPosition({ x: 300, y: 300 }, cell, { width: 10, height: 10 }), { x: 8, y: 8 });
+});
+
+test("alignShortcutsToGrid gives every shortcut its own cell, the nearest free one, in the order of the shortcuts", () => {
+  const order = ["a", "b", "c", "d"];
+  // a and b sit almost on the same spot; c is off the grid; d has no spot at all and is left out.
+  const positions = { a: { x: 10, y: 10 }, b: { x: 12, y: 14 }, c: { x: 8 + stepX + 40, y: 8 + 3 } };
+  const result = layout.alignShortcutsToGrid(positions, order, cell, gridArea);
+  assert.deepEqual(Object.keys(result), ["a", "b", "c"]);
+  assert.deepEqual(result.a, { x: 8, y: 8 });
+  assert.deepEqual(result.b, { x: 8, y: 8 + stepY }, "the next free cell for the one who came second (ties go to the lower row)");
+  assert.deepEqual(result.c, { x: 8 + stepX, y: 8 }, "c is nearest to the second column");
+  const rects = Object.values(result).map((point) => ({ ...point, ...cell }));
+  rects.forEach((one, i) => rects.forEach((two, j) => { if (i < j) assert.ok(!overlaps(one, two)); }));
+});
+
+test("alignShortcutsToGrid never overlaps, even with more shortcuts than the area has cells", () => {
+  const tiny = { width: 120, height: 100 };
+  const order = ["a", "b", "c", "d", "e"];
+  const positions = Object.fromEntries(order.map((id) => [id, { x: 8, y: 8 }]));
+  const result = layout.alignShortcutsToGrid(positions, order, cell, tiny);
+  const rects = order.map((id) => ({ ...result[id], ...cell }));
+  assert.equal(rects.length, 5);
+  rects.forEach((one, i) => rects.forEach((two, j) => { if (i < j) assert.ok(!overlaps(one, two), `${i} and ${j}`); }));
+});
+
+test("alignShortcutsToGrid does not touch its arguments and keeps an aligned layout as it is", () => {
+  const order = ["a", "b"];
+  const positions = { a: { x: 8, y: 8 }, b: { x: 8 + stepX, y: 8 + stepY } };
+  const copy = JSON.parse(JSON.stringify(positions));
+  assert.deepEqual(layout.alignShortcutsToGrid(positions, order, cell, gridArea), positions);
+  assert.deepEqual(positions, copy);
+});
+
+test("the shortcut seam snaps a drop and an Alt+Arrow step to the grid only while the setting is on", () => {
+  assert.ok(shortcuts.includes("snapShortcutPosition("));
+  assert.ok(shortcuts.includes("export function alignedShortcutPositions"));
+  assert.ok(shortcuts.includes("ShortcutGridContext"));
+  assert.ok(/const grid = useContext\(ShortcutGridContext\)/.test(shortcuts));
+  assert.ok(shortcuts.includes("grid ?"), "off: the old free drop stays");
+});

@@ -104,3 +104,66 @@ export function placeShortcuts(
   const bottom = Math.max(0, ...Object.values(positions).map((point) => point.y + cell.height));
   return { positions, contentHeight: Math.max(area.height, bottom + reserveBottom) };
 }
+
+/** How many cells of the shortcut grid fit across and down the area (at least one each): the same grid placeShortcuts fills, inset + n * (cell + gap). */
+function shortcutGridSize(cell: ShortcutCell, area: { width: number; height: number }, inset: number, gap: number): { columns: number; rows: number } {
+  return {
+    columns: Math.max(1, Math.floor((area.width - 2 * inset + gap) / (cell.width + gap))),
+    rows: Math.max(1, Math.floor((area.height - 2 * inset + gap) / (cell.height + gap))),
+  };
+}
+
+const finiteOr = (value: number, fallback: number) => (Number.isFinite(value) ? value : fallback);
+
+/**
+ * The nearest cell of the shortcut grid for a position (owner 22, «Выровнять значки по сетке»), held inside the area.
+ * The step is the cell plus the gap; pass the drop area (shortcutDropArea) on the tablet, the workspace on the PC. Pure.
+ */
+export function snapShortcutPosition(
+  position: { x: number; y: number },
+  cell: ShortcutCell,
+  area: { width: number; height: number },
+  inset = 8,
+  gap = 8,
+): { x: number; y: number } {
+  const { columns, rows } = shortcutGridSize(cell, area, inset, gap);
+  const column = Math.min(columns - 1, Math.max(0, Math.round((finiteOr(position.x, inset) - inset) / (cell.width + gap))));
+  const row = Math.min(rows - 1, Math.max(0, Math.round((finiteOr(position.y, inset) - inset) / (cell.height + gap))));
+  return { x: inset + column * (cell.width + gap), y: inset + row * (cell.height + gap) };
+}
+
+/**
+ * Puts every shortcut that has a position into its own cell of the grid: the nearest free one, the shortcuts in the given order
+ * (the earlier one picks first, ties go to the upper row, then the left column). Shortcuts without a position are left out.
+ * If the area has fewer cells than shortcuts, rows are added below, so nothing overlaps. Never mutates its arguments.
+ */
+export function alignShortcutsToGrid(
+  positions: Readonly<Record<string, { x: number; y: number } | undefined>>,
+  order: readonly string[],
+  cell: ShortcutCell,
+  area: { width: number; height: number },
+  inset = 8,
+  gap = 8,
+): Record<string, { x: number; y: number }> {
+  const ids = order.filter((id) => positions[id] !== undefined);
+  const size = shortcutGridSize(cell, area, inset, gap);
+  const columns = size.columns;
+  const rows = Math.max(size.rows, Math.ceil(ids.length / columns));
+  const free: { x: number; y: number }[] = [];
+  for (let row = 0; row < rows; row += 1) for (let column = 0; column < columns; column += 1) free.push({ x: inset + column * (cell.width + gap), y: inset + row * (cell.height + gap) });
+  const result: Record<string, { x: number; y: number }> = {};
+  for (const id of ids) {
+    const from = positions[id] as { x: number; y: number };
+    const x = finiteOr(from.x, inset);
+    const y = finiteOr(from.y, inset);
+    let best = 0;
+    let bestDistance = Infinity;
+    free.forEach((point, index) => {
+      const distance = Math.hypot(point.x - x, point.y - y);
+      if (distance < bestDistance) { best = index; bestDistance = distance; }
+    });
+    result[id] = free[best] as { x: number; y: number };
+    free.splice(best, 1);
+  }
+  return result;
+}

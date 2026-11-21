@@ -22,7 +22,7 @@ import { splitEmbeddedMedia } from "@/lib/rich-text-media";
 import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, type BroadcastTab } from "@/lib/broadcasts";
 import { AppWindow, appMeta, minimumWindowSize, nodWindow, type AppId } from "@/components/portia-desktop-window";
 import { PREVIEW_HIDE_MS, PREVIEW_SHOW_MS, TaskbarPreview, useTaskbarPreview } from "@/components/portia-desktop-taskbar";
-import { DesktopIcon, StartPanelButton, desktopShortcutOrder, placedShortcut, useShortcutPlacement, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
+import { DesktopIcon, ShortcutGridContext, StartPanelButton, alignedShortcutPositions, desktopShortcutOrder, placedShortcut, useShortcutPlacement, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
 import { PortiaPromotion } from "@/components/portia-promotion";
 import { PortiaTemplateBuilder } from "@/components/portia-template-builder";
 import { AssistantItems } from "@/components/portia-companion-items";
@@ -158,14 +158,15 @@ const WINDOW_FADE_OUT_MS = 120;
 const contentSyncMs = 30_000;
 const editorContentSyncMs = 10_000;
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
-type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string; spider: string; customAccent: string };
+type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; iconGrid: string; motion: string; spider: string; customAccent: string };
 
-const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard", motion: "on", spider: "on", customAccent: "" };
+const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard", iconGrid: "off", motion: "on", spider: "on", customAccent: "" };
 // Every value a setting may hold; the same ids the «Настройки» groups offer.
 const settingValues: Record<Exclude<keyof DesktopSettings, "customAccent">, readonly string[]> = {
   accent: [...accentIds, "custom"],
   wallpaper: ["radar", "grid", "gel", "cells", "flasks", "quiet"],
   iconSize: ["compact", "standard", "large"],
+  iconGrid: ["on", "off"],
   motion: motionModes,
   spider: spiderModes,
 };
@@ -1207,6 +1208,23 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     setShortcutPositions((current) => ({ ...current, [shortcutId]: position }));
   };
 
+  // Owner 22: «Выровнять значки по сетке» is saved with the other settings; turning it on puts every shortcut into the nearest free cell.
+  const toggleIconGrid = () => {
+    const turnOn = desktopSettings.iconGrid !== "on";
+    updateDesktopSettings({ iconGrid: turnOn ? "on" : "off" });
+    if (!turnOn) { announceLayout("Выравнивание значков по сетке выключено"); return; }
+    const nav = desktopIconsRef.current;
+    const aligned = nav ? alignedShortcutPositions(nav, desktopShortcutOrder, shortcutPlacement) : null;
+    if (aligned) setShortcutPositions(aligned);
+    announceLayout("Значки выровнены по сетке");
+  };
+
+  // Owner 22: «Вернуть значки в изначальное положение» forgets the saved places only (the saved-places key is rewritten by the effect above); the other settings stay.
+  const restoreShortcutPositions = () => {
+    setShortcutPositions({});
+    announceLayout("Значки возвращены в изначальное положение");
+  };
+
   // The check window says aria-modal, so the rest of the desktop must neither take focus nor be read while it runs; the focus goes back where it was afterwards.
   useEffect(() => {
     if (!qualificationLocked) return;
@@ -2026,6 +2044,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
 
         <main className={`workspace${windows[activeApp].open && !windows[activeApp].minimized ? " mobile-app-open" : ""}`} style={shortcutPlacement ? { "--shortcut-content-height": `${shortcutPlacement.contentHeight}px` } as React.CSSProperties : undefined}>
           <nav className="desktop-icons" ref={desktopIconsRef} aria-label="Рабочий стол PORTIA" style={desktopSettingsLoaded && shortcutPositionsLoaded ? undefined : { visibility: "hidden" }}>
+            <ShortcutGridContext.Provider value={desktopSettings.iconGrid === "on"}>
             <DesktopIcon app="search" onOpen={openApp} position={shortcutPositions.search} placed={placedShortcut(shortcutPlacement, "search")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="archive" onOpen={openApp} position={shortcutPositions.archive} placed={placedShortcut(shortcutPlacement, "archive")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="employees" onOpen={openApp} position={shortcutPositions.employees} placed={placedShortcut(shortcutPlacement, "employees")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
@@ -2038,6 +2057,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
             <DesktopIcon app="charter" onOpen={openApp} position={shortcutPositions.charter} placed={placedShortcut(shortcutPlacement, "charter")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="sheet" onOpen={openApp} position={shortcutPositions.sheet} placed={placedShortcut(shortcutPlacement, "sheet")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="trash" onOpen={openApp} position={shortcutPositions.trash} placed={placedShortcut(shortcutPlacement, "trash")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} className="desktop-icon-trash" />
+            </ShortcutGridContext.Provider>
           </nav>
 
           {qualificationLocked && <div className="qualification-focus-backdrop" aria-hidden="true"><span>ИДЁТ КВАЛИФИКАЦИОННАЯ ПРОВЕРКА</span></div>}
@@ -2249,6 +2269,10 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
               </SettingGroup>
               <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['gel','Гель'],['cells','Клетки'],['flasks','Лабораторные колбы'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={chooseWallpaper}>{wallpaperSaveFailed && <p className="setting-hint" role="alert">Фон не сохранён. Остался прежний.</p>}</SettingGroup>
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
+              <section className="settings-section"><h2>Значки рабочего стола</h2><div className="setting-options icon-layout-options">
+                <button type="button" className={desktopSettings.iconGrid === "on" ? "selected" : ""} aria-pressed={desktopSettings.iconGrid === "on"} onClick={toggleIconGrid}><span>Выровнять значки по сетке</span></button>
+                <button type="button" onClick={restoreShortcutPositions}><span>Вернуть значки в изначальное положение</span></button>
+              </div></section>
               <SettingGroup title="Анимации" values={[['on','Включены'],['reduced','Уменьшены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)}><p className="setting-hint">Системная настройка движения не учитывается.</p></SettingGroup>
               <SettingGroup title="Паук" values={[['on','Показывать'],['off','Скрыть']]} current={desktopSettings.spider} onSelect={(value) => updateDesktopSetting("spider", value)} />
               {/* Owner 2026-11-18: things for Вивьян and for the spider; pictures of this device only, never uploaded. */}
