@@ -59,7 +59,7 @@ test("OWN-03 the drop-down: Escape closes and returns the focus to the button; a
   assert.match(field, /document\.removeEventListener\("pointerdown", [a-zA-Z]+\)/, "and it is taken off");
   assert.match(field, /const inside = \(node: Node \| null\) => !!node && \(!!root\.current\?\.contains\(node\) \|\| !!panel\.current\?\.contains\(node\)\)/);
   assert.match(field, /onBlur=\{\(event\) => \{[^}]*event\.relatedTarget[^}]*!inside\(event\.relatedTarget as Node\)[^}]*setOpen\(false\)/, "focus that leaves the whole drop-down closes it; a null target is a press, the document handles that");
-  assert.match(field, /onClick=\{\(\) => \{ setHint\(null\); setHost\(routePanelHost\(toggle\.current\)\); setOpen\(\(was\) => !was\); \}\}/, "a press on the button toggles, with a fresh hint and the host of the layer");
+  assert.match(field, /onClick=\{\(\) => \{ pointed\.current = null; setHost\(routePanelHost\(toggle\.current\)\); setOpen\(\(was\) => !was\); \}\}/, "a press on the button toggles, with a fresh hint and the host of the layer");
   assert.doesNotMatch(field, /"Enter"|" "|"Space"/, "Enter and Space open the button natively");
 });
 
@@ -127,7 +127,7 @@ test("OWN-03 the styles: drop-down, toggle, panel, option, list, item, descripti
   assert.match(css, /\.route-dropdown-panel \{[^}]*position: fixed/, "item 32: a layer over the page, not a part of the form's layout");
   assert.match(css, /\.route-dropdown-panel \{[^}]*width: min\(320px, calc\(100vw - 32px\)\)/, "owner 2026-11-21 item 18: a compact panel");
   assert.match(css, /\.route-dropdown-panel \{[^}]*z-index: \d+/, "above the neighbours");
-  assert.match(css, /\.route-dropdown-panel \{[^}]*overflow-y: auto/, "scrolls when the room is short");
+  assert.match(css, /\.route-dropdown-list \{[^}]*overflow-y: auto/, "the rows scroll when the room is short (item 32: the list, not the whole panel)");
   assert.match(css, /@media \(max-width: 900px\) \{\s*\.route-dropdown-toggle \{ min-height: var\(--tap-target\)/, "a phone-sized tap target");
   assert.ok(css.indexOf(".route-dropdown-panel {") < css.indexOf("/* ui-unify:start"), "the rules stand before the last block, ui-unify");
   assert.match(css, /\.route-option:has\(input:checked\)/);
@@ -140,15 +140,53 @@ test("OWN-03 the styles: drop-down, toggle, panel, option, list, item, descripti
 
 // OWN-03 (owner 2026-11-21, clarification 18, 26.1-21): the list was «too big, does not fit and drops far away». The rows are one line each, the descriptions
 // moved to ONE hint line at the bottom of the panel (for the route under the pointer or in focus), and the panel opens upwards when the room below is short.
-test("OWN-03 item 18: the rows carry no description; one hint line under the list says the route under the pointer or in focus; every checkbox is described by it", () => {
+// Item 32 (26.1-25): the hint line was inside the scrolling panel and covered the lowest chosen row. It is now the panel's foot, outside the scrolling
+// list, and its text is written into it on hover and focus without a render of the rows.
+test("OWN-03 items 18 and 32: the rows carry no description; the foot under the list says the route under the pointer or in focus; every checkbox is described by it", () => {
   assert.doesNotMatch(field, /<small>/, "no description in a row");
-  assert.match(field, /<p className="route-dropdown-hint" id=\{hintId\}/, "the shared hint line");
-  assert.match(field, /const hintId = useId\(\)/);
-  assert.match(field, /aria-describedby=\{hintId\}/, "the checkbox is linked to the hint");
-  assert.match(field, /onMouseEnter=\{\(\) => setHint\(choice\.name\)\}/, "the pointer shows the route's description");
-  assert.match(field, /onFocus=\{\(\) => setHint\(choice\.name\)\}/, "so does the focus");
+  assert.match(field, /const footId = useId\(\)/);
+  assert.match(field, /aria-describedby=\{footId\}/, "every checkbox is linked to the foot");
+  assert.match(field, /onMouseEnter=\{\(\) => describe\(choice\.name\)\}/, "the pointer shows the route's description");
+  assert.match(field, /onFocus=\{\(\) => describe\(choice\.name\)\}/, "so does the focus");
+  assert.match(field, /onMouseLeave=\{\(\) => describe\(null\)\}/, "leaving the panel shows the chosen route again");
   assert.match(field, /Наведите на путь/, "the default hint, when nothing is chosen or pointed at");
   assert.match(field, /transmissionDescription\(/, "the text is read from the model, not retyped");
+});
+
+test("OWN-03 item 32: the foot stands outside the scrolling list, so it never covers a row; its text changes without a render of the rows", () => {
+  assert.match(field, /createPortal\(<div className="route-dropdown-panel"[^\n]*\n\s*<div className="route-dropdown-list">/, "the panel is a column: the list first");
+  assert.match(field, /<\/div>\s*<p className="route-dropdown-foot" id=\{footId\} ref=\{foot\} \/>\s*<\/div>, host\)\}/, "then the foot, after the list is closed, as the panel's last child");
+  assert.match(field, /TRANSMISSION_CHOICES\.map\(/);
+  assert.ok(field.indexOf('<div className="route-dropdown-list">') < field.lastIndexOf("TRANSMISSION_CHOICES.map(") && field.indexOf("extras.map(") < field.indexOf('<p className="route-dropdown-foot"'), "every row and every extra is in the list");
+  assert.doesNotMatch(field, /route-dropdown-hint|setHint|hintId/, "the old hint line and its state are gone");
+  assert.doesNotMatch(field, /useState<string \| null>/, "no state for the pointed route: hover renders nothing");
+  assert.match(field, /const pointed = useRef<string \| null>\(null\)/, "the pointed route is a ref");
+  assert.match(field, /foot\.current\.textContent = hintFor\(/, "the text is written into the foot, as plain text");
+  assert.match(field, /const hintFor = \(name: string \| null\) => transmissionDescription\(name \?\? ""\) \?\? "Наведите на путь"/);
+  assert.match(field, /pointed\.current = null; setHost\(routePanelHost\(toggle\.current\)\); setOpen\(\(was\) => !was\);/, "a fresh hint on every press of the button");
+  assert.ok(!css.includes(".route-dropdown-hint"), "its rule is removed");
+  assert.match(css, /\.route-dropdown-panel \{[^}]*display: flex; flex-direction: column/);
+  assert.match(css, /\.route-dropdown-list \{[^}]*flex: 1 1 auto; min-height: 0;[^}]*overflow-y: auto/);
+  assert.match(css, /\.route-dropdown-foot \{[^}]*flex: none/);
+  for (const rule of css.match(/\.route-dropdown-(panel|list|foot) \{[^}]*\}/g) ?? []) assert.doesNotMatch(rule, /position: sticky/, "nothing sticks over the rows");
+});
+
+test("OWN-03 item 32 / T-26.1-55: the place follows the button once per frame on any scroll or resize; a button scrolled out of its form closes the panel; the listeners leave with it", () => {
+  const effect = sliceOf(field, /const natural = node\.offsetHeight;/, /\n {2}\}, \[open\]\);/);
+  assert.match(effect, /const clips = scrollingAncestors\(button\);/, "the clipping ancestors are found once, on opening");
+  assert.match(effect, /if \(frame === 0\) frame = requestAnimationFrame\(onFrame\);/, "one frame per burst of events");
+  assert.match(effect, /window\.addEventListener\("scroll", schedule, options\);/);
+  assert.match(effect, /window\.addEventListener\("resize", schedule, options\);/);
+  assert.match(effect, /const options = \{ capture: true, passive: true \} as const;/, "any scrolling ancestor is heard, in the capture phase, passively");
+  assert.match(effect, /window\.removeEventListener\("scroll", schedule, options\);/);
+  assert.match(effect, /window\.removeEventListener\("resize", schedule, options\);/);
+  assert.match(effect, /cancelAnimationFrame\(frame\)/);
+  assert.match(effect, /if \(event\.target instanceof Node && node\.contains\(event\.target\)\) return;/, "the list's own scroll moves nothing");
+  assert.match(effect, /const anchor = button\.getBoundingClientRect\(\);/, "one read of the button per frame");
+  assert.match(effect, /if \(!routeAnchorVisible\(anchor, clips\.map\(\(clip\) => clip\.getBoundingClientRect\(\)\)\)\) \{ setOpen\(false\); return; \}/, "out of the form: closed");
+  assert.match(effect, /writeRoutePanelPlace\(node, routePanelPlacement\(anchor, /, "one write of the style");
+  assert.doesNotMatch(effect.slice(effect.indexOf("const onFrame")), /set(Host|Hint|Placement)\(/, "the frame renders nothing; only closing is a state change");
+  assert.match(dossier, /function scrollingAncestors\(node: HTMLElement\): HTMLElement\[\]/);
 });
 
 test("OWN-03 items 18 and 32: on opening the room around the button is measured and the panel goes up when it is short below and larger above; the place is written, not rendered", () => {
@@ -188,13 +226,14 @@ test("OWN-03 item 32: the panel stands at the end of its host, so Tab is carried
 
 test("OWN-03 item 18: the compact panel — 320px wide, no taller than 280px or 45svh and scrolling inside, 4px from the button, up on request; 28px rows of 13px names", () => {
   assert.match(css, /\.route-dropdown-anchor \{[^}]*position: relative/, "the panel hangs on the button, not on the label above it");
-  assert.match(css, /\.route-dropdown-panel \{[^}]*max-height: min\(280px, 45svh\)/);
+  assert.match(css, /\.route-dropdown-list \{[^}]*max-height: min\(280px, 45svh\)/, "the rows stay compact; the foot stands under them");
   assert.match(css, /\.route-option \{[^}]*min-height: 28px/, "28px rows on a PC");
   assert.match(css, /\.route-option-text strong \{[^}]*font: 700 13px/);
-  assert.match(css, /\.route-dropdown-hint \{[^}]*position: sticky[^}]*bottom: 0/, "the hint stays at the bottom of the panel while the rows scroll");
-  assert.match(css, /\.route-dropdown-hint \{[^}]*font: 11px/);
+  assert.match(css, /\.route-dropdown-foot \{[^}]*font: 11px/);
   assert.match(css, /@media \(max-width: 900px\) \{[^@]*\.route-option \{ min-height: var\(--tap-target\)/, "a phone-sized row");
-  assert.ok(css.indexOf(".route-dropdown-hint {") < css.indexOf("/* ui-unify:start"), "before the last block");
+  for (const rule of [".route-dropdown-list {", ".route-dropdown-foot {"]) {
+    assert.ok(css.indexOf(rule) >= 0 && css.indexOf(rule) < css.indexOf("/* users-tab:start"), `${rule} stands before the users-tab block`);
+  }
 });
 
 // Reads the declaration blocks of the plain rules (no @media) whose selector is exactly `selector`, as the builder reads the live sheets.

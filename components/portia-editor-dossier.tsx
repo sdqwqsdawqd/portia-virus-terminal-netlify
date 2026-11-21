@@ -16,7 +16,7 @@ import { HOLD_MS, hasPlaceToGo, holdStep, holdTargetAllowed, idleHold, type Hold
 import { classificationIconFor, PortiaIcon } from "@/components/portia-icons";
 import { CardTabs, cardTabsCopy, useCardTabSelection } from "@/components/portia-editor-card-tabs";
 import { TRANSMISSION_CHOICES, formatTransmissionRoutes, parseTransmissionRoutes, toggleTransmissionRoute, transmissionDescription } from "@/lib/transmission-routes";
-import { ROUTE_PANEL_WIDTH, routePanelPlacement, type RoutePanelPlace } from "@/lib/route-dropdown-position";
+import { ROUTE_PANEL_WIDTH, routeAnchorVisible, routePanelPlacement, type RoutePanelPlace } from "@/lib/route-dropdown-position";
 
 type ImagePlacement = "dossier" | "mutation" | "recycle" | "guide" | "employee";
 
@@ -418,8 +418,18 @@ function writeRoutePanelPlace(node: HTMLElement, place: RoutePanelPlace) {
   node.style.bottom = place.bottom === null ? "auto" : `${place.bottom}px`;
   node.style.left = `${place.left}px`;
   node.style.width = `${place.width}px`;
-  node.style.maxHeight = `min(280px, 45svh, ${place.maxHeight}px)`;
+  node.style.maxHeight = `${place.maxHeight}px`;
   node.dataset.side = place.side;
+}
+
+// The ancestors that clip the button (the scrolling form, the window): when the button leaves one of them, the panel has nothing to hang on and closes.
+function scrollingAncestors(node: HTMLElement): HTMLElement[] {
+  const found: HTMLElement[] = [];
+  for (let at = node.parentElement; at && at !== document.body && at !== document.documentElement; at = at.parentElement) {
+    const style = getComputedStyle(at);
+    if (style.display !== "contents" && /auto|scroll|hidden|clip|overlay/.test(`${style.overflowX} ${style.overflowY}`)) found.push(at);
+  }
+  return found;
 }
 
 // The focusable element that follows the button in the page, the panel's own checkboxes left out.
@@ -441,27 +451,60 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
   const labelId = useId();
   const valueId = useId();
   const panelId = useId();
-  const hintId = useId();
+  const footId = useId();
   const panel = useRef<HTMLDivElement>(null);
   // Owner 2026-11-21, item 32: the panel is a layer over the page, drawn into document.body (or the open dialog the field stands in), never a child of
   // the scrolling form, so opening it changes neither the layout nor the scroll bars of the window. The host is chosen on the press that opens it.
   const [host, setHost] = useState<Element | null>(null);
-  // The one hint line: the description of the route under the pointer or in focus.
-  const [hint, setHint] = useState<string | null>(null);
+  // The foot of the panel says the route under the pointer or in focus (item 18). Item 32: the pointed route is a ref and the text is written into the
+  // foot directly, so moving the pointer over the rows renders nothing; React draws the foot empty and never touches its text.
+  const foot = useRef<HTMLParagraphElement>(null);
+  const pointed = useRef<string | null>(null);
+  const hintFor = (name: string | null) => transmissionDescription(name ?? "") ?? "Наведите на путь";
+  const describe = (name: string | null) => {
+    pointed.current = name;
+    if (foot.current) foot.current.textContent = hintFor(name ?? parseTransmissionRoutes(value)[0] ?? null);
+  };
   const selected = parseTransmissionRoutes(value);
   const known = new Set(TRANSMISSION_CHOICES.map((choice) => choice.name));
   const extras = selected.filter((item) => !known.has(item));
-  const hintText = transmissionDescription(hint ?? selected[0] ?? "") ?? "Наведите на путь";
   // The button and the panel are one drop-down for the press and the focus, though the panel lives elsewhere in the page.
   const inside = (node: Node | null) => !!node && (!!root.current?.contains(node) || !!panel.current?.contains(node));
-  // Owner item 18 and 32: placed before the paint by the button's rectangle (position: fixed), down or up, never past the edge of the screen;
-  // the style is written into the panel directly, so the place costs no render.
+  // On opening and after every change of the value the foot is filled before the paint: the pointed route, or else the first chosen one.
+  useLayoutEffect(() => {
+    if (open && foot.current) foot.current.textContent = transmissionDescription(pointed.current ?? parseTransmissionRoutes(value)[0] ?? "") ?? "Наведите на путь";
+  }, [open, value]);
+  // Owner items 18 and 32: placed before the paint by the button's rectangle (position: fixed), down or up, never past the edge of the screen.
+  // Then it follows the button: any scroll (of any ancestor, heard in the capture phase) or resize asks for ONE animation frame; the frame reads the
+  // button once and writes the panel's style once, with no render. A button scrolled out of its form closes the panel. The listeners leave with it.
   useLayoutEffect(() => {
     const node = panel.current;
     const button = toggle.current;
     if (!open || !node || !button) return;
     const natural = node.offsetHeight;
+    const clips = scrollingAncestors(button);
     writeRoutePanelPlace(node, routePanelPlacement(button.getBoundingClientRect(), { width: ROUTE_PANEL_WIDTH, height: natural }, routeViewport()));
+    let frame = 0;
+    const onFrame = () => {
+      frame = 0;
+      const anchor = button.getBoundingClientRect();
+      if (!routeAnchorVisible(anchor, clips.map((clip) => clip.getBoundingClientRect()))) { setOpen(false); return; }
+      writeRoutePanelPlace(node, routePanelPlacement(anchor, { width: ROUTE_PANEL_WIDTH, height: natural }, routeViewport()));
+    };
+    const schedule = (event: Event) => {
+      if (event.target instanceof Node && node.contains(event.target)) return;
+      if (frame === 0) frame = requestAnimationFrame(onFrame);
+    };
+    const options = { capture: true, passive: true } as const;
+    window.addEventListener("scroll", schedule, options);
+    window.addEventListener("resize", schedule, options);
+    window.visualViewport?.addEventListener("resize", schedule, options);
+    return () => {
+      window.removeEventListener("scroll", schedule, options);
+      window.removeEventListener("resize", schedule, options);
+      window.visualViewport?.removeEventListener("resize", schedule, options);
+      cancelAnimationFrame(frame);
+    };
   }, [open]);
   // A press anywhere outside closes the panel; a press inside it (on the button or in the panel) never does.
   useEffect(() => {
@@ -490,7 +533,7 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
     onBlur={(event) => { if (open && event.relatedTarget && !inside(event.relatedTarget as Node)) setOpen(false); }}>
     <span className="route-dropdown-label" id={labelId}>{label}</span>
     <div className="route-dropdown-anchor">
-      <button type="button" className="route-dropdown-toggle" ref={toggle} aria-haspopup="true" aria-expanded={open} aria-controls={open ? panelId : undefined} aria-labelledby={`${labelId} ${valueId}`} onClick={() => { setHint(null); setHost(routePanelHost(toggle.current)); setOpen((was) => !was); }}>
+      <button type="button" className="route-dropdown-toggle" ref={toggle} aria-haspopup="true" aria-expanded={open} aria-controls={open ? panelId : undefined} aria-labelledby={`${labelId} ${valueId}`} onClick={() => { pointed.current = null; setHost(routePanelHost(toggle.current)); setOpen((was) => !was); }}>
         <span className="route-dropdown-value" id={valueId}>
           {selected.length === 0 ? <em>Не указан</em> : selected.map((name) => {
             const icon = classificationIconFor(name);
@@ -499,20 +542,22 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
         </span>
         <span className="route-dropdown-chevron" aria-hidden="true">{open ? "▴" : "▾"}</span>
       </button>
-      {open && host && createPortal(<div className="route-dropdown-panel" id={panelId} role="group" aria-labelledby={labelId} ref={panel} onMouseLeave={() => setHint(null)}>
-        {TRANSMISSION_CHOICES.map((choice) => {
-          const icon = classificationIconFor(choice.name);
-          return <label key={choice.name} className="route-option" onMouseEnter={() => setHint(choice.name)}>
-            <input type="checkbox" checked={selected.includes(choice.name)} aria-describedby={hintId} onFocus={() => setHint(choice.name)} onChange={() => onChange(toggleTransmissionRoute(value, choice.name))} />
-            {icon && <PortiaIcon name={icon} className="route-icon" />}
-            <span className="route-option-text"><strong>{choice.name}</strong></span>
-          </label>;
-        })}
-        {extras.map((extra) => <div key={extra} className="route-option route-extra">
-          <span className="route-option-text"><strong>{extra}</strong></span>
-          <button type="button" className="secondary-control" onClick={() => onChange(formatTransmissionRoutes(selected.filter((item) => item !== extra)))}>Убрать</button>
-        </div>)}
-        <p className="route-dropdown-hint" id={hintId}>{hintText}</p>
+      {open && host && createPortal(<div className="route-dropdown-panel" id={panelId} role="group" aria-labelledby={labelId} ref={panel} onMouseLeave={() => describe(null)}>
+        <div className="route-dropdown-list">
+          {TRANSMISSION_CHOICES.map((choice) => {
+            const icon = classificationIconFor(choice.name);
+            return <label key={choice.name} className="route-option" onMouseEnter={() => describe(choice.name)}>
+              <input type="checkbox" checked={selected.includes(choice.name)} aria-describedby={footId} onFocus={() => describe(choice.name)} onChange={() => onChange(toggleTransmissionRoute(value, choice.name))} />
+              {icon && <PortiaIcon name={icon} className="route-icon" />}
+              <span className="route-option-text"><strong>{choice.name}</strong></span>
+            </label>;
+          })}
+          {extras.map((extra) => <div key={extra} className="route-option route-extra">
+            <span className="route-option-text"><strong>{extra}</strong></span>
+            <button type="button" className="secondary-control" onClick={() => onChange(formatTransmissionRoutes(selected.filter((item) => item !== extra)))}>Убрать</button>
+          </div>)}
+        </div>
+        <p className="route-dropdown-foot" id={footId} ref={foot} />
       </div>, host)}
     </div>
   </div>;
