@@ -484,7 +484,8 @@ export function PortiaTemplateBuilder({ onClose, standalone = false }: { onClose
             </EditorGroup>}
 
             {dossierTab === "mutations" && <EditorGroup title="Мутации" stack>
-              <CardTabs label={cardTabsCopy.mutations} items={virus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))} activeId={cardTabs.active("template:mutations", Object.keys(virus.mutations))} onSelect={(id) => { closeFormatter(); cardTabs.select("template:mutations", id); }} />
+              <CardTabs label={cardTabsCopy.mutations} items={virus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))} activeId={cardTabs.active("template:mutations", Object.keys(virus.mutations))} onSelect={(id) => { closeFormatter(); cardTabs.select("template:mutations", id); }}
+                add={{ onAdd: () => { closeFormatter(); change(addTemplateMutation); }, disabled: false, label: cardTabsCopy.addMutation }} />
               {virus.mutations.map((mutation, index) => String(index) === cardTabs.active("template:mutations", Object.keys(virus.mutations)) && (
                 <div className="nested-editor-card" key={index}>
                   <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={busy} onClick={() => removeMutation(index)}>Удалить</button></div>
@@ -493,7 +494,6 @@ export function PortiaTemplateBuilder({ onClose, standalone = false }: { onClose
                   <TemplateImageField label="Изображение мутации" placement="mutation" image={dossier.images.mutations[index] ?? null} error={imageErrors[slotKey(index)] === true} busy={busy} onFile={(file) => { void chooseImage(index, file); }} onRemove={() => removeImage(index)} onFrame={(framing) => change((current) => setTemplateImageFraming(current, index, framing))} />
                 </div>
               ))}
-              <button className="secondary-control" type="button" onClick={() => change(addTemplateMutation)}>+ ДОБАВИТЬ МУТАЦИЮ</button>
             </EditorGroup>}
           </div>
 

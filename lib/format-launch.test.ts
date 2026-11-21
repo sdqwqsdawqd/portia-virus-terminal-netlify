@@ -127,6 +127,8 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //  26. PORTIA-26.1-ADDTABS (26.1-26; OWN-10, D-21) — «+ Добавить…» в конце каждой полосы вкладок (applyAddTabsHunk): проп add у полос записей учёных, мутаций вкладки вирусов
 //      и подразделов «Информации» (те же действия добавления, пределы и заметки), удаление прежних кнопок под списками. Подписи кнопок лежат в шве (cardTabsCopy.addLog,
 //      addMutation, addSubsection), других русских строк не добавлено. Источник одобрения: 26.1-OWNER-REQUEST, пункт 34 (2026-11-21), план 26.1-26.
+//  27. PORTIA-26.1-ADDTABS2 (26.1-26 Task 2; OWN-10, D-21) — то же для полос мутаций вкладки вирусов и подразделов «Информации» (applyAddTabs2Hunk): проп add у CardTabs и удаление
+//      кнопок «+ ДОБАВИТЬ МУТАЦИЮ» и «+ ПОДРАЗДЕЛ» под списками; подписи в шве, других русских строк не добавлено. Источник одобрения: 26.1-OWNER-REQUEST, пункт 34, план 26.1-26.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -1417,6 +1419,36 @@ function applyAddTabsHunk(text: string): string {
   return next;
 }
 
+/** PORTIA-26.1-ADDTABS2 (26.1-26 Task 2): мутации вкладки вирусов и подразделы «Информации» — то же, что PORTIA-26.1-ADDTABS для записей. */
+const VIRUS_MUTATIONS_SELECT_END = "                  onSelect={(id) => { setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:mutations`, id); }}";
+const VIRUS_MUTATION_PUSH = 'updateVirus((virus) => virus.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }))';
+const INFO_SUBSECTIONS_MOVE_END = "                onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, section.id)?.section; if (target) moveArrayItem(target.subsections, from, to); })}";
+const INFO_SUBSECTION_ACTION = 'const id = makeId("info"); changeDraft((next) => { updateById(next.infoSections, section.id, (item) => { item.subsections.push({ id, title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }); }); }); setOpen([id], true);';
+const INFO_SUBSECTION_NOTE = "<LimitNote id={`limit-subsections-${section.id}`} count={section.subsections.length} max={MAX_SUBSECTIONS} />";
+const INFO_SUBSECTION_ADD_UNDER_LIST = [
+  '              <div className="scientist-log-actions">',
+  '                <button className="secondary-control limit-add" type="button" disabled={section.subsections.length >= MAX_SUBSECTIONS} aria-describedby={`limit-subsections-${section.id}`} onClick={() => { ' + INFO_SUBSECTION_ACTION + " }}>+ ПОДРАЗДЕЛ</button>",
+  `                ${INFO_SUBSECTION_NOTE}`,
+  "              </div>",
+  "",
+].join("\n");
+function applyAddTabs2Hunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    `${VIRUS_MUTATIONS_SELECT_END} />\n`,
+    `${VIRUS_MUTATIONS_SELECT_END}\n                  add={{ onAdd: () => { setFormatTarget(null); setFormatterOpen(false); ${VIRUS_MUTATION_PUSH}; }, disabled: false, label: cardTabsCopy.addMutation }} />\n`,
+    "add tabs 2: the add action of the mutations strip",
+  );
+  next = replaceOnce(next, `                <button className="secondary-control" type="button" onClick={() => ${VIRUS_MUTATION_PUSH}}>+ ДОБАВИТЬ МУТАЦИЮ</button>\n`, "", "add tabs 2: the mutation button under the list is gone");
+  next = replaceOnce(
+    next,
+    `${INFO_SUBSECTIONS_MOVE_END} />\n`,
+    `${INFO_SUBSECTIONS_MOVE_END}\n                add={{ onAdd: () => { closeFormatterFor(...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id)))); ${INFO_SUBSECTION_ACTION} }, disabled: section.subsections.length >= MAX_SUBSECTIONS, label: cardTabsCopy.addSubsection, note: ${INFO_SUBSECTION_NOTE} }} />\n`,
+    "add tabs 2: the add action of the subsections strip",
+  );
+  return replaceOnce(next, INFO_SUBSECTION_ADD_UNDER_LIST, "", "add tabs 2: the subsection button under the list is gone");
+}
+
 /** Реестр одобренных правок (D-64): `apply` — порядок применения к образцу; `normalizeActual` — что вырезается из текущего файла перед сравнением. */
 const approvedEditorEdits: readonly { id: string; apply: (text: string) => string; normalizeActual?: (text: string) => string }[] = [
   { id: "D-57", apply: applyLaunchButtonHunk },
@@ -1449,6 +1481,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26.1-LIVE-ACCESS", apply: applyLiveAccessHunk },
   { id: "PORTIA-26.1-ADDCARD", apply: applyGuideAddCardHunk },
   { id: "PORTIA-26.1-ADDTABS", apply: applyAddTabsHunk },
+  { id: "PORTIA-26.1-ADDTABS2", apply: applyAddTabs2Hunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -1522,7 +1555,8 @@ test("D-62: the «Информация» tab starts with the add-section bar and
   const info = code.slice(start, end);
   assert.ok(!info.includes("<SectionAddBar") && !info.includes(INFO_TABS_LINE_START), "the tab body holds neither the add bar nor the section tabs");
   assert.equal(info.split("+ ДОБАВИТЬ РАЗДЕЛ</button>").length - 1, 0, "no add-section button below the columns");
-  assert.ok(info.includes("+ ПОДРАЗДЕЛ</button>"), "the add-subsection button stays at the bottom of the section card");
+  // 26.1-26 (owner item 34): the add-subsection action ends the strip of the subsection tabs inside the section card, its label lives in the card tabs seam.
+  assert.ok(info.includes("label: cardTabsCopy.addSubsection") && !info.includes("+ ПОДРАЗДЕЛ</button>"), "the add-subsection action stays in the section card, at the end of its subsection strip");
 });
 
 test("D-64: portia-editor.tsx differs from 449c756 only by the approved edits (D-57 launch button, D-62 «Информация» add-section, D-63 frame attributes)", () => {
@@ -1609,12 +1643,12 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.notEqual(firstDifference(expected, withoutGuideCardTabs), null, "a file without the PORTIA-26.1-TABS hunk is a difference");
   assert.throws(() => applyGuideCardTabsHunk(expected), /exactly one approved anchor/, "the guide card tabs hunk cannot be applied twice");
   assert.ok(expected.includes("<CardTabs label={cardTabsCopy.cards}"), "the approved editor shows the card tabs of a «Справочник» section");
-  const withoutInfoSubsectionTabs = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-TABS2").reduce((text, edit) => edit.apply(text), sample);
+  const withoutInfoSubsectionTabs = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-TABS2" && edit.id !== "PORTIA-26.1-ADDTABS2").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutInfoSubsectionTabs), null, "a file without the PORTIA-26.1-TABS2 hunk is a difference");
   assert.throws(() => applyInfoSubsectionTabsHunk(expected), /exactly one approved anchor/, "the info subsection tabs hunk cannot be applied twice");
   assert.ok(expected.includes("<CardTabs label={cardTabsCopy.subsections}"), "the approved editor shows the subsection tabs of an «Информация» section");
   // PORTIA-26.1-ADDTABS stands on the strips that PORTIA-26.1-TABS2 and TABS3 draw, so it leaves with them.
-  const withoutVirusItemTabs = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-TABS3" && edit.id !== "PORTIA-26.1-ADDTABS").reduce((text, edit) => edit.apply(text), sample);
+  const withoutVirusItemTabs = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-TABS3" && edit.id !== "PORTIA-26.1-ADDTABS" && edit.id !== "PORTIA-26.1-ADDTABS2").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutVirusItemTabs), null, "a file without the PORTIA-26.1-TABS3 hunk is a difference");
   assert.throws(() => applyVirusItemTabsHunk(expected), /exactly one approved anchor/, "the virus item tabs hunk cannot be applied twice");
   assert.ok(expected.includes("<CardTabs label={cardTabsCopy.mutations}") && expected.includes("<CardTabs label={cardTabsCopy.logs}"), "the approved editor shows the tabs of the mutations and the scientist records");
@@ -1636,6 +1670,12 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.throws(() => applyAddTabsHunk(expected), /exactly one approved anchor/, "the add tabs hunk cannot be applied twice");
   assert.ok(expected.includes("label: cardTabsCopy.addLog") && !expected.includes(">+ ДОБАВИТЬ ЗАПИСЬ</button>"), "the approved editor puts the add record action into the strip and has no button under the list");
   assert.ok(withoutAddTabs.includes(">+ ДОБАВИТЬ ЗАПИСЬ</button>"), "without the hunk the record button stands under the list");
+  const withoutAddTabs2 = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-ADDTABS2").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutAddTabs2), null, "a file without the PORTIA-26.1-ADDTABS2 hunk is a difference");
+  assert.throws(() => applyAddTabs2Hunk(expected), /exactly one approved anchor/, "the add tabs 2 hunk cannot be applied twice");
+  assert.ok(expected.includes("label: cardTabsCopy.addMutation") && expected.includes("label: cardTabsCopy.addSubsection"), "the approved editor puts the add mutation and add subsection actions into their strips");
+  assert.ok(!expected.includes(">+ ДОБАВИТЬ МУТАЦИЮ</button>") && !expected.includes(">+ ПОДРАЗДЕЛ</button>"), "… and has no button under those lists");
+  assert.ok(withoutAddTabs2.includes(">+ ДОБАВИТЬ МУТАЦИЮ</button>") && withoutAddTabs2.includes(">+ ПОДРАЗДЕЛ</button>"), "without the hunk the buttons stand under the lists");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

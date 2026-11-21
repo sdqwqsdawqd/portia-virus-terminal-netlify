@@ -364,18 +364,19 @@ export function ArchivedVirusEditor({ virus, uploadState, uploadMessage, onUploa
       ] as [keyof Virus["classification"], string][]).map(([key, label]) => <ClassificationField key={key} label={label} classificationKey={key} value={virus.classification[key]} onChange={(value) => onChange((item) => { item.classification[key] = value; })} />)}
     </EditorGroup>}
     {dossierTab === "mutations" && <EditorGroup title="Мутации" stack>
-      <CardTabs label={cardTabsCopy.mutations} items={virus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))} activeId={cardTabs.active(`${virus.id}:mutations`, Object.keys(virus.mutations))} onSelect={(id) => cardTabs.select(`${virus.id}:mutations`, id)} />
+      <CardTabs label={cardTabsCopy.mutations} items={virus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))} activeId={cardTabs.active(`${virus.id}:mutations`, Object.keys(virus.mutations))} onSelect={(id) => cardTabs.select(`${virus.id}:mutations`, id)}
+        add={{ onAdd: () => onChange((item) => { item.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }); }), disabled: false, label: cardTabsCopy.addMutation }} />
       {virus.mutations.map((mutation, index) => String(index) === cardTabs.active(`${virus.id}:mutations`, Object.keys(virus.mutations)) && <div className="nested-editor-card" key={`${virus.id}-mutation-${index}`}>
         <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={uploadState === "uploading"} onClick={() => onRemoveMutation(index)}>Удалить</button></div>
         <Field label="Название"><input value={mutation.name} onChange={(event) => onChange((item) => { item.mutations[index].name = event.target.value; })} /></Field>
         <Field label="Описание" wide><textarea value={mutation.description} onChange={(event) => onChange((item) => { item.mutations[index].description = event.target.value; })} /></Field>
         <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} uploadMessage={uploadMessage} framing={mutation.imageFraming} framingBox="natural" onFramingChange={(frame) => onChange((item) => { const target = item.mutations[index]; if (!target) return; if (frame) target.imageFraming = frame; else delete target.imageFraming; })} onChange={(value) => onChange((item) => { item.mutations[index].image = value; })} onUpload={(file) => onUpload(file, (url) => onChange((item) => { const target = item.mutations[index]; if (target) target.image = url; }))} />
       </div>)}
-      <button className="secondary-control" type="button" onClick={() => onChange((item) => { item.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }); })}>+ ДОБАВИТЬ МУТАЦИЮ</button>
     </EditorGroup>}
     {dossierTab === "logs" && <EditorGroup title="Записи учёных" stack>
       {virus.scientistLogs.length === 0 && <p className="editor-guidance">{levelCopy.logsEmptyEditor}</p>}
-      <CardTabs label={cardTabsCopy.logs} items={virus.scientistLogs.map((log) => ({ id: log.id, title: log.title }))} activeId={cardTabs.active(`${virus.id}:logs`, virus.scientistLogs.map((log) => log.id))} onSelect={(id) => cardTabs.select(`${virus.id}:logs`, id)} />
+      <CardTabs label={cardTabsCopy.logs} items={virus.scientistLogs.map((log) => ({ id: log.id, title: log.title }))} activeId={cardTabs.active(`${virus.id}:logs`, virus.scientistLogs.map((log) => log.id))} onSelect={(id) => cardTabs.select(`${virus.id}:logs`, id)}
+        add={{ onAdd: () => onChange((item) => { item.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(item.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 1, content: [""] }); }), disabled: virus.scientistLogs.length >= MAX_SCIENTIST_LOGS, label: cardTabsCopy.addLog, note: `${virus.scientistLogs.length} / ${MAX_SCIENTIST_LOGS}` }} />
       {virus.scientistLogs.map((log, index) => log.id === cardTabs.active(`${virus.id}:logs`, virus.scientistLogs.map((item) => item.id)) && <div className="nested-editor-card" key={log.id}>
         <div className="nested-editor-head"><strong>ЗАПИСЬ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => onChange((item) => { item.scientistLogs.splice(index, 1); })}>Удалить</button></div>
         <Field label="Название"><input value={log.title} onChange={(event) => onChange((item) => { item.scientistLogs[index].title = event.target.value; })} /></Field>
@@ -383,7 +384,6 @@ export function ArchivedVirusEditor({ virus, uploadState, uploadMessage, onUploa
         <LevelPicker name={`level-log-${log.id}`} value={log.lockedLevel} onChange={(level) => onChange((item) => { item.scientistLogs[index].lockedLevel = level; })} />
         <Field label="Текст записи" wide><textarea value={scientistLogPlainText(log)} onChange={(event) => onChange((item) => { item.scientistLogs[index].content = event.target.value.split(/\n\s*\n/); item.scientistLogs[index].richContent = { runs: [{ text: event.target.value }] }; })} /></Field>
       </div>)}
-      <button className="secondary-control" type="button" disabled={virus.scientistLogs.length >= MAX_SCIENTIST_LOGS} onClick={() => onChange((item) => { item.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(item.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 1, content: [""] }); })}>+ ДОБАВИТЬ ЗАПИСЬ</button>
     </EditorGroup>}
     <div className="archive-virus-actions"><button className="secondary-control" type="button" disabled={restoreBlocked} title={restoreBlocked ? "Раздел «База вирусов» для вас закрыт" : undefined} onClick={onRestore}>ВОССТАНОВИТЬ В БАЗУ</button><button className="danger-control" type="button" onClick={onDelete}>УДАЛИТЬ НАВСЕГДА</button></div>
   </div>;

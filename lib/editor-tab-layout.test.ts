@@ -1160,6 +1160,30 @@ test("owner 2026-11-21 item 34: the strip of the scientist records of a virus en
   assert.ok(!records.includes("scientist-log-actions") && !records.includes("+ ДОБАВИТЬ ЗАПИСЬ"), "no button under the records");
 });
 
+test("owner 2026-11-21 item 34: every strip of tabs — the guide cards, the info subsections, the mutations and records of a virus, the full record in the bin, «Шаблон» — ends with its add button; no old button under a list", () => {
+  const strips = (code: string) => code.split("<CardTabs ").slice(1).map((part) => part.slice(0, part.indexOf("/>\n")));
+  const builder = stripComments(lf(readFileSync(new URL("../components/portia-template-builder.tsx", import.meta.url), "utf8")));
+  const places = [...strips(stripComments(editor)), ...strips(stripComments(dossierSeam)), ...strips(builder)];
+  assert.equal(places.length, 7, "four strips in the editor, two in the bin record, one in «Шаблон»");
+  for (const strip of places) assert.ok(strip.includes("add={{ onAdd: "), `the strip ${strip.slice(0, 60)}… has its add action`);
+  const labelled = places.map((strip) => strip.match(/label: cardTabsCopy\.(\w+)/)?.[1] ?? "addCard (default)");
+  assert.deepEqual(labelled, ["addMutation", "addLog", "addSubsection", "addCard (default)", "addMutation", "addLog", "addMutation"], "each strip names what it adds with a label of the seam");
+  for (const [name, code] of [["editor", stripComments(editor)], ["bin record", stripComments(dossierSeam)], ["«Шаблон»", builder]] as const) {
+    for (const old of [">+ ДОБАВИТЬ МУТАЦИЮ</button>", ">+ ДОБАВИТЬ ЗАПИСЬ</button>", ">+ ПОДРАЗДЕЛ</button>", ">+ ДОБАВИТЬ КАРТОЧКУ</button>"]) assert.ok(!code.includes(old), `${name}: no ${old} under a list`);
+  }
+  // A new item is selected at once: the add pushes a new id (the rule of useCardTabSelection picks the grown id); the subsection opens as before.
+  const info = editorSlice('{tab === "info" && (', '{tab === "guide" && (');
+  assert.ok(info.includes('const id = makeId("info"); changeDraft((next) => { updateById(next.infoSections, section.id, (item) => { item.subsections.push({ id, title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }); }); }); setOpen([id], true); }, disabled: section.subsections.length >= MAX_SUBSECTIONS, label: cardTabsCopy.addSubsection, note: <LimitNote id={`limit-subsections-${section.id}`}'), "the same add-subsection action, limit and note");
+  assert.ok(builder.includes("add={{ onAdd: () => { closeFormatter(); change(addTemplateMutation); }, disabled: false, label: cardTabsCopy.addMutation }}"), "«Шаблон» adds through the same pure step, the panel closes");
+  assert.ok(stripComments(dossierSeam).includes("disabled: virus.scientistLogs.length >= MAX_SCIENTIST_LOGS, label: cardTabsCopy.addLog, note: `${virus.scientistLogs.length} / ${MAX_SCIENTIST_LOGS}`"), "the bin record keeps the limit of the records and shows the count, as the editor");
+  // «Корзина» is a list and a detail, not a strip: its add buttons stand at the end of the list column, where «+ ДОБАВИТЬ ВИРУС» stands in «База вирусов».
+  const recycle = editorSlice('{tab === "recycle" && (', '{tab === "search" && (');
+  const column = recycle.slice(recycle.indexOf('<aside className="editor-record-list etab-list">'), recycle.indexOf("</aside>"));
+  assert.ok(column.indexOf(">+ ДОБАВИТЬ ФАЙЛ</button>") > column.indexOf("orderedRecycleKeys.map("), "the add file button ends the list column");
+  const viruses = editorSlice('{tab === "viruses" && (', "</aside>");
+  assert.ok(viruses.indexOf(">+ ДОБАВИТЬ ВИРУС</button>") > viruses.indexOf("draft.viruses.map("), "… as the add virus button ends its column");
+});
+
 test("owner 2026-11-21 item 17: the editor gives the strip of the guide cards its add action and no longer draws the button under the list", () => {
   const guide = editorSlice('{tab === "guide" && (', '{tab === "recycle"');
   const strip = guide.slice(guide.indexOf("<CardTabs label={cardTabsCopy.cards}"), guide.indexOf('<div className="info-subsection-list" data-sort-group="guide-cards"'));

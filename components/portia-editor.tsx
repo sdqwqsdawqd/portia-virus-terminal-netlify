@@ -1346,7 +1346,8 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
               {dossierTab === "mutations" && <EditorGroup title="Мутации" stack>
                 {/* A delete shifts the later mutations' index keys, so it closes the format panel. shortcut: mutations have no id, so delete is blocked while an upload runs; an undo mid-upload can still shift its index — give Mutation an id if that matters. */}
                 <CardTabs label={cardTabsCopy.mutations} items={selectedVirus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))} activeId={cardTabs.active(`${selectedVirus.id}:mutations`, Object.keys(selectedVirus.mutations))}
-                  onSelect={(id) => { setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:mutations`, id); }} />
+                  onSelect={(id) => { setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:mutations`, id); }}
+                  add={{ onAdd: () => { setFormatTarget(null); setFormatterOpen(false); updateVirus((virus) => virus.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" })); }, disabled: false, label: cardTabsCopy.addMutation }} />
                 {selectedVirus.mutations.map((mutation, index) => String(index) === cardTabs.active(`${selectedVirus.id}:mutations`, Object.keys(selectedVirus.mutations)) && (
                   <div className="nested-editor-card" key={index}>
                     <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={uploadState === "uploading"} onClick={() => { setFormatTarget(null); setFormatterOpen(false); changeDraft((next) => updateById(next.viruses, selectedVirus.id, (virus) => removeMutation(next, virus, index))); }}>Удалить</button></div>
@@ -1355,7 +1356,6 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                     <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} uploadMessage={uploadMessage} framing={mutation.imageFraming} framingBox="natural" onFramingChange={(frame) => updateVirus((virus) => { const item = virus.mutations[index]; if (!item) return; if (frame) item.imageFraming = frame; else delete item.imageFraming; })} onChange={(value) => updateVirus((virus) => { virus.mutations[index].image = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { const item = virus.mutations[index]; if (item) item.image = url; }))} />
                   </div>
                 ))}
-                <button className="secondary-control" type="button" onClick={() => updateVirus((virus) => virus.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }))}>+ ДОБАВИТЬ МУТАЦИЮ</button>
               </EditorGroup>}
 
               {dossierTab === "logs" && <EditorGroup title="Записи учёных" stack>
@@ -1401,7 +1401,8 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
               <FormattedTextarea area="info" label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => updateById(next.infoSections, section.id, (item) => { item.body = text; }))} />
               <CardTabs label={cardTabsCopy.subsections} items={section.subsections.map((subsection) => ({ id: subsection.id, title: subsection.title }))} activeId={cardTabs.active(section.id, section.subsections.map((subsection) => subsection.id))}
                 onSelect={(id) => { closeFormatterFor(...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id)))); cardTabs.select(section.id, id); setOpen([id], true); }}
-                onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, section.id)?.section; if (target) moveArrayItem(target.subsections, from, to); })} />
+                onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, section.id)?.section; if (target) moveArrayItem(target.subsections, from, to); })}
+                add={{ onAdd: () => { closeFormatterFor(...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id)))); const id = makeId("info"); changeDraft((next) => { updateById(next.infoSections, section.id, (item) => { item.subsections.push({ id, title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }); }); }); setOpen([id], true); }, disabled: section.subsections.length >= MAX_SUBSECTIONS, label: cardTabsCopy.addSubsection, note: <LimitNote id={`limit-subsections-${section.id}`} count={section.subsections.length} max={MAX_SUBSECTIONS} /> }} />
               <div className="info-subsection-list">
                 {section.subsections.map((subsection, subIndex) => subsection.id === cardTabs.active(section.id, section.subsections.map((item) => item.id)) && (
                   <CollapsibleCard key={subsection.id} id={subsection.id} sortIndex={subIndex} label={`ПОДРАЗДЕЛ ${String(subIndex + 1).padStart(2, "0")}`} title={subsection.title} open={isOpen(subsection.id)} onToggle={() => toggleCard(subsection.id)}
@@ -1432,10 +1433,6 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                     </div>
                   </CollapsibleCard>
                 ))}
-              </div>
-              <div className="scientist-log-actions">
-                <button className="secondary-control limit-add" type="button" disabled={section.subsections.length >= MAX_SUBSECTIONS} aria-describedby={`limit-subsections-${section.id}`} onClick={() => { const id = makeId("info"); changeDraft((next) => { updateById(next.infoSections, section.id, (item) => { item.subsections.push({ id, title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }); }); }); setOpen([id], true); }}>+ ПОДРАЗДЕЛ</button>
-                <LimitNote id={`limit-subsections-${section.id}`} count={section.subsections.length} max={MAX_SUBSECTIONS} />
               </div>
             </CollapsibleCard>
           ))}</div>
