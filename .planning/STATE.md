@@ -434,6 +434,7 @@ Full decision history: `.planning/PROJECT.md`.
 | 261117-px5 | Повышение: кандидат сам начинает квалификацию после экрана правил (правила по переходу, миграция 20261117 — ОЖИДАЕТ ВЛАДЕЛЬЦА), компактный конструктор вопросов в окне, строка квот | 2026-11-17 | 729e27d | [261117-px5-promotion-candidate-starts-qualification](./quick/261117-px5-promotion-candidate-starts-qualification/) |
 | 261118-2ha | Calm helices, item mini-editor, accent keeps saturation, compact guide like Информация, search 10/25 | 2026-11-18 | 25a3dc4 | [261118-2ha-dna-helices-items-editor-guide-cards-col](./quick/261118-2ha-dna-helices-items-editor-guide-cards-col/) |
 | 261122-sg1 | «Справочник» не сжимается при появлении полосы прокрутки (scrollbar-gutter: stable) | 2026-11-22 | cd73a3a2 | [261122-sg1-guide-scrollbar-gutter](./quick/261122-sg1-guide-scrollbar-gutter/) |
+| 261122-rt2 | Живой режим: выбор путей передачи работает; «Шаблон»: пути — название и иконка, без кнопок | 2026-11-22 | 1982b5a3 | [261122-rt2-live-routes-template-still](./quick/261122-rt2-live-routes-template-still/) |
 
 ### Roadmap Evolution
 
