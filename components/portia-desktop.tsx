@@ -2299,16 +2299,20 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
                 </div>}
               </SettingGroup>
               <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['gel','Гель'],['cells','Клетки'],['flasks','Лабораторные колбы'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={chooseWallpaper}>{wallpaperSaveFailed && <p className="setting-hint" role="alert">Фон не сохранён. Остался прежний.</p>}</SettingGroup>
+              {/* Owner 2026-11-21 item 28: one order for the groups — appearance, then motion, then the desktop, then the rest. */}
+              <SettingGroup title="Паук" values={[['on','Показывать'],['off','Скрыть']]} current={desktopSettings.spider} onSelect={(value) => updateDesktopSetting("spider", value)} />
+              <SettingGroup title="Анимации" values={[['on','Включены'],['reduced','Уменьшены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)}><p className="setting-hint">Системная настройка движения не учитывается.</p></SettingGroup>
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
               <SettingsCategory title="Ярлыки рабочего стола" className="icon-layout-options">
                 <button type="button" className={desktopSettings.iconGrid === "on" ? "selected" : ""} aria-pressed={desktopSettings.iconGrid === "on"} onClick={toggleIconGrid}><span>Выровнять ярлыки по сетке</span></button>
                 <button type="button" onClick={restoreShortcutPositions}><span>Вернуть ярлыки в изначальное положение</span></button>
               </SettingsCategory>
-              <SettingGroup title="Анимации" values={[['on','Включены'],['reduced','Уменьшены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)}><p className="setting-hint">Системная настройка движения не учитывается.</p></SettingGroup>
-              <SettingGroup title="Паук" values={[['on','Показывать'],['off','Скрыть']]} current={desktopSettings.spider} onSelect={(value) => updateDesktopSetting("spider", value)} />
               {/* Owner 2026-11-18: things for Вивьян and for the spider; pictures of this device only, never uploaded. */}
-              <CompanionItemsSettings />
-              <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2>{!canEdit && <p>Войдите в разрешённый аккаунт редактора.</p>}</div><div className="content-control-actions"><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a></div></section>
+              <SettingsCategory title="Предметы" className="companion-settings-buttons"><CompanionItemsSettings /></SettingsCategory>
+              <SettingsCategory title="Содержимое сайта" sectionClassName="content-control-entry" className="content-control-actions">
+                <button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a>
+                {!canEdit && <p className="setting-hint">Войдите в разрешённый аккаунт редактора.</p>}
+              </SettingsCategory>
               <div className="settings-footer"><button className="factory-reset" type="button" onClick={resetDesktopSettings}>СБРОСИТЬ ДО ЗАВОДСКИХ</button><span className={`settings-saved-status${settingsSavedVisible ? " is-visible" : ""}`} role="status" aria-live="polite">Настройки сохранены</span></div>
             </div>
           </AppWindow>

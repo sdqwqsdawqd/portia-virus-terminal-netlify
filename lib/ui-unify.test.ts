@@ -1045,3 +1045,10 @@ test("owner 2026-11-20 OWN-02: content columns fill the window (guide card, nest
   assert.equal(lastDeclaration(portiaCss, ".info-block-video", "max-width"), "820px");
   assert.equal(lastDeclaration(portiaCss, ".global-search-header", "max-width"), "680px");
 });
+
+// owner 2026-11-21 item 27: the padding of the «Справочник» tiles is NOT narrowed (about 55 characters a line stay) — a guard on the value of 26.1-23.
+test("owner item 27: the «Справочник» tile padding stays as it is", () => {
+  assert.equal(lastDeclaration(portiaCss, ".guide-tile-title", "padding"), "6px 6px");
+  assert.equal(lastDeclaration(portiaCss, ".guide-tile-title", "padding", PHONE), "6px 6px", "no phone override narrows it");
+  assert.equal(lastDeclaration(portiaCss, ".guide-tile", "padding"), "0");
+});

@@ -637,10 +637,42 @@ test("OWN-13 owner 22: «Выровнять ярлыки по сетке» is a 
   const restore = source.slice(source.indexOf("const restoreShortcutPositions = "), source.indexOf("const restoreShortcutPositions = ") + 330);
   assert.ok(restore.includes("setShortcutPositions({})") && restore.includes('announceLayout("Ярлыки возвращены в изначальное положение")'));
   assert.ok(source.includes("<ShortcutGridContext.Provider value={desktopSettings.iconGrid === \"on\"}>"), "the shortcuts learn about the grid through one context");
-  assert.ok(styles.includes(".icon-layout-options {") && styles.indexOf(".icon-layout-options {") < styles.indexOf("users-tab:start"));
+  // owner 2026-11-21 item 28: the group has no layout of its own any more, it is the shared row of the settings category.
+  assert.ok(!styles.includes(".icon-layout-options {"));
   // the factory reset already walks defaultDesktopSettings, so the grid goes back to off with it.
   assert.ok(source.includes("Object.entries(defaultDesktopSettings).every("));
   assert.ok(!source.includes("portia-desktop-icon-grid") && !source.includes("iconGridStorageKey"), "no new storage key (STAB-DESK-07)");
+});
+
+// owner 2026-11-21 item 28: every group of «Настройки» looks the same — one category (heading, one row of options and actions), in one order.
+test("OWN-13 owner item 28: every settings group is a SettingsCategory, in one order, under one set of rules", () => {
+  const start = source.indexOf('<AppWindow app="settings"');
+  const pane = source.slice(start, source.indexOf("</AppWindow>", start));
+  assert.ok(start > 0 && pane.includes("settings-app"));
+  assert.ok(!pane.includes("<section"), "no group of the settings window is drawn outside SettingsCategory");
+  assert.equal((source.match(/settings-section/g) ?? []).length, 1, "the group markup exists once, in SettingsCategory");
+  const companion = lf(readFileSync(new URL("../components/portia-companion-editor.tsx", import.meta.url), "utf8"));
+  assert.ok(!companion.includes("settings-section") && !companion.includes("<h2>"), "«Предметы» takes its heading and row from the category");
+  const order = [...pane.matchAll(/<(?:SettingGroup|SettingsCategory) title="([^"]+)"/g)].map((match) => match[1]);
+  // appearance, then motion, then the desktop, then the rest.
+  assert.deepEqual(order, ["Цвет интерфейса", "Фон рабочего стола", "Паук", "Анимации", "Размер ярлыков", "Ярлыки рабочего стола", "Предметы", "Содержимое сайта"]);
+  assert.ok(pane.includes("<CompanionItemsSettings />"));
+  assert.ok(pane.includes('sectionClassName="content-control-entry"'), "the content group still spans the maximized pane");
+
+  const body = (selector: string) => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return styles.match(new RegExp(`\\n${escaped} \\{([^}]*)\\}`))?.[1] ?? "";
+  };
+  assert.match(body(".settings-section"), /margin-top: 28px/);
+  assert.match(body(".settings-section h2"), /font: 700 11px var\(--sans\);[^}]*text-transform: uppercase/);
+  assert.match(body(".setting-options"), /display: flex; flex-wrap: wrap; gap: 8px;/, "one row of buttons that wraps");
+  assert.match(body(".setting-options > button"), /min-height: var\(--control-height-compact\);/, "32px buttons on a PC");
+  assert.match(styles, /@media \(max-width: 900px\) \{[^@]*?\n {2}\.setting-options > button \{ min-height: var\(--tap-target\); \}/, "a tap target on a phone");
+  assert.match(body(".content-control-actions button, .content-control-actions a"), /min-height: var\(--control-height-compact\);/, "the same height as the other buttons");
+  assert.ok(styles.indexOf("\n.setting-options {") < styles.indexOf("users-tab:start"), "the rules stand before the users-tab block");
+  // a group class touches only the content of its row: no own margin, frame, heading or row layout.
+  const groupRule = /(?:^|\n)\s*\.(?:content-control-entry|companion-settings|companion-settings-buttons|icon-layout-options|color-options)(?: h2| > div[^{,]*)? \{/;
+  assert.doesNotMatch(styles, groupRule);
 });
 
 // owner 2026-11-20 OWN-11: the figure fades as one layer, so the items no longer show the body through.

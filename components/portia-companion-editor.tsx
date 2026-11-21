@@ -29,7 +29,7 @@ const targetButtons: Record<CompanionTarget, string> = { assistant: "ПОМОЩ�
 const handles: readonly CompanionHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 const HANDLE_PX = 10;
 
-/** One settings section with a button per target; each opens the editor of that target. */
+/** The row of the settings group «Предметы» (the desktop draws the heading with SettingsCategory, owner 2026-11-21 item 28): a button per target; each opens the editor of that target. */
 export function CompanionItemsSettings() {
   const items = useCompanionItems();
   const [open, setOpen] = useState<CompanionTarget | null>(null);
@@ -40,16 +40,13 @@ export function CompanionItemsSettings() {
     // The dialog is gone from the page: the opener takes the focus back.
     if (target) requestAnimationFrame(() => openers.current[target]?.focus());
   };
-  return <section className="settings-section companion-settings" aria-label="Предметы">
-    <h2>Предметы</h2>
+  return <>
+    {(Object.keys(targetButtons) as CompanionTarget[]).map((target) => <button key={target} type="button" ref={(node) => { openers.current[target] = node; }} onClick={() => setOpen(target)}>
+      <span>{targetButtons[target]} · {items.filter((item) => item.target === target).length}</span>
+    </button>)}
     <p className="setting-hint">Только на этом устройстве.</p>
-    <div className="companion-settings-buttons">
-      {(Object.keys(targetButtons) as CompanionTarget[]).map((target) => <button key={target} type="button" ref={(node) => { openers.current[target] = node; }} onClick={() => setOpen(target)}>
-        {targetButtons[target]} · {items.filter((item) => item.target === target).length}
-      </button>)}
-    </div>
     {open && <CompanionItemsEditor target={open} onClose={close} />}
-  </section>;
+  </>;
 }
 
 /** Tab and Shift+Tab go round the stops of the dialog: past the last one the focus returns to the first, and the other way round. */

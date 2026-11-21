@@ -342,21 +342,19 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .info-app footer { display: flex; justify-content: space-between; gap: 20px; margin-top: 50px; padding-top: 14px; border-top: 1px solid oklch(.407 calc(.035 * var(--accent-chroma)) var(--accent-hue)); color: oklch(.563 calc(.028 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); letter-spacing: .05em; }
 
 .settings-app header p, .trash-app header p { margin: 0; color: oklch(.632 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font-size: 14px; line-height: 1.55; }
+/* Owner 2026-11-21 item 28: every group of «Настройки» is one category (SettingsCategory) — the same gap, an 11px capital heading and one row
+   of buttons that wraps; the buttons are one height (32px on a PC, the tap target on a phone) and share the free width of their line.
+   A group class (color-options, icon-layout-options, companion-settings-buttons, content-control-actions) touches only the content of its row. */
 .settings-section { margin-top: 28px; }
 .settings-section h2 { margin: 0 0 11px; color: oklch(.73 calc(.025 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px var(--sans); letter-spacing: .07em; text-transform: uppercase; }
-.setting-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.color-options { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-.accent-picker { grid-column: 1 / -1; }
-.setting-options > button { min-height: 54px; display: flex; align-items: center; justify-content: center; gap: 9px; padding: 10px; border: 1px solid oklch(.378 calc(.035 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-card); background: rgba(255,255,255,.018); color: oklch(.776 calc(.022 * var(--accent-chroma)) var(--accent-hue)); cursor: pointer; }
-/* after the shared button rule so it wins: swatch above a 13px label (the 16px mono label is 77px wide), so five labels fit the 520 px window */
-.color-options > button { flex-direction: column; gap: 4px; padding-inline: 4px; font-size: 13px; }
-/* Owner 22: «Ярлыки рабочего стола» — два действия в строку, те же кнопки настроек. */
-.icon-layout-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.setting-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.accent-picker { flex-basis: 100%; }
+.setting-options > button { flex: 1 1 0; min-width: min(100%, max-content); min-height: var(--control-height-compact); display: flex; align-items: center; justify-content: center; gap: 8px; padding: 4px 12px; border: 1px solid oklch(.378 calc(.035 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-card); background: rgba(255,255,255,.018); color: oklch(.776 calc(.022 * var(--accent-chroma)) var(--accent-hue)); font-size: 13px; line-height: 1.25; cursor: pointer; }
 .setting-options > button:hover, .setting-options > button.selected { border-color: var(--teal); background: var(--teal-soft); color: #fff; }
 .setting-options > button.selected { box-shadow: inset 0 -2px 0 var(--teal); }
-/* A long option label wraps inside its button instead of being cut or pushing the grid wider (E2). */
+/* A long option label wraps inside its button instead of being cut or pushing the row wider (E2). */
 .setting-options > button > span { min-width: 0; overflow-wrap: anywhere; text-align: center; }
-.swatch { width: 16px; height: 16px; border-radius: var(--radius-round); border: 2px solid rgba(255,255,255,.35); }
+.swatch { flex: none; width: 16px; height: 16px; border-radius: var(--radius-round); border: 2px solid rgba(255,255,255,.35); }
 .swatch.teal { background: #00bca6; }
 .swatch.ice { background: #7ec8e3; }
 .swatch.amber { background: #e8953f; }
@@ -365,16 +363,12 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .settings-footer { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 34px; padding-top: 18px; border-top: 1px solid oklch(.38 calc(.031 * var(--accent-chroma)) var(--accent-hue)); }
 .settings-saved-status { color: oklch(.609 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); opacity: 0; transform: translateY(3px); transition: opacity 160ms ease, transform 160ms ease; }
 .settings-saved-status.is-visible { opacity: 1; transform: translateY(0); }
-.setting-hint { grid-column: 1 / -1; margin: 8px 0 0; color: oklch(.609 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font: 500 11px/1.25 var(--sans); overflow-wrap: anywhere; }
+.setting-hint { flex-basis: 100%; margin: 8px 0 0; color: oklch(.609 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font: 500 11px/1.25 var(--sans); overflow-wrap: anywhere; }
 .factory-reset { padding: 11px 14px; border: 1px solid #79453f; background: rgba(174,64,54,.08); color: #df8a81; font: 700 11px var(--sans); letter-spacing: .05em; cursor: pointer; }
 .factory-reset:hover { background: rgba(174,64,54,.18); }
 #settingsStatus { color: oklch(.609 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font: 11px var(--sans); }
-.content-control-entry { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 24px; padding: 18px; border: 1px solid oklch(.383 calc(.033 * var(--accent-chroma)) var(--accent-hue)); background: rgba(var(--desktop-glow), .035); }
-.content-control-entry > div:first-child { flex: 1 1 260px; min-width: 0; }
-.content-control-entry h2 { margin-bottom: 6px; color: oklch(.87 calc(.017 * var(--accent-chroma)) var(--accent-hue)); font-size: 12px; }
-.content-control-entry p { margin: 0; color: oklch(.609 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font-size: 13px; line-height: 1.5; }
-.content-control-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-.content-control-actions button, .content-control-actions a { display: inline-flex; min-height: 38px; align-items: center; justify-content: center; padding: 8px 12px; border: 1px solid var(--teal-dim); background: var(--teal-soft); color: var(--teal); font: 700 11px var(--sans); letter-spacing: .05em; text-decoration: none; cursor: pointer; }
+/* «Содержимое сайта»: the actions keep their own colours and their width (D-02: never stretched); the frame, heading and row are the category's. */
+.content-control-actions button, .content-control-actions a { display: inline-flex; flex: none; min-height: var(--control-height-compact); align-items: center; justify-content: center; padding: 4px 12px; border: 1px solid var(--teal-dim); border-radius: var(--radius-card); background: var(--teal-soft); color: var(--teal); font: 700 11px var(--sans); letter-spacing: .05em; text-decoration: none; cursor: pointer; }
 .content-control-actions a { border-color: oklch(.42 calc(.038 * var(--accent-chroma)) var(--accent-hue)); background: transparent; color: oklch(.776 calc(.023 * var(--accent-chroma)) var(--accent-hue)); }
 .content-control-actions a:hover { border-color: var(--teal-dim); color: var(--teal); }
 .content-control-actions button:disabled { opacity: .45; cursor: not-allowed; }
@@ -1598,10 +1592,6 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .desktop:has(> .floating-text-format) .content-editor { padding-bottom: calc(min(34svh, 270px) + 96px); }
   .rich-text-toolbar { grid-template-columns: 1fr; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
   .access-editor-add { grid-template-columns: 1fr; }
-  .content-control-entry { align-items: stretch; flex-direction: column; }
-  /* D-16: in a column the 260px flex-basis became a 260px height, an empty band above the buttons. */
-  .content-control-entry > div:first-child { flex: 0 0 auto; }
-  .content-control-actions { width: 100%; }
   .info-ledger > div { grid-template-columns: 1fr; gap: 7px; padding: 14px; }
   .info-table-row { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
   .info-table-head { display: flex; gap: 10px; }
@@ -1609,8 +1599,6 @@ html[data-icon-size="large"] .desktop-icon-symbol { width: 62px; height: 62px; }
   .info-table-head-pad { display: none; }
   .info-table-row > :not(.order-drag-handle) { grid-column: 1; }
   .info-app footer { flex-direction: column; gap: 6px; }
-  .color-options, .setting-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .color-options > button:last-of-type { grid-column: 1 / -1; }
   .settings-footer { align-items: flex-start; flex-direction: column; }
   .trash-app { padding: 18px 12px 40px; }
   .trash-layout { min-height: 390px; }
@@ -2715,6 +2703,8 @@ html[data-motion="full"] .search-hit { animation: search-hit-fade 2400ms linear 
   .search-recommendations button { flex: 0 0 auto; min-height: 44px; max-width: min(62vw, 240px); padding: 5px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .broadcast-tabs button { min-height: 44px; }
   .content-control-actions button, .content-control-actions a, .factory-reset { min-height: 44px; }
+  /* Owner 2026-11-21 item 28: every button of a settings category is one tap target high. */
+  .setting-options > button { min-height: var(--tap-target); }
 }
 @media (max-width: 430px) {
   .taskbar-app { max-width: 44px; }
@@ -2800,11 +2790,9 @@ html[data-motion="reduced"] .assistant-items { transition-duration: var(--motion
 html[data-motion="off"] .desktop-assistant .assistant-items { animation: none !important; }
 html[data-motion="off"] .assistant-button:hover + .assistant-items, html[data-motion="off"] .assistant-button:focus-visible + .assistant-items, html[data-motion="off"] .assistant-button:active + .assistant-items { transform: none; }
 .assistant-items { position: absolute; inset: 0; z-index: 3; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-/* Owner 2026-11-18 (round 2): item settings are one section with a button per target; the mini-editor is a dialog with a stage (the figure and its items) and a tools column. */
-.companion-settings { display: grid; gap: 8px; }
-.companion-settings-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
-.companion-settings-buttons button, .companion-tools button, .companion-file { min-height: 30px; padding: 0 10px; border: 1px solid var(--line); background: var(--panel-2); color: inherit; font: 700 11px var(--sans); cursor: pointer; }
-.companion-settings-buttons button:disabled, .companion-tools button:disabled { opacity: .5; cursor: default; }
+/* Owner 2026-11-18 (round 2): item settings are one settings category with a button per target (its buttons are the category's since 2026-11-21 item 28); the mini-editor is a dialog with a stage (the figure and its items) and a tools column. */
+.companion-tools button, .companion-file { min-height: 30px; padding: 0 10px; border: 1px solid var(--line); background: var(--panel-2); color: inherit; font: 700 11px var(--sans); cursor: pointer; }
+.companion-tools button:disabled { opacity: .5; cursor: default; }
 .companion-editor-dialog { width: min(980px, calc(100vw - 24px)); }
 .companion-editor-body { display: grid; grid-template-columns: minmax(0, 1fr) 260px; align-items: start; gap: 16px; min-width: 0; }
 .companion-stage-box { min-width: 0; border: 1px solid var(--line); background: var(--panel); }
