@@ -279,18 +279,36 @@ test("26-12 lock-* and all non-class, non-route icons, their helpers, the type, 
   assert.equal(sliceOf(iconsSource, "export function PortiaIcon(", "\n}\n"), sliceOf(sample, "export function PortiaIcon(", "\n}\n"), "PortiaIcon");
 });
 
-// OWN-03 (26.1-15, clarification 11): the old six route icons are back byte for byte from the sample; the three routes that had no old icon are new.
+// OWN-03 (26.1-15, clarification 11; 26.1-18, owner 2026-11-21, item 19): the old six route icons are back byte for byte from the sample;
+// «Трансмиссивный» keeps the 26.1-03 drawing byte for byte from VECTOR_SAMPLE_COMMIT; only «Гемоконтактный» (route-blood) is drawn new.
+// «Аэрозольный» uses the old dust icon (route-dust), the 26.1-15 route-aerosol is gone.
 const oldRouteKeys = ["route-droplet", "route-dust", "route-contact", "route-oral", "route-sexual", "route-unknown"];
-const newRouteKeys = ["route-aerosol", "route-vector", "route-blood"];
+const newRouteKeys = ["route-blood"];
+const VECTOR_SAMPLE_COMMIT = "bfa9b1f50dd21d8cba9f2ae92eeaa2158fa50275";
 const routeNames: Record<string, string> = {
-  "Аэрозольный": "route-aerosol", "Контактно-бытовой": "route-contact", "Фекально-оральный": "route-oral",
+  "Аэрозольный": "route-dust", "Контактно-бытовой": "route-contact", "Фекально-оральный": "route-oral",
   "Трансмиссивный": "route-vector", "Гемоконтактный": "route-blood", "Половой путь": "route-sexual", "Неизвестно": "route-unknown",
 };
 
-test("OWN-03 the route icon keys are the old six plus the new three; route-fecal-oral is gone", () => {
+function readVectorSampleIcons(): string {
+  const short = VECTOR_SAMPLE_COMMIT.slice(0, 7);
+  try {
+    return git(["show", `${VECTOR_SAMPLE_COMMIT}:${ICONS_PATH}`]).replace(/\r\n/g, "\n");
+  } catch (error) {
+    assert.fail(`OWN-03 icon guard: commit ${short} or ${ICONS_PATH} in it is missing (${(error as Error).message}); run git fetch --unshallow (the clone must have full history)`);
+  }
+}
+
+test("OWN-03 the route icon keys are the old six plus route-vector and route-blood; route-aerosol and route-fecal-oral are gone", () => {
   const typed = [...typeBlock.matchAll(/"(route-[a-z-]+)"/g)].map((match) => match[1]).sort();
-  assert.deepEqual(typed, [...oldRouteKeys, ...newRouteKeys].sort());
+  assert.deepEqual(typed, [...oldRouteKeys, "route-vector", ...newRouteKeys].sort());
+  assert.ok(!iconsSource.includes("route-aerosol"), "route-aerosol is gone: «Аэрозольный» shows the old route-dust (owner 2026-11-21, item 19)");
   assert.ok(!iconsSource.includes("route-fecal-oral"), "route-fecal-oral is gone: the old route-oral is back");
+});
+
+test("OWN-03 route-vector equals the 26.1-03 drawing in commit bfa9b1f byte for byte", () => {
+  const sampleIconPaths = sliceOf(readVectorSampleIcons(), "const iconPaths:", "// The badge for each canonical term");
+  assert.equal(drawing("route-vector"), entryIn(sampleIconPaths, "route-vector"), `route-vector is unchanged since ${VECTOR_SAMPLE_COMMIT.slice(0, 7)}`);
 });
 
 test("OWN-03 the old route drawings and the drop helper equal ICON_SAMPLE_COMMIT byte for byte", () => {
@@ -307,7 +325,7 @@ test("OWN-03 the class map gives each of the seven route names its icon and keep
   for (const old of ["Воздушно-капельный", "Воздушно-пылевой", '"Половой"']) assert.ok(!iconMapBlock.includes(old), `${old} is not in the map`);
 });
 
-test("OWN-03 the three new route drawings are in the style of the old ones: root line 1.75, the drop helper, filled dots, fading only on minor lines, no colours, no dashes", () => {
+test("OWN-03 the new haemocontact drawing is in the style of the old ones: root line 1.75, the drop helper, filled dots, fading only on minor lines, no colours, no dashes", () => {
   const sampleIconPaths = sliceOf(readSampleIcons(), "const iconPaths:", "// The badge for each canonical term");
   const sampleDrawings = [...sampleIconPaths.matchAll(/\n  ("[a-z-]+"|[a-z]+):/g)].map((match) => entryIn(sampleIconPaths, match[1].replaceAll('"', "")).trim());
   for (const key of newRouteKeys) {
@@ -319,7 +337,5 @@ test("OWN-03 the three new route drawings are in the style of the old ones: root
     for (const dot of item.matchAll(/<circle[^>]*fill="currentColor"[^>]*\/>/g)) assert.match(dot[0], /r="\.9"/, `${key}: dots are .9 like the old dust`);
     assert.ok(!sampleDrawings.includes(item.trim()), `${key} is a new drawing, not one of the sample`);
   }
-  assert.ok(drawing("route-aerosol").includes("drop(") && /<circle[^>]*fill="currentColor"/.test(drawing("route-aerosol")), "aerosol is built from the drop of the droplet icon and the curls and dots of the dust icon");
-  assert.ok(drawing("route-aerosol").includes("a2.2 2.2 0 1"), "aerosol has dust curls");
   assert.ok(drawing("route-blood").includes("drop("), "the haemocontact icon has a drop at the needle");
 });

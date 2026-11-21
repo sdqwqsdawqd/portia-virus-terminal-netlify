@@ -11,15 +11,16 @@ export type PortiaIconName =
   | "class-stabilar" | "class-impulsar" | "class-infernar"
   | "class-isomorph" | "class-polymorph" | "class-xenomorph"
   | "route-droplet" | "route-dust" | "route-contact" | "route-oral" | "route-sexual" | "route-unknown"
-  | "route-aerosol" | "route-vector" | "route-blood"
+  | "route-vector" | "route-blood"
   | "lock-open" | "lock-closed";
 
 // Classification badges: the 18 signs of the six axes are the owner's round-5 drawing (26-ICON-DECISION.md, «Геометрия»),
 // each <symbol> copied verbatim into JSX. One base sign per axis; the level reads from growing distortion, there is no separate
 // level mark. Line 1.5 (not the 1.75 of the other icons); the filled parts carry stroke="none" so the root stroke does not swell them.
 // Routes of transmission are not levelled, so each is its own small picture without a frame.
-// Owner 2026-11-20 (OWN-03, clarification 11): the old route icons are back as they were (root line 1.75, the drop helper below); «Аэрозольный», «Трансмиссивный»
-// and «Гемоконтактный» had none and are drawn in their style: drop(), dots with fill="currentColor", minor lines with opacity=".55", no colours, no dashes.
+// Owner 2026-11-20 (OWN-03, clarification 11): the old route icons are back as they were (root line 1.75, the drop helper below); «Гемоконтактный» had none
+// and is drawn in their style: drop(), dots with fill="currentColor", minor lines with opacity=".55", no colours, no dashes.
+// Owner 2026-11-21, item 19: «Аэрозольный» shows the old dust icon (route-dust); «Трансмиссивный» keeps the 26.1-03 route-vector drawing.
 const drop = (x: number, y: number, k: number) => <path d={`M${x} ${y}c${-k} ${1.3 * k} ${-1.5 * k} ${2.1 * k} ${-1.5 * k} ${2.8 * k}a${1.5 * k} ${1.5 * k} 0 0 0 ${3 * k} 0c0 ${-0.7 * k} ${-0.5 * k} ${-1.5 * k} ${-1.5 * k} ${-2.8 * k}Z`} />;
 // Access locks (sketch #locks-a): a padlock whose shackle swings aside when open.
 const lockBody = <><rect x="5" y="10.5" width="14" height="10" rx="2" /><circle cx="12" cy="14.6" r="1.3" /><path d="M12 15.9v2" /></>;
@@ -120,8 +121,7 @@ const iconPaths: Record<PortiaIconName, React.ReactNode> = {
   "route-oral": <>{drop(12, 2.6, 1.3)}<path d="M5.6 9.6h12.8l-1.5 9.6a1.8 1.8 0 0 1-1.8 1.5H8.9a1.8 1.8 0 0 1-1.8-1.5Z" /><path d="M7.6 13h8.8" opacity=".55" /></>,
   "route-sexual": <><circle cx="9.2" cy="12" r="5.4" /><circle cx="14.8" cy="12" r="5.4" /></>,
   "route-unknown": <><circle cx="12" cy="12" r="8.5" strokeDasharray="2.2 2.6" /><path d="M9.6 9.6a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.2 1-1.2 1.9v.4" /><circle cx="12" cy="16.9" r=".9" fill="currentColor" /></>,
-  "route-aerosol": <>{drop(7, 3.5, 1.9)}{drop(17.5, 13.6, 1.1)}<path d="M12.5 8h5.8a2.2 2.2 0 1 0-2.2-2.2M3.5 15.6h8.4a2.2 2.2 0 1 1-2.2 2.2" /><circle cx="20.8" cy="4.8" r=".9" fill="currentColor" /><circle cx="21" cy="9.6" r=".9" fill="currentColor" /><circle cx="5.8" cy="20.4" r=".9" fill="currentColor" /></>,
-  "route-vector": <><circle cx="7" cy="8.4" r="1.4" /><path d="M6.1 9.5 3.4 14.8" /><ellipse cx="13.6" cy="11.4" rx="5.8" ry="2.4" transform="rotate(20 13.6 11.4)" /><path d="M11.2 8.6C11.8 5 15.2 3.2 19.6 3.8 19.2 7.4 15.4 9.2 11.2 8.6Z" />{drop(3.2, 16.4, .75)}<path d="M11.2 12.8 9.4 18.6M14.6 13.6 15.8 19.4" opacity=".55" /></>,
+  "route-vector": <><g fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="6.2" r="1.3" /><path d="M12 4.9V2.4" /><ellipse cx="12" cy="10.5" rx="2.2" ry="2.2" /><ellipse cx="12" cy="16.8" rx="1.7" ry="3.4" /><path d="M10 9.6C7 6.6 4.5 7 3.8 9C4.2 11 7.5 11.5 10 10.8" /><path d="M14 9.6C17 6.6 19.5 7 20.2 9C19.8 11 16.5 11.5 14 10.8" /><path d="M9.8 12.4L4.8 14.2" /><path d="M10.3 14.6L6.2 19.2" /><path d="M14.2 12.4L19.2 14.2" /><path d="M13.7 14.6L17.8 19.2" /></g></>,
   "route-blood": <><g transform="rotate(-45 12 12)"><path d="M2.5 12H7" /><rect x="7" y="9.6" width="10" height="4.8" rx="1" /><path d="M17 8.4v7.2M17 12h4M21 9.8v4.4" /><path d="M10 9.6v1.6M12.5 9.6v1.6M15 9.6v1.6" opacity=".55" /></g>{drop(5, 19.6, .65)}</>,
   "lock-open": <>{lockBody}<path d="M8 10.5V7.5a4 4 0 0 1 7.7-1.6" /></>,
   "lock-closed": <>{lockBody}<path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /></>,
@@ -135,7 +135,7 @@ export const classificationIcon: Record<string, PortiaIconName> = {
   "Люцидиум": "class-lucidium", "Транзитиум": "class-transitium", "Обливиум": "class-oblivium",
   "Изоморф": "class-isomorph", "Полиморф": "class-polymorph", "Ксеноморф": "class-xenomorph",
   "Стабилар": "class-stabilar", "Импульсар": "class-impulsar", "Инфернар": "class-infernar",
-  "Аэрозольный": "route-aerosol", "Контактно-бытовой": "route-contact", "Фекально-оральный": "route-oral",
+  "Аэрозольный": "route-dust","Контактно-бытовой": "route-contact", "Фекально-оральный": "route-oral",
   "Трансмиссивный": "route-vector", "Гемоконтактный": "route-blood", "Половой путь": "route-sexual", "Неизвестно": "route-unknown",
 };
 
