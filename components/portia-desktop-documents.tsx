@@ -6,7 +6,7 @@ import { mergePlaceholders } from "@/lib/level-placeholders";
 import { levelCopy } from "@/lib/level-copy";
 import { guideTileTitleFit } from "@/lib/guide-tile";
 import { RedactedPlaceholder } from "@/components/portia-redacted";
-import { PortiaIllustration } from "@/components/portia-icons";
+import { PortiaIcon, PortiaIllustration } from "@/components/portia-icons";
 import { emptyCopy, iframeLoadTimeoutMs } from "@/lib/app-state";
 import type { ImageFraming } from "@/lib/image-framing";
 import { FormattedText } from "@/components/portia-desktop-dossier";
@@ -246,8 +246,12 @@ export function GuideApp({ sections, formattedText, openCardId, onOpenCard, hitI
 const tileFraming = (framing: ImageFraming | undefined): ImageFraming | undefined => (framing && framing.ratio !== undefined ? { x: framing.x, y: framing.y, zoom: framing.zoom } : framing);
 
 function GuideTile({ item, hit, onOpen, live }: { item: GuideSection["cards"][number]; hit: boolean; onOpen: (id: string) => void; /** LIVE-02: the tile is a row of the order list and has a remove button; absent for a visitor. */ live?: { order: LiveOrder; remove: ReactNode } }) {
-  const tile = <button type="button" className={`guide-tile${item.cover ? "" : " guide-tile-thin"}${hit ? " search-hit" : ""}`} data-card-id={item.id} data-title-fit={guideTileTitleFit(item.title || "Без названия")} {...(hit ? { "data-search-hit": "true", "aria-current": "true" as const } : {})} onClick={() => onOpen(item.id)}>
-    {item.cover && <span className="guide-tile-cover"><PortiaImage src={item.cover} alt="" recordId={`${item.id}:cover`} priority="lazy" icon="guide" className="is-fill is-compact" framing={tileFraming(item.coverFraming)} /></span>}
+  // Owner 2026-11-21, item 23: every tile is one size. A tile with no cover draws the same 16:10 area with the guide icon, the title field is a fixed three lines
+  // (the font shrinks first, lib/guide-tile.ts), and the full title is the tile's `title` (React sets it as text, never as markup).
+  const tile = <button type="button" className={`guide-tile${hit ? " search-hit" : ""}`} title={item.title || "Без названия"} data-card-id={item.id} data-title-fit={guideTileTitleFit(item.title || "Без названия")} {...(hit ? { "data-search-hit": "true", "aria-current": "true" as const } : {})} onClick={() => onOpen(item.id)}>
+    {item.cover
+      ? <span className="guide-tile-cover"><PortiaImage src={item.cover} alt="" recordId={`${item.id}:cover`} priority="lazy" icon="guide" className="is-fill is-compact" framing={tileFraming(item.coverFraming)} /></span>
+      : <span className="guide-tile-cover is-empty" aria-hidden="true"><PortiaIcon name="guide" className="guide-tile-icon" /></span>}
     <span className="guide-tile-title">{item.title || "Без названия"}</span>
   </button>;
   return live ? <div className="live-tile" {...live.order.rowProps}>{live.order.handle}{tile}{live.remove}</div> : tile;

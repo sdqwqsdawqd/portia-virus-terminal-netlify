@@ -1401,22 +1401,35 @@ test("owner 2026-11-18: «Справочник» draws every tile through GuideT
   assert.match(styles, /\.guide-tile-cover img \{[^}]*object-position: 50% 50%/);
 });
 
-test("owner 2026-11-20 (OWN-01): a tile title gets a size from lib/guide-tile.ts and is never cut with an ellipsis", () => {
+// owner 2026-11-21 item 23: equal tiles; the font shrinks first, the third line is the last resort. (Until 26.1-21 the title wrapped whole, with no
+// line-clamp, and a tile without a cover was a thin row of its own height; both are replaced: every tile is one size.)
+test("owner 2026-11-21 (OWN-01, item 23): a tile title gets a size from lib/guide-tile.ts, in a field of a fixed three lines; the font shrinks first, the third line is the last resort", () => {
   const documents = lf(readFileSync(new URL("../components/portia-desktop-documents.tsx", import.meta.url), "utf8"));
   assert.match(documents, /import \{ guideTileTitleFit \} from "@\/lib\/guide-tile"/);
   assert.match(documents, /data-title-fit=\{guideTileTitleFit\(/, "GuideTile sets data-title-fit; both renderings go through GuideTile");
   const title = styles.match(/\.guide-tile-title\s*\{([^}]*)\}/)?.[1] ?? "";
   assert.ok(title.length > 0, "the title rule exists");
-  assert.doesNotMatch(title, /line-clamp|text-overflow|nowrap|min-height/, "the title wraps whole");
-  assert.match(title, /font:\s*700 13px/);
+  assert.doesNotMatch(title, /text-overflow|nowrap|min-height/, "no ellipsis, no single line");
+  assert.match(title, /height:\s*calc\(3 \* 1\.3 \* 13px \+ 12px\)/, "a fixed height of three lines of the regular size plus the padding");
+  assert.match(title, /overflow:\s*hidden/);
+  assert.match(title, /-webkit-line-clamp:\s*3/, "only the last resort: the third line is cut when 11px does not fit either");
+  assert.match(title, /font:\s*700 13px\/1\.3/);
+  assert.match(title, /padding:\s*6px 6px/, "the padding lib/guide-tile.ts estimates with");
   assert.match(title, /overflow-wrap:\s*anywhere/);
   assert.match(styles, /\.guide-tile\[data-title-fit="small"\] \.guide-tile-title\s*\{[^}]*font-size:\s*12px/);
   assert.match(styles, /\.guide-tile\[data-title-fit="smaller"\] \.guide-tile-title\s*\{[^}]*font-size:\s*11px/);
-  const thin = styles.match(/\.guide-tile-thin \.guide-tile-title\s*\{([^}]*)\}/)?.[1] ?? "";
-  assert.ok(thin.length > 0, "the thin tile title rule exists");
-  assert.doesNotMatch(thin, /text-overflow|nowrap|ellipsis/, "the thin tile title wraps whole too");
-  assert.match(thin, /var\(--tap-target\)/, "the thin tile keeps the touch minimum");
-  assert.doesNotMatch(styles, /\.guide-tile[^{}]*\{[^}]*(?:-webkit-line-clamp|text-overflow:\s*ellipsis)/, "no guide tile rule cuts text");
+  assert.doesNotMatch(styles, /\.guide-tile[^{}]*\{[^}]*text-overflow:\s*ellipsis/, "no guide tile rule draws an ellipsis");
+});
+
+test("owner 2026-11-21 (item 23): all tiles are one size, with a cover and without; a tile with no cover draws the same 16:10 area with the guide icon; the full title is the tile's title", () => {
+  const documents = lf(readFileSync(new URL("../components/portia-desktop-documents.tsx", import.meta.url), "utf8"));
+  assert.doesNotMatch(documents, /guide-tile-thin/, "no thin tile");
+  assert.doesNotMatch(styles, /\.guide-tile-thin/, "no thin tile rule");
+  assert.match(documents, /<span className="guide-tile-cover is-empty" aria-hidden="true"><PortiaIcon name="guide" className="guide-tile-icon" \/><\/span>/);
+  assert.match(documents, /title=\{item\.title \|\| "Без названия"\}/, "the full title by the pointer");
+  assert.match(styles, /\.guide-tile-cover\.is-empty \{[^}]*display: grid[^}]*place-items: center/);
+  assert.match(styles, /\.guide-grid \{[^}]*grid-auto-rows: 1fr/, "the rows of the grid are one height");
+  assert.match(styles, /\.guide-tile \{[^}]*display: flex[^}]*flex-direction: column/);
 });
 
 // LIVE-04/LIVE-05 (26.1-13): the sweep over the whole family of the visitor's desktop (the window parts and the virus card). The visitor draws no live class and calls no live tool
