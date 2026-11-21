@@ -130,14 +130,14 @@ export function useShortcutPlacement(
   return band === "phone" ? null : placement;
 }
 
-/** Owner 22: while «Выровнять значки по сетке» is on, a drop and an Alt+Arrow step end in a cell of the grid; the desktop provides it around the shortcuts. */
+/** Owner 22: while «Выровнять ярлыки по сетке» is on, a drop and an Alt+Arrow step end in a cell of the grid; the desktop provides it around the shortcuts. */
 export const ShortcutGridContext = createContext(false);
 
 // The desktop grid: the one the placement measured; before the first measurement, the workspace with the cell of the size the desktop set on the page root.
 const gridOf = (workspace: HTMLElement, placed?: { grid: DesktopGrid }): DesktopGrid => placed?.grid ?? desktopGrid({ width: workspace.clientWidth, height: workspace.clientHeight }, shortcutCell(document.documentElement.dataset.iconSize ?? "standard"));
 
 /**
- * Where every shortcut stands now, put into the grid (the toggle «Выровнять значки по сетке» was turned on): the places the tablet placement
+ * Where every shortcut stands now, put into the grid (the toggle «Выровнять ярлыки по сетке» was turned on): the places the tablet placement
  * gave, or on the PC the places measured on the page. null on a phone (a CSS grid, nothing to move) or when the desktop has no size to measure.
  */
 export function alignedShortcutPositions(nav: HTMLElement, ids: readonly DesktopShortcutId[], placement: ShortcutPlacementState | null): Partial<Record<DesktopShortcutId, ShortcutPosition>> | null {

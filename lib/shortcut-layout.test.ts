@@ -262,7 +262,7 @@ test("WR-02: phone, tablet and PC queries cover every width exactly once, in the
   assert.ok(css.includes("@media (width > 900px) {"), "the PC blocks start where the phone blocks (max-width: 900px) end");
 });
 
-// Owner 22: «Выровнять значки по сетке». Owner 2026-11-21 items 29, 31 replaced the old grid (inset + n * (cell + gap), cut short by the
+// Owner 22: «Выровнять ярлыки по сетке» (renamed by owner 2026-11-21 item 28). Owner 2026-11-21 items 29, 31 replaced the old grid (inset + n * (cell + gap), cut short by the
 // 56px taskbar reserve, so it was uneven and the bottom row could not be reached) with desktopGrid: one even step over the whole area.
 const cell = { width: 94, height: 86 };
 const gridArea = { width: 800, height: 600 };

@@ -1236,21 +1236,21 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     setShortcutPositions((current) => ({ ...current, [shortcutId]: position }));
   };
 
-  // Owner 22: «Выровнять значки по сетке» is saved with the other settings; turning it on puts every shortcut into the nearest free cell.
+  // Owner 22 (renamed by owner 2026-11-21 item 28): «Выровнять ярлыки по сетке» is saved with the other settings (field iconGrid); turning it on puts every shortcut into the nearest free cell.
   const toggleIconGrid = () => {
     const turnOn = desktopSettings.iconGrid !== "on";
     updateDesktopSettings({ iconGrid: turnOn ? "on" : "off" });
-    if (!turnOn) { announceLayout("Выравнивание значков по сетке выключено"); return; }
+    if (!turnOn) { announceLayout("Выравнивание ярлыков по сетке выключено"); return; }
     const nav = desktopIconsRef.current;
     const aligned = nav ? alignedShortcutPositions(nav, desktopShortcutOrder, shortcutPlacement) : null;
     if (aligned) setShortcutPositions(aligned);
-    announceLayout("Значки выровнены по сетке");
+    announceLayout("Ярлыки выровнены по сетке");
   };
 
-  // Owner 22: «Вернуть значки в изначальное положение» forgets the saved places only (the saved-places key is rewritten by the effect above); the other settings stay.
+  // Owner 22: «Вернуть ярлыки в изначальное положение» forgets the saved places only (the saved-places key is rewritten by the effect above); the other settings stay.
   const restoreShortcutPositions = () => {
     setShortcutPositions({});
-    announceLayout("Значки возвращены в изначальное положение");
+    announceLayout("Ярлыки возвращены в изначальное положение");
   };
 
   // The check window says aria-modal, so the rest of the desktop must neither take focus nor be read while it runs; the focus goes back where it was afterwards.
@@ -2300,10 +2300,10 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
               </SettingGroup>
               <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['gel','Гель'],['cells','Клетки'],['flasks','Лабораторные колбы'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={chooseWallpaper}>{wallpaperSaveFailed && <p className="setting-hint" role="alert">Фон не сохранён. Остался прежний.</p>}</SettingGroup>
               <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
-              <section className="settings-section"><h2>Значки рабочего стола</h2><div className="setting-options icon-layout-options">
-                <button type="button" className={desktopSettings.iconGrid === "on" ? "selected" : ""} aria-pressed={desktopSettings.iconGrid === "on"} onClick={toggleIconGrid}><span>Выровнять значки по сетке</span></button>
-                <button type="button" onClick={restoreShortcutPositions}><span>Вернуть значки в изначальное положение</span></button>
-              </div></section>
+              <SettingsCategory title="Ярлыки рабочего стола" className="icon-layout-options">
+                <button type="button" className={desktopSettings.iconGrid === "on" ? "selected" : ""} aria-pressed={desktopSettings.iconGrid === "on"} onClick={toggleIconGrid}><span>Выровнять ярлыки по сетке</span></button>
+                <button type="button" onClick={restoreShortcutPositions}><span>Вернуть ярлыки в изначальное положение</span></button>
+              </SettingsCategory>
               <SettingGroup title="Анимации" values={[['on','Включены'],['reduced','Уменьшены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)}><p className="setting-hint">Системная настройка движения не учитывается.</p></SettingGroup>
               <SettingGroup title="Паук" values={[['on','Показывать'],['off','Скрыть']]} current={desktopSettings.spider} onSelect={(value) => updateDesktopSetting("spider", value)} />
               {/* Owner 2026-11-18: things for Вивьян and for the spider; pictures of this device only, never uploaded. */}
@@ -2457,7 +2457,12 @@ function PromotionRetakeToast({ onDismiss }: { onDismiss: (openPromotion: boolea
   </aside>;
 }
 
+/** Owner 2026-11-21 item 28: one markup for every group of «Настройки» — the heading, then one row of options and actions; `className` marks only the row content, `sectionClassName` only the place of the group in the pane. */
+function SettingsCategory({ title, children, className, sectionClassName }: { title: string; children: React.ReactNode; className?: string; sectionClassName?: string }) {
+  return <section className={`settings-section${sectionClassName ? ` ${sectionClassName}` : ""}`}><h2>{title}</h2><div className={`setting-options${className ? ` ${className}` : ""}`}>{children}</div></section>;
+}
+
 function SettingGroup({ title, values, current, onSelect, children }: { title: string; values: [string, string][]; current: string; onSelect: (value: string) => void; children?: React.ReactNode }) {
-  return <section className="settings-section"><h2>{title}</h2><div className={`setting-options${title === "Цвет интерфейса" ? " color-options" : ""}`}>{values.map(([value, label]) => <button key={value} type="button" className={current === value ? "selected" : ""} aria-pressed={current === value} onClick={() => onSelect(value)}>{title === "Цвет интерфейса" && <i className={`swatch ${value}`} />}<span>{label}</span></button>)}{children}</div></section>;
+  return <SettingsCategory title={title} className={title === "Цвет интерфейса" ? "color-options" : undefined}>{values.map(([value, label]) => <button key={value} type="button" className={current === value ? "selected" : ""} aria-pressed={current === value} onClick={() => onSelect(value)}>{title === "Цвет интерфейса" && <i className={`swatch ${value}`} />}<span>{label}</span></button>)}{children}</SettingsCategory>;
 }
 

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { componentFamily, lf } from "./component-source.ts";
 import { accessCheckFailedText } from "./app-state.ts";
 
@@ -619,16 +619,23 @@ test("OWN-06: the preview CSS: above the taskbar, 220px, panel colours, accent f
   assert.ok(styles.includes("  .taskbar-preview { display: none; }"), "phone: no preview");
 });
 
-test("OWN-13 owner 22: «Выровнять значки по сетке» is a saved setting, «Вернуть значки в изначальное положение» forgets the saved places", () => {
+// owner 2026-11-21 item 28: «Значки» became «Ярлыки», as in «Размер ярлыков»; the saved field iconGrid and the settings key stay, so a saved grid is kept.
+test("OWN-13 owner 22: «Выровнять ярлыки по сетке» is a saved setting, «Вернуть ярлыки в изначальное положение» forgets the saved places", () => {
   assert.ok(source.includes('iconGrid: "off"') && source.includes('iconGrid: ["on", "off"]'), "the value is read back only from the known ones (T-26.1-52)");
   assert.ok(source.includes("iconGrid: string"));
-  assert.ok(source.includes("<span>Выровнять значки по сетке</span>") && source.includes("<span>Вернуть значки в изначальное положение</span>"));
+  assert.ok(source.includes('<SettingsCategory title="Ярлыки рабочего стола"'), "the group is drawn by the shared category");
+  assert.ok(source.includes("<span>Выровнять ярлыки по сетке</span>") && source.includes("<span>Вернуть ярлыки в изначальное положение</span>"));
+  const components = readdirSync(new URL("../components/", import.meta.url)).filter((name) => name.endsWith(".tsx"))
+    .map((name) => readFileSync(new URL(`../components/${name}`, import.meta.url), "utf8")).join("\n");
+  for (const old of ["Значки рабочего стола", "Выровнять значки по сетке", "Вернуть значки в изначальное положение", "Значки выровнены", "Значки возвращены", "Выравнивание значков"]) {
+    assert.ok(!components.includes(old), `«${old}» is gone from the interface`);
+  }
   assert.ok(source.includes('aria-pressed={desktopSettings.iconGrid === "on"}') && source.includes("onClick={toggleIconGrid}") && source.includes("onClick={restoreShortcutPositions}"));
   const toggle = source.slice(source.indexOf("const toggleIconGrid = "), source.indexOf("const restoreShortcutPositions = "));
   assert.ok(toggle.includes("alignedShortcutPositions(nav, desktopShortcutOrder, shortcutPlacement)") && toggle.includes("setShortcutPositions(aligned)"));
-  assert.ok(toggle.includes("announceLayout("), "a screen reader is told");
+  assert.ok(toggle.includes('announceLayout("Ярлыки выровнены по сетке")') && toggle.includes('announceLayout("Выравнивание ярлыков по сетке выключено")'), "a screen reader is told");
   const restore = source.slice(source.indexOf("const restoreShortcutPositions = "), source.indexOf("const restoreShortcutPositions = ") + 330);
-  assert.ok(restore.includes("setShortcutPositions({})") && restore.includes("announceLayout("));
+  assert.ok(restore.includes("setShortcutPositions({})") && restore.includes('announceLayout("Ярлыки возвращены в изначальное положение")'));
   assert.ok(source.includes("<ShortcutGridContext.Provider value={desktopSettings.iconGrid === \"on\"}>"), "the shortcuts learn about the grid through one context");
   assert.ok(styles.includes(".icon-layout-options {") && styles.indexOf(".icon-layout-options {") < styles.indexOf("users-tab:start"));
   // the factory reset already walks defaultDesktopSettings, so the grid goes back to off with it.

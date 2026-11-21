@@ -350,7 +350,7 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .setting-options > button { min-height: 54px; display: flex; align-items: center; justify-content: center; gap: 9px; padding: 10px; border: 1px solid oklch(.378 calc(.035 * var(--accent-chroma)) var(--accent-hue)); border-radius: var(--radius-card); background: rgba(255,255,255,.018); color: oklch(.776 calc(.022 * var(--accent-chroma)) var(--accent-hue)); cursor: pointer; }
 /* after the shared button rule so it wins: swatch above a 13px label (the 16px mono label is 77px wide), so five labels fit the 520 px window */
 .color-options > button { flex-direction: column; gap: 4px; padding-inline: 4px; font-size: 13px; }
-/* Owner 22: «Значки рабочего стола» — два действия в строку, те же кнопки настроек. */
+/* Owner 22: «Ярлыки рабочего стола» — два действия в строку, те же кнопки настроек. */
 .icon-layout-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .setting-options > button:hover, .setting-options > button.selected { border-color: var(--teal); background: var(--teal-soft); color: #fff; }
 .setting-options > button.selected { box-shadow: inset 0 -2px 0 var(--teal); }
