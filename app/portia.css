@@ -623,6 +623,11 @@ html:is([data-motion="reduced"], [data-motion="off"]) .promotion-retake-toast { 
   .virus-editor-layout.employee-editor-layout { align-items: stretch; grid-template-rows: minmax(0, 1fr); }
   .employee-editor-layout > .editor-record-list { position: static; align-content: start; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
   .employee-editor-layout > .employee-profile-editor { min-height: 0; overflow-y: auto; }
+  /* 26.1-20 (owner 2026-11-21, item 16): the recycle bin list fills the whole tab at any window size, as the roster does; the cap of the common list (62svh / 620px) is lifted and a long list scrolls in its column. */
+  .content-editor > .recycle-editor-layout { flex: 1 1 0; min-height: 320px; }
+  .virus-editor-layout.recycle-editor-layout { align-items: stretch; grid-template-rows: minmax(0, 1fr); }
+  .recycle-editor-layout > .editor-record-list { position: static; align-content: start; min-height: 0; max-height: none; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+  .recycle-editor-layout > :not(.editor-record-list):not(.editor-back-to-list) { min-height: 0; overflow-y: auto; }
   /* Editor scrolls as one page; pinned chrome took the owner's space (quick 261102-07k). */
   .content-editor > .promotion-editor { flex: 1 1 0; min-height: 0; }
   /* Tiles keep their own size when the window grows; extra width adds columns. */
@@ -3167,9 +3172,9 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
      46 заголовок окна + 56 (панель 48 + зазор 8 = top) + 28 нижний отступ .content-editor = 218. Только пока панель в одну строку: вторая
      строка (черновик, предупреждение, форма раздела) выше, и колонка осталась бы под ней, поэтому тогда прежний статичный список.
      «Сотрудники» (своя раскладка), «Повышение» и телефон не затронуты; деталь не прокручивается отдельно, страница — как раньше. */
-  .app-window.is-maximized .content-editor:not(:has(.etab-draft-label)):not(:has(.etab-banner)):not(:has(.editor-section-create:not([hidden]))) > .etab-body:not(.employee-editor-layout) > .etab-list,
+  .app-window.is-maximized .content-editor:not(:has(.etab-draft-label)):not(:has(.etab-banner)):not(:has(.editor-section-create:not([hidden]))) > .etab-body:not(.employee-editor-layout):not(.recycle-editor-layout) > .etab-list,
   .app-window.is-maximized .content-editor:not(:has(.etab-draft-label)):not(:has(.etab-banner)):not(:has(.editor-section-create:not([hidden]))) > .users-tab > .etab-body > .etab-list { position: sticky; top: 56px; align-self: start; max-height: calc(100svh - 218px); overflow-y: auto; overscroll-behavior: contain; }
-  .app-window.is-maximized .content-editor:not(:has(.etab-draft-label)):not(:has(.etab-banner)):not(:has(.editor-section-create:not([hidden]))) > .etab-body:not(.employee-editor-layout) > .etab-list .editor-toc ol,
+  .app-window.is-maximized .content-editor:not(:has(.etab-draft-label)):not(:has(.etab-banner)):not(:has(.editor-section-create:not([hidden]))) > .etab-body:not(.employee-editor-layout):not(.recycle-editor-layout) > .etab-list .editor-toc ol,
   .app-window.is-maximized .content-editor:not(:has(.etab-draft-label)):not(:has(.etab-banner)):not(:has(.editor-section-create:not([hidden]))) > .users-tab > .etab-body > .etab-list .editor-toc ol { max-height: none; }
 }
 /* R3 (D-19): две колонки только у плоских форм — профиль сотрудника и форма вируса в редакторе; не шире 1320px.

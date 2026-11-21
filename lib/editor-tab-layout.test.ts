@@ -1070,3 +1070,33 @@ test("owner 2026-11-20 OWN-10: where the strip is not drawn: blocks inside a car
   const recycle = editorSlice('{tab === "recycle" && (', '{tab === "search" && (');
   assert.ok(!recycle.includes("<CardTabs"), "the recycle bin is a list and a detail already");
 });
+
+// ---- 26.1-20 (owner 2026-11-21, item 16): «Корзина» — список на всю высоту вкладки при любом размере окна ----
+test("owner 2026-11-21 item 16: the recycle bin list fills the whole height of the tab on a PC window, the long list scrolls inside the column", () => {
+  const maximized = ".app-window.is-maximized";
+  const layout = ".content-editor > .recycle-editor-layout";
+  assert.equal(declared(layout, "flex", DESKTOP), "1 1 0", "the bin takes the rest of the editor height, as «Сотрудники»");
+  assert.equal(declared(layout, "min-height", DESKTOP), "320px");
+  assert.equal(declared(".virus-editor-layout.recycle-editor-layout", "align-items", DESKTOP), "stretch");
+  assert.equal(declared(".virus-editor-layout.recycle-editor-layout", "grid-template-rows", DESKTOP), "minmax(0, 1fr)");
+  const column = ".recycle-editor-layout > .editor-record-list";
+  assert.equal(declared(column, "min-height", DESKTOP), "0");
+  assert.equal(declared(column, "overflow-y", DESKTOP), "auto");
+  assert.equal(declared(column, "align-content", DESKTOP), "start");
+  assert.equal(declared(column, "max-height", DESKTOP), "none", "the 62svh / 620px cap of the common list does not stop the column");
+  assert.equal(declared(".recycle-editor-layout > :not(.editor-record-list):not(.editor-back-to-list)", "min-height", DESKTOP), "0", "the detail is scrolled inside, so the row stays one fr tall");
+  assert.equal(declared(".recycle-editor-layout > :not(.editor-record-list):not(.editor-back-to-list)", "overflow-y", DESKTOP), "auto");
+  // The sticky column of the maximized window (quick 261117-bi1) names the bin out, as it names out «Сотрудники».
+  const sticky = rules.filter((rule) => rule.selectors.some((selector) => selector.startsWith(maximized) && selector.includes("> .etab-body:not(.employee-editor-layout)")));
+  assert.ok(sticky.length > 0, "the maximized sticky rules are found");
+  for (const rule of sticky) {
+    for (const selector of rule.selectors.filter((item) => item.includes("> .etab-body:not(.employee-editor-layout)"))) {
+      assert.ok(selector.includes(":not(.recycle-editor-layout)"), `${selector} leaves the bin to its own full-height layout`);
+    }
+  }
+  // Nothing of it is outside the PC query, and the phone list stays one column of its own.
+  assert.equal(declared(layout, "flex"), undefined);
+  assert.equal(declared(column, "overflow-y"), undefined);
+  // «База вирусов» keeps the page-scroll list and detail: its long form scrolls the page, the column sticks (quick 261117-bi1), so no fixed-height row.
+  assert.equal(declared(".content-editor > .virus-editor-layout:not(.recycle-editor-layout):not(.employee-editor-layout)", "flex", DESKTOP), undefined);
+});
