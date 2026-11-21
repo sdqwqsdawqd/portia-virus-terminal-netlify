@@ -48,11 +48,10 @@ import {
   templateCardWidth,
   templateDefaultTitle,
   templateExportError,
+  templateDownloadName,
   templateExportViolations,
-  templateFileName,
   templateImageAccept,
   templateImageOpenError,
-  templatePngFileName,
   templatePngTooLargeError,
   type TemplateCssRule,
   type TemplateImage,
@@ -368,7 +367,7 @@ export function PortiaTemplateBuilder({ onClose, standalone = false }: { onClose
       await minimumShown;
       // D-61: downloadTemplateBlob throws only before the browser has the file; once it returns the file is handed over, so "done" is
       // set whatever the cleanup after the click did, and the error below can only mean that no file was passed.
-      downloadTemplateBlob(content, format === "png" ? templatePngFileName : templateFileName);
+      downloadTemplateBlob(content, templateDownloadName(snapshot.virus.name, format));
       setExportedKey(snapshotKey);
       setPhase("done");
     } catch (error) {
