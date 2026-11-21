@@ -169,7 +169,9 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .workspace {
   position: relative;
   min-height: calc(100svh - 88px);
-  overflow: hidden;
+  /* Owner 2026-11-22: clip, not hidden. A hidden box can still be scrolled by the browser (a focus, a scrollIntoView, a file dragged to its edge), and then
+     every window drifts off the screen with no scroll bar to bring it back. A clipped box cannot scroll at all. */
+  overflow: clip;
 }
 
 .desktop-icons {
@@ -239,7 +241,7 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
   min-height: 0;
   border: 1px solid var(--line-bright);
   border-radius: var(--radius-window);
-  overflow: hidden;
+  overflow: clip; /* owner 2026-11-22: as .workspace, the window frame itself never scrolls its title bar away */
   background: var(--panel);
   box-shadow: 0 26px 80px rgba(0,0,0,.48), 0 0 0 1px rgba(255,255,255,.02);
 }

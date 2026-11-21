@@ -159,7 +159,7 @@ test("STAB-DESK-07: app ids, storage keys and API endpoints stay as pinned", () 
   };
   assert.equal(/type AppId = ([^;]+);/.exec(source)?.[1], '"archive" | "employees" | "search" | "info" | "guide" | "promotion" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor" | "template"');
   // IN-05 (Phase 25): the two device-cache keys live only in lib/device-cache.ts; the desktop imports them.
-  assert.deepEqual(keys(source), ["portia-broadcasts-read-signature-v1", "portia-desktop-shortcuts-v3", "portia-guide-expanded-v3", "portia-quests-seen-v1", "portia-taskbar-order-v1"]);
+  assert.deepEqual(keys(source), ["portia-broadcasts-read-signature-v1", "portia-desktop-shortcuts-v3", "portia-guide-folded-v4", "portia-quests-seen-v1", "portia-taskbar-order-v1"]);
   assert.match(source, /import \{[^}]*\bCONTENT_CACHE_KEY\b[^}]*\bEMPLOYEES_CACHE_KEY\b[^}]*\} from "@\/lib\/device-cache";/);
   assert.deepEqual(keys(editorSource), ["portia-format-panel-v1"]);
   assert.deepEqual(endpoints(source), { "/api/content": 2, "/api/access": 1, "/api/employees": 1 });
@@ -780,11 +780,11 @@ test("animated shortcuts keep one precise vector artwork through the resting han
   assert.ok(refreshedAnimationLines.every((line) => line.includes(" both;")), "refreshed icon animation must retain its exact terminal frame");
 });
 
-test("guide sections start folded and the compact back control does not cover card content", () => {
-  // Owner 2026-11-18: the device stores the OPENED sections, so a section it never saw (a new one) starts folded too.
-  assert.ok(source.includes('const guideExpandedStorageKey = "portia-guide-expanded-v3"'));
-  assert.ok(source.includes("const [expanded, setExpanded] = useState<string[]>([]);"));
-  assert.ok(source.includes("const folded = !expanded.includes(section.id);"));
+test("guide sections start open and the compact back control does not cover card content", () => {
+  // Owner 2026-11-22: every section opens by itself; the device stores only the FOLDED ones, so a new section starts open.
+  assert.ok(source.includes('const guideFoldedStorageKey = "portia-guide-folded-v4"'));
+  assert.ok(source.includes("const [foldedIds, setFoldedIds] = useState<string[]>([]);"));
+  assert.ok(source.includes("const folded = foldedIds.includes(section.id);"));
   assert.doesNotMatch(source, /initialCollapsed\.current/);
   const back = /\.guide-back-bar \{([^}]*)\}/.exec(styles)?.[1] ?? "";
   assert.match(back, /height:\s*36px/);
@@ -1040,7 +1040,7 @@ test("«Корзина» shows no restore or delete control on the desktop; the 
 test("«Таблица» and «Устав»: skeleton until onLoad, fatal panel after the 15s timeout, retry remounts the frame; sandbox and zoom stay (STAB-APP-06, T-19-20)", () => {
   const documents = desktopFamily.find((part) => part.file === "portia-desktop-documents.tsx")?.text ?? "";
   const start = documents.indexOf("export function EmbeddedDocument");
-  const embedded = documents.slice(start, documents.indexOf("// Owner 2026-11-18: v3 stores the sections", start));
+  const embedded = documents.slice(start, documents.indexOf("// Owner 2026-11-22: every section opens by itself", start));
   assert.match(embedded, /<iframe[^>]*key=\{frameKey\}[^>]*onLoad=/);
   assert.ok(embedded.includes("sandbox={embedSandbox}"));
   assert.equal(count(documents, "sandbox={embedSandbox}"), 2, "the document frame and the YouTube frame");
@@ -1564,4 +1564,9 @@ test("IN-02 (26.1-REVIEW-2): the copy of a window is not locked and not active",
   const seam = desktopFamily.find((part) => part.file === "portia-desktop-taskbar.tsx")?.text ?? "";
   const clone = seam.slice(seam.indexOf("export function previewCloneOf"), seam.indexOf("type TaskbarPreviewProps"));
   assert.match(clone, /copy\.classList\.remove\("is-modal-locked", "is-active"\)/);
+});
+
+test("owner 2026-11-22: the workspace and the window frame clip, so nothing can scroll the windows off the screen", () => {
+  assert.match(/\n\.workspace \{([^}]*)\}/.exec(styles)?.[1] ?? "", /overflow: clip;/);
+  assert.match(/\n\.app-window \{([^}]*)\}/.exec(styles)?.[1] ?? "", /overflow: clip;/);
 });
