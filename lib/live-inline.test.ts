@@ -120,6 +120,15 @@ test("26.1-27 (owner 33): a multi-line place is the visitor's text block: no fra
   // without field-sizing the rows are the text's own lines: no floor of two or three rows that the visitor's paragraph does not have
   assert.match(sliceOf(seam, "export function LiveCommitText(", "export function LiveTextarea("), /rows=\{shown\.split\("\\n"\)\.length\}/);
   assert.match(sliceOf(seam, "export function LiveTextarea(", "export function LiveDate("), /rows=\{value\.split\("\\n"\)\.length\}/);
+  // review 3 WR-04: a browser without field-sizing gets the text's own height from scrollHeight, so a long paragraph is never one line with its own scroll
+  const fallback = sliceOf(seam, "function useTextHeightFallback(", "export function LiveCommitText(");
+  assert.match(fallback, /CSS\.supports\("field-sizing", "content"\)\) return;/, "only where field-sizing is missing");
+  assert.match(fallback, /element\.style\.height = "auto";\s*\/\/[^\n]*\n\s*element\.style\.height = `\$\{element\.scrollHeight \+ element\.offsetHeight - element\.clientHeight\}px`;/, "the height is the text's, no floor");
+  assert.match(fallback, /new ResizeObserver\(\(\) => \{ if \(element\.clientWidth !== width\) fit\(\); \}\)/, "a new width wraps again; its own height is no reason to fit");
+  assert.match(fallback, /return \(\) => observer\.disconnect\(\);/);
+  assert.match(fallback, /\}, \[ref, text\]\);/, "fitted again after every change of the text");
+  assert.match(sliceOf(seam, "export function LiveCommitText(", "export function LiveTextarea("), /useTextHeightFallback\(area, multiline \? typed \?\? value : null\);[\s\S]*<textarea\s+ref=\{area\}/);
+  assert.match(sliceOf(seam, "export function LiveTextarea(", "export function LiveDate("), /useTextHeightFallback\(area, value\);\s*return <textarea\s+ref=\{area\}/);
   // the formatted text: pressed, it is the editor's field; in the live mode the field drops its frame, padding, label row and tall minimum
   const field = declarationsOf(".live-surface .live-rich-edit .formatted-rich-input");
   for (const [property, value] of [["min-height", "1.6em"], ["max-height", "none"], ["padding", "0"], ["border", "0"], ["border-radius", "0"], ["background", "transparent"], ["box-shadow", "none"], ["overflow", "visible"]] as const) {

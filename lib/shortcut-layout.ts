@@ -369,6 +369,25 @@ export function resolveShortcutOverlaps(
 }
 
 /**
+ * Review 3 WR-01: true when a saved place (in `order`) needs a bigger area than this one, its right or bottom edge past the inset, so that
+ * resolveShortcutOverlaps would have to hold it inside. That desktop is a smaller PC window than the one the places were set on (half a screen,
+ * a laptop after a big monitor, devtools open): the placement holds the places inside for the screen only, and the saved key must stay as the
+ * owner left it, so the layout comes back on the big screen. Junk places are not counted (they are junk on any screen). Pure.
+ */
+export function shortcutPlacesOutgrowArea(
+  positions: Readonly<Record<string, { x: number; y: number } | undefined>>,
+  order: readonly string[],
+  cell: ShortcutCell,
+  grid: DesktopGrid,
+): boolean {
+  return order.some((id) => {
+    const spot = positions[id];
+    if (!spot || !Number.isFinite(spot.x) || !Number.isFinite(spot.y)) return false;
+    return spot.x + cell.width > grid.area.width - grid.originX || spot.y + cell.height > grid.area.height - grid.originY;
+  });
+}
+
+/**
  * Where a released (or Alt+Arrow moved) shortcut lands (item 30): with the grid the cell under the point, without it the point held inside the
  * area; if another shortcut (`positions`, the own place left out) or an obstacle is there, the nearest free cell or place instead (`displaced`).
  * The result is inside the area and covers nothing, unless the whole area is full (then the wanted place stays). Pure.

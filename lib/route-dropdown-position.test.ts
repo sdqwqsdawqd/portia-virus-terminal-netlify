@@ -16,7 +16,8 @@ test("near the bottom of the screen the panel opens upwards, 4px above the butto
   const place = routePanelPlacement({ top: 700, bottom: 732, left: 40, width: 340 }, panel, screen);
   assert.equal(place.side, "up");
   assert.equal(place.top, 700 - 4 - 280);
-  assert.equal(place.bottom, 768 - 700 + 4, "anchored by its bottom edge, so a taller description grows upwards, away from the button");
+  assert.equal(place.top + Math.min(panel.height, place.maxHeight), 700 - 4, "review 3 WR-03: placed by its top edge, its bottom edge 4px above the button");
+  assert.ok(!("bottom" in place), "no CSS bottom: it would count from the layout viewport's bottom");
   assert.equal(place.left, 40);
   assert.equal(place.width, 320);
   assert.equal(place.maxHeight, 700 - 4 - 8, "no taller than the room above, less 8px");
@@ -26,7 +27,6 @@ test("near the top of the screen the panel opens downwards, 4px below the button
   const place = routePanelPlacement({ top: 60, bottom: 92, left: 40, width: 340 }, panel, screen);
   assert.equal(place.side, "down");
   assert.equal(place.top, 92 + 4);
-  assert.equal(place.bottom, null);
   assert.equal(place.maxHeight, 768 - 92 - 4 - 8);
 });
 
@@ -47,6 +47,15 @@ test("the larger side wins when the panel fits nowhere; the cap is the room less
   assert.equal(highButton.maxHeight, 224 - 8);
   const tiny = routePanelPlacement({ top: 60, bottom: 92, left: 40, width: 340 }, panel, { width: 1366, height: 160 });
   assert.equal(tiny.maxHeight, 120, "never smaller than 120px");
+});
+
+test("review 3 WR-03: with the phone keyboard the visible bottom is the room's bottom, and an upward panel still ends 4px above the button", () => {
+  // The layout viewport is 768px high, the keyboard leaves 420px visible: the component passes the visible bottom in the same coordinates.
+  const keyboard = { width: 390, height: 420 };
+  const place = routePanelPlacement({ top: 360, bottom: 392, left: 16, width: 358 }, panel, keyboard);
+  assert.equal(place.side, "up", "356 above, 24 below the visible bottom");
+  assert.equal(place.top + Math.min(panel.height, place.maxHeight), 360 - 4, "never over the button");
+  assert.ok(place.top >= 0);
 });
 
 test("a narrow screen: the panel is the screen less 32px and stands 16px from each edge", () => {

@@ -379,6 +379,7 @@ test("[STAB-TMPL-01] classification: a changed value shows in the preview and th
 /**
  * One axis of the classification form. Six axes are selects; the routes of transmission (the third field) are the drop-down of
  * 26.1-15: a press opens a panel of checkboxes, a second press closes it. A single route is chosen, the drop-down is closed again.
+ * 26.1-25 (owner item 32): the panel is a portal into document.body, not a DOM child of the field, so it is found by the button's aria-controls.
  */
 async function chooseClassValue(fields: Locator, index: number, value: string) {
   const field = fields.nth(index);
@@ -388,7 +389,14 @@ async function chooseClassValue(fields: Locator, index: number, value: string) {
     return;
   }
   await dropdown.click();
-  await field.getByRole("checkbox", { name: value }).check();
+  await expect(dropdown).toHaveAttribute("aria-expanded", "true");
+  const panelId = await dropdown.getAttribute("aria-controls");
+  expect(panelId).toBeTruthy();
+  // useId gives an id with colons: a selector by attribute needs no escaping.
+  const panel = field.page().locator(`[id="${panelId}"]`);
+  // The panel lives in document.body and never inside the form, so opening it does not stretch the form's scroll.
+  await expect(field.page().locator(`body > [id="${panelId}"]`)).toHaveCount(1);
+  await panel.getByRole("checkbox", { name: value }).check();
   await dropdown.click();
   await expect(dropdown).toHaveAttribute("aria-expanded", "false");
 }

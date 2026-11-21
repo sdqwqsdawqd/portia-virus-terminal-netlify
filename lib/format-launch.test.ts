@@ -129,6 +129,9 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //      addMutation, addSubsection), других русских строк не добавлено. Источник одобрения: 26.1-OWNER-REQUEST, пункт 34 (2026-11-21), план 26.1-26.
 //  27. PORTIA-26.1-ADDTABS2 (26.1-26 Task 2; OWN-10, D-21) — то же для полос мутаций вкладки вирусов и подразделов «Информации» (applyAddTabs2Hunk): проп add у CardTabs и удаление
 //      кнопок «+ ДОБАВИТЬ МУТАЦИЮ» и «+ ПОДРАЗДЕЛ» под списками; подписи в шве, других русских строк не добавлено. Источник одобрения: 26.1-OWNER-REQUEST, пункт 34, план 26.1-26.
+//  28. PORTIA-Q261122-GUIDEOPEN (quick 261122-ws3; D-21) — разделы и карточки вкладки «Справочник» в редакторе открыты по умолчанию (applyGuideOpenHunk): набор guideFolded
+//      и guideOpenByDefault рядом с прежним expanded, isOpen/setOpen учитывают оба. Русских строк не добавлено. Источник одобрения: владелец 2026-11-22 («разделы и основные карточки
+//      развёртывались сами», ответ «1»).
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -1432,6 +1435,13 @@ const INFO_SUBSECTION_ADD_UNDER_LIST = [
   "              </div>",
   "",
 ].join("\n");
+/** PORTIA-Q261122-GUIDEOPEN (owner 2026-11-22): the sections and cards of «Справочник» in the editor start open; the rest keep the D-01 collapsed start. */
+const GUIDE_OPEN_OLD = "  const isOpen = (id: string) => expanded.has(id);\n  const setOpen = (ids: string[], open: boolean) => setExpanded((current) => {\n    const next = new Set(current);\n    for (const id of ids) { if (open) next.add(id); else next.delete(id); }\n    return next;\n  });";
+const GUIDE_OPEN_NEW = "  // Owner 2026-11-22: the sections and cards of «Справочник» start open; only the ones folded during this visit are closed.\n  const [guideFolded, setGuideFolded] = useState<Set<string>>(() => new Set());\n  const guideOpenByDefault = new Set(draft.guideSections.flatMap((section) => [section.id, ...section.cards.map((card) => card.id)]));\n  const isOpen = (id: string) => (guideOpenByDefault.has(id) ? !guideFolded.has(id) : expanded.has(id));\n  const setOpen = (ids: string[], open: boolean) => {\n    setGuideFolded((current) => {\n      const next = new Set(current);\n      for (const id of ids) { if (!guideOpenByDefault.has(id)) continue; if (open) next.delete(id); else next.add(id); }\n      return next;\n    });\n    setExpanded((current) => {\n      const next = new Set(current);\n      for (const id of ids) { if (guideOpenByDefault.has(id)) continue; if (open) next.add(id); else next.delete(id); }\n      return next;\n    });\n  };";
+function applyGuideOpenHunk(text: string): string {
+  return replaceOnce(text, GUIDE_OPEN_OLD, GUIDE_OPEN_NEW, "guide open by default: isOpen and setOpen");
+}
+
 function applyAddTabs2Hunk(text: string): string {
   let next = replaceOnce(
     text,
@@ -1482,6 +1492,7 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26.1-ADDCARD", apply: applyGuideAddCardHunk },
   { id: "PORTIA-26.1-ADDTABS", apply: applyAddTabsHunk },
   { id: "PORTIA-26.1-ADDTABS2", apply: applyAddTabs2Hunk },
+  { id: "PORTIA-Q261122-GUIDEOPEN", apply: applyGuideOpenHunk },
 ];
 
 function expectedEditor(sample: string): string {

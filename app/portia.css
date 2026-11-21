@@ -169,7 +169,9 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
 .workspace {
   position: relative;
   min-height: calc(100svh - 88px);
-  overflow: hidden;
+  /* Owner 2026-11-22: clip, not hidden. A hidden box can still be scrolled by the browser (a focus, a scrollIntoView, a file dragged to its edge), and then
+     every window drifts off the screen with no scroll bar to bring it back. A clipped box cannot scroll at all. */
+  overflow: clip;
 }
 
 .desktop-icons {
@@ -239,7 +241,7 @@ img[src$="/portia-logo.png"] { filter: var(--mark-filter); }
   min-height: 0;
   border: 1px solid var(--line-bright);
   border-radius: var(--radius-window);
-  overflow: hidden;
+  overflow: clip; /* owner 2026-11-22: as .workspace, the window frame itself never scrolls its title bar away */
   background: var(--panel);
   box-shadow: 0 26px 80px rgba(0,0,0,.48), 0 0 0 1px rgba(255,255,255,.02);
 }
@@ -2956,7 +2958,7 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 .live-date > span { font: 700 11px var(--sans); letter-spacing: .08em; text-transform: uppercase; }
 .live-date input { width: 150px; min-height: 28px; }
 .live-date small { color: var(--danger); font: 11px var(--sans); }
-/* 26.1-27 (п. 33): условия — абзац участника: без рамки и отступов, высота по тексту (field-sizing; без него — строки по числу абзацев), угла изменения размера нет. */
+/* 26.1-27 (п. 33): условия — абзац участника: без рамки и отступов, высота по тексту (field-sizing; без него высоту по scrollHeight ставит useTextHeightFallback), угла изменения размера нет. */
 .live-surface .broadcast-conditions .live-textarea { display: block; width: 100%; box-sizing: border-box; resize: none; field-sizing: content; overflow-wrap: anywhere; }
 .live-card-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
 .live-card-tools .live-remove-wrap { position: static; margin-left: auto; }

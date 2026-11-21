@@ -545,3 +545,20 @@ test("owner 2026-11-21 item 30: the desktop checks the saved places once after l
   assert.ok(effect.includes("if (shortcutOverlapsChecked.current || !shortcutPositionsLoaded || !desktopSettingsLoaded || !shortcutPlacement) return;"), "once, after load and measurement");
   assert.ok(desktop.includes('const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v3"'), "the same key (STAB-DESK-07)");
 });
+
+test("review 3 WR-01: places set on a bigger PC window are not rewritten on a smaller one; the screen still holds them inside and apart", () => {
+  const order = [...layout.desktopShortcutIds];
+  const bigGrid = layout.desktopGrid({ width: 1920, height: 1000 }, pcCell);
+  const trashAtRight = { ...layout.homeShortcutPositions(bigGrid), trash: { x: 1920 - pcCell.width - 8, y: 1000 - pcCell.height - 8 } };
+  assert.equal(layout.shortcutPlacesOutgrowArea(trashAtRight, order, pcCell, bigGrid), false, "on the screen they were set on, every place fits");
+  assert.equal(layout.shortcutPlacesOutgrowArea(trashAtRight, order, pcCell, pcGrid), true, "a 1366px window is smaller than the places need");
+  assert.equal(layout.shortcutPlacesOutgrowArea(pcHomes, order, pcCell, pcGrid), false, "the homes of this window fit");
+  const edge = { search: { x: 1366 - pcCell.width - 8, y: 680 - pcCell.height - 8 } };
+  assert.equal(layout.shortcutPlacesOutgrowArea(edge, order, pcCell, pcGrid), false, "a place right at the inset still fits");
+  assert.equal(layout.shortcutPlacesOutgrowArea({ search: { x: edge.search.x + 1, y: 8 } }, order, pcCell, pcGrid), true, "one px past the inset does not");
+  assert.equal(layout.shortcutPlacesOutgrowArea({ search: { x: Number.NaN, y: 8 }, stranger: { x: 9000, y: 9000 } }, order, pcCell, pcGrid), false, "junk and ids outside the order are not counted");
+  // What the screen shows on the small window: inside the area, nothing on another shortcut (item 30).
+  assertNoOverlap(layout.resolveShortcutOverlaps(trashAtRight, order, pcCell, pcGrid), "shown on the smaller window");
+  const desktop = readFileSync(new URL("../components/portia-desktop.tsx", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+  assert.ok(/setShortcutPositions\(\(current\) => \{\n\s+if \(shortcutPlacesOutgrowArea\(current, desktopShortcutOrder, cell, grid\)\) return current;\n\s+const resolved = resolveShortcutOverlaps\(current,/.test(desktop), "the load check keeps the saved key when a place outgrows the area");
+});

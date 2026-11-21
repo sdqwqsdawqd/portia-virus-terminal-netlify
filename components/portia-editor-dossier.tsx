@@ -401,21 +401,19 @@ export function DossierTabs({ active, changed, onSelect, tabs }: { active: Dossi
   </nav>;
 }
 
-// Owner 2026-11-21, item 32: the panel of the routes is a layer over the page. A modal dialog is the top layer, so a field inside one keeps its panel
-// inside that dialog; everywhere else the panel goes to document.body, above the windows of the desktop.
-function routePanelHost(button: HTMLElement | null): Element {
-  return button?.closest("dialog") ?? document.body;
-}
-
-// The visible screen, with the phone keyboard accounted for.
+// Review 3 WR-03: the room in the coordinates of the layout viewport, the ones getBoundingClientRect and position: fixed use. The width is the
+// layout viewport's; the height ends at the bottom of what is visible (visualViewport.offsetTop + height, in the same coordinates), so a panel
+// opening down stops above the phone keyboard. Pinch zoom no longer shifts the panel onto the button.
 function routeViewport() {
-  return { width: window.visualViewport?.width ?? window.innerWidth, height: window.visualViewport?.height ?? window.innerHeight };
+  const page = document.documentElement;
+  const visual = window.visualViewport;
+  return { width: page.clientWidth, height: visual ? Math.min(page.clientHeight, visual.offsetTop + visual.height) : page.clientHeight };
 }
 
-// One write of the panel's place: an upward panel hangs by its bottom edge, so a longer description grows away from the button.
+// One write of the panel's place: the top edge for both sides (review 3 WR-03), never a CSS bottom.
 function writeRoutePanelPlace(node: HTMLElement, place: RoutePanelPlace) {
-  node.style.top = place.bottom === null ? `${place.top}px` : "auto";
-  node.style.bottom = place.bottom === null ? "auto" : `${place.bottom}px`;
+  node.style.top = `${place.top}px`;
+  node.style.bottom = "auto";
   node.style.left = `${place.left}px`;
   node.style.width = `${place.width}px`;
   node.style.maxHeight = `${place.maxHeight}px`;
@@ -433,9 +431,8 @@ function scrollingAncestors(node: HTMLElement): HTMLElement[] {
 }
 
 // The focusable element that follows the button in the page, the panel's own checkboxes left out.
-function nextTabStop(button: HTMLElement, panel: HTMLElement, host: Element | null): HTMLElement | null {
-  const scope = host instanceof HTMLDialogElement ? host : document;
-  const stops = [...scope.querySelectorAll<HTMLElement>("a[href], button, input, select, textarea, [tabindex]")]
+function nextTabStop(button: HTMLElement, panel: HTMLElement): HTMLElement | null {
+  const stops = [...document.querySelectorAll<HTMLElement>("a[href], button, input, select, textarea, [tabindex]")]
     .filter((node) => node.tabIndex >= 0 && !(node as HTMLButtonElement).disabled && !panel.contains(node) && node.getClientRects().length > 0);
   const at = stops.indexOf(button);
   return at < 0 ? null : stops[at + 1] ?? null;
@@ -453,9 +450,9 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
   const panelId = useId();
   const footId = useId();
   const panel = useRef<HTMLDivElement>(null);
-  // Owner 2026-11-21, item 32: the panel is a layer over the page, drawn into document.body (or the open dialog the field stands in), never a child of
-  // the scrolling form, so opening it changes neither the layout nor the scroll bars of the window. The host is chosen on the press that opens it.
-  const [host, setHost] = useState<Element | null>(null);
+  // Owner 2026-11-21, item 32: the panel is a layer over the page, drawn into document.body, never a child of the scrolling form, so opening it
+  // changes neither the layout nor the scroll bars of the window. Review 3 WR-05 (owner's choice): always document.body; no caller of the field
+  // stands in a <dialog>. A field put into a <dialog> one day needs its own host there (the top layer, and a transformed dialog moves fixed children).
   // The foot of the panel says the route under the pointer or in focus (item 18). Item 32: the pointed route is a ref and the text is written into the
   // foot directly, so moving the pointer over the rows renders nothing; React draws the foot empty and never touches its text.
   const foot = useRef<HTMLParagraphElement>(null);
@@ -477,20 +474,32 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
   // Owner items 18 and 32: placed before the paint by the button's rectangle (position: fixed), down or up, never past the edge of the screen.
   // Then it follows the button: any scroll (of any ancestor, heard in the capture phase) or resize asks for ONE animation frame; the frame reads the
   // button once and writes the panel's style once, with no render. A button scrolled out of its form closes the panel. The listeners leave with it.
+  // Review 3 WR-02: a resize of the button (one more chosen route wraps to a new line) or of the panel (a row of «Убрать» gone, a new width) asks
+  // for the same frame, and that frame measures the panel's own height again, so the panel never covers the grown button or picks a side by an old height.
   useLayoutEffect(() => {
     const node = panel.current;
     const button = toggle.current;
     if (!open || !node || !button) return;
-    const natural = node.offsetHeight;
+    // The panel's own height, without the cap written last time (the cap shrinks the list inside it).
+    const measure = () => { node.style.maxHeight = "none"; return node.offsetHeight; };
+    let natural = measure();
     const clips = scrollingAncestors(button);
     writeRoutePanelPlace(node, routePanelPlacement(button.getBoundingClientRect(), { width: ROUTE_PANEL_WIDTH, height: natural }, routeViewport()));
     let frame = 0;
+    let resized = false;
     const onFrame = () => {
       frame = 0;
       const anchor = button.getBoundingClientRect();
       if (!routeAnchorVisible(anchor, clips.map((clip) => clip.getBoundingClientRect()))) { setOpen(false); return; }
+      if (resized) { resized = false; natural = measure(); }
       writeRoutePanelPlace(node, routePanelPlacement(anchor, { width: ROUTE_PANEL_WIDTH, height: natural }, routeViewport()));
     };
+    const observer = new ResizeObserver(() => {
+      resized = true;
+      if (frame === 0) frame = requestAnimationFrame(onFrame);
+    });
+    observer.observe(button);
+    observer.observe(node);
     const schedule = (event: Event) => {
       if (event.target instanceof Node && node.contains(event.target)) return;
       if (frame === 0) frame = requestAnimationFrame(onFrame);
@@ -500,6 +509,7 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
     window.addEventListener("resize", schedule, options);
     window.visualViewport?.addEventListener("resize", schedule, options);
     return () => {
+      observer.disconnect();
       window.removeEventListener("scroll", schedule, options);
       window.removeEventListener("resize", schedule, options);
       window.visualViewport?.removeEventListener("resize", schedule, options);
@@ -516,7 +526,7 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
     document.addEventListener("pointerdown", onOutside);
     return () => document.removeEventListener("pointerdown", onOutside);
   }, [open]);
-  // The panel stands at the end of its host, so Tab is carried by hand: from the button into the first checkbox, from the first back to the button,
+  // The panel stands at the end of document.body, so Tab is carried by hand: from the button into the first checkbox, from the first back to the button,
   // and from the last on to whatever follows the button in the page, closing the panel on the way out.
   const carryTab = (event: ReactKeyboardEvent) => {
     const box = panel.current;
@@ -526,14 +536,14 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
     if (stops.length === 0) return;
     if (event.target === button && !event.shiftKey) { event.preventDefault(); stops[0].focus(); }
     else if (event.target === stops[0] && event.shiftKey) { event.preventDefault(); button.focus(); }
-    else if (event.target === stops[stops.length - 1] && !event.shiftKey) { event.preventDefault(); setOpen(false); (nextTabStop(button, box, host) ?? button).focus(); }
+    else if (event.target === stops[stops.length - 1] && !event.shiftKey) { event.preventDefault(); setOpen(false); (nextTabStop(button, box) ?? button).focus(); }
   };
   return <div className="route-dropdown classification-editor-field" ref={root}
     onKeyDown={(event) => { if (event.key === "Escape" && open) { event.preventDefault(); event.stopPropagation(); setOpen(false); toggle.current?.focus(); } else if (event.key === "Tab" && open) carryTab(event); }}
     onBlur={(event) => { if (open && event.relatedTarget && !inside(event.relatedTarget as Node)) setOpen(false); }}>
     <span className="route-dropdown-label" id={labelId}>{label}</span>
     <div className="route-dropdown-anchor">
-      <button type="button" className="route-dropdown-toggle" ref={toggle} aria-haspopup="true" aria-expanded={open} aria-controls={open ? panelId : undefined} aria-labelledby={`${labelId} ${valueId}`} onClick={() => { pointed.current = null; setHost(routePanelHost(toggle.current)); setOpen((was) => !was); }}>
+      <button type="button" className="route-dropdown-toggle" ref={toggle} aria-haspopup="true" aria-expanded={open} aria-controls={open ? panelId : undefined} aria-labelledby={`${labelId} ${valueId}`} onClick={() => { pointed.current = null; setOpen((was) => !was); }}>
         <span className="route-dropdown-value" id={valueId}>
           {selected.length === 0 ? <em>Не указан</em> : selected.map((name) => {
             const icon = classificationIconFor(name);
@@ -542,7 +552,7 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
         </span>
         <span className="route-dropdown-chevron" aria-hidden="true">{open ? "▴" : "▾"}</span>
       </button>
-      {open && host && createPortal(<div className="route-dropdown-panel" id={panelId} role="group" aria-labelledby={labelId} ref={panel} data-floating-layer="" onMouseLeave={() => describe(null)}>
+      {open && createPortal(<div className="route-dropdown-panel" id={panelId} role="group" aria-labelledby={labelId} ref={panel} data-floating-layer="" onMouseLeave={() => describe(null)}>
         <div className="route-dropdown-list">
           {TRANSMISSION_CHOICES.map((choice) => {
             const icon = classificationIconFor(choice.name);
@@ -558,7 +568,7 @@ export function TransmissionRoutesField({ label, value, onChange }: { label: str
           </div>)}
         </div>
         <p className="route-dropdown-foot" id={footId} ref={foot} />
-      </div>, host)}
+      </div>, document.body)}
     </div>
   </div>;
 }

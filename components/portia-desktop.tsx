@@ -38,7 +38,7 @@ import { PortiaImage } from "@/components/portia-desktop-media";
 import { newRecommendationSeed, pickSearchRecommendations, seededRandom } from "@/lib/search-recommendations";
 import { infoCurrentTitle, infoNextTarget, infoOverviewVisible, infoSectionsButtonLabel, infoSectionsHitCount, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";
 import { startMenuCloseReason, type StartMenuEvent } from "@/lib/start-menu";
-import { resolveShortcutOverlaps, shortcutCell } from "@/lib/shortcut-layout";
+import { resolveShortcutOverlaps, shortcutCell, shortcutPlacesOutgrowArea } from "@/lib/shortcut-layout";
 import { buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, searchKeyAction, searchKeyContext, searchFirstPage, searchMaxShown, searchShownCount, type SearchItem } from "@/lib/search-index";
 
 // Phase 24, D-20/D-22: a record window whose record became closed keeps its place and shows the block; the slot of the placeholder
@@ -1014,7 +1014,9 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
   }, [shortcutPositions, shortcutPositionsLoaded]);
 
   // Owner 2026-11-21 item 30: once per page load, after the saved places and the settings are read back and the desktop is measured with the chosen
-  // icon size, saved places that lie on each other or outside the area move to the nearest free ones. The same key is rewritten only if one moved.
+  // icon size, saved places that lie on each other move to the nearest free ones. The same key is rewritten only if one moved.
+  // Review 3 WR-01: a saved place outside the area (a PC window smaller than the one the places were set on) is never written back: the
+  // placement holds it inside and off the others for the screen only (useShortcutPlacement), and the owner's layout comes back on the big screen.
   useEffect(() => {
     if (shortcutOverlapsChecked.current || !shortcutPositionsLoaded || !desktopSettingsLoaded || !shortcutPlacement) return;
     const cell = shortcutCell(desktopSettings.iconSize);
@@ -1029,6 +1031,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     const timer = window.setTimeout(() => {
       shortcutOverlapsChecked.current = true;
       setShortcutPositions((current) => {
+        if (shortcutPlacesOutgrowArea(current, desktopShortcutOrder, cell, grid)) return current;
         const resolved = resolveShortcutOverlaps(current, desktopShortcutOrder, cell, grid, gridOn);
         const moved = desktopShortcutOrder.some((id) => current[id] && (resolved[id]?.x !== current[id]?.x || resolved[id]?.y !== current[id]?.y));
         return moved ? resolved : current;
