@@ -5,16 +5,16 @@ milestone_name: Доступ и единый стиль
 current_phase: "26.1"
 current_phase_name: Правки владельца
 status: verifying
-stopped_at: Completed 26.1-18-PLAN.md
-last_updated: "2026-11-21T09:15:21.802Z"
+stopped_at: Completed 26.1-19-PLAN.md
+last_updated: "2026-11-21T09:31:59.523Z"
 last_activity: 2026-11-20
 last_activity_desc: Phase 26.1 execution started
-state_head: c304c16b35ea3d25bb5e5f1fc560d0a6fd1d9169
+state_head: ab5e57eef0c0f82cdedee3788ae17459198ea63c
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 92
-  completed_plans: 88
+  completed_plans: 89
 ---
 
 Total Phases: 6
@@ -129,6 +129,7 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase 26.1 P16 | 1h30m | 2 tasks | 9 files |
 | Phase 26.1 P17 | 20m | 2 tasks | 4 files |
 | Phase 26.1 P18 | 15min | 2 tasks | 5 files |
+| Phase 26.1 P26.1-19 | 2h | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -396,6 +397,7 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase 26.1]: 26.1-13: live mode is exactly six apps (guide, info, broadcasts, viruses, recycle, assistant); LIVE_EXCLUDED names the reason of the other five; last phrase of obida/idle/activity cannot be removed
 - [Phase 26.1]: 26.1-14: only quota classes are dead CSS of the phase; order-drag-handle/column-swap-handle stay (hidden keyboard button); 26.1-04 e2e updated but BLOCKED, not run
 - [Phase 26.1]: 26.1-16: живое «Повышение» пишет банки сервера теми же командами по уходу фокуса, кнопка в панели вкладки (LIVE_SEAM_TABS), модель lib/live-edit.ts получает проверку вопроса аргументом
+- [Phase 26.1]: 26.1-19: живой «Доступ» - вариант A (владелец 2026-11-21, пункт 25): просмотр экранов ворот во всех состояниях, тексты не правятся, без сети; граница режима - без живого режима только Поиск, Сотрудники, Пользователи
 
 ### Pending Todos
 
@@ -454,8 +456,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-21T09:15:20.107Z
-Stopped at: Completed 26.1-18-PLAN.md
+Last session: 2026-11-21T09:31:51.384Z
+Stopped at: Completed 26.1-19-PLAN.md
 Resume file: None
 
 ## Operator Next Steps
