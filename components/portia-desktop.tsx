@@ -4,12 +4,12 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExtern
 import dynamic from "next/dynamic";
 import { findGuide, findInfo, portiaTextKey, type Broadcast, type DocumentLinks, type PortiaContent, type RecycleFile, type RichTextDocument, type Virus } from "@/lib/portia-content";
 import { acceptsRoster, employeeRatings, mergeEmployeesAnswer, type PortiaEmployee } from "@/lib/portia-employees";
-import { classificationIconFor, PortiaIcon, PortiaIllustration, type PortiaIllustrationName } from "@/components/portia-icons";
+import { PortiaIcon, PortiaIllustration, type PortiaIllustrationName } from "@/components/portia-icons";
 import { DesktopWallpaper } from "@/components/portia-wallpaper";
 import { accentIds, bootSeenStorageKey, desktopSettingsStorageKey, motionModes, spiderModes } from "@/lib/accent-boot";
 import { accentTokenNames, deriveAccentTokens } from "@/lib/accent-custom";
 import { CustomColorPicker } from "@/components/custom-color-picker";
-import { fitGeometry, type WindowGeometry } from "@/lib/window-geometry";
+import { fitGeometry, refitGeometry, titlebarReachable, type WindowGeometry } from "@/lib/window-geometry";
 import { exitedWindow, openedWindow, originOf, visibleWindowCount, windowAppears, type OpenOrigin, type WindowState } from "@/lib/window-open";
 import { acceptFetchedContent, isNewerAnswer, normalizeDocumentLinks, viewerKeyOf } from "@/lib/content-sync";
 import { CONTENT_CACHE_KEY, EMPLOYEES_CACHE_KEY, cacheMatchesSource, cacheMatchesViewer, clearDeviceContentCaches, deviceCacheSource, stampCacheSource } from "@/lib/device-cache";
@@ -19,20 +19,27 @@ import { flattenPlaceholders, guideSlotChain, infoSlotChain, isViewerShapedConte
 import { levelCopy } from "@/lib/level-copy";
 import { RedactedPlaceholder } from "@/components/portia-redacted";
 import { splitEmbeddedMedia } from "@/lib/rich-text-media";
-import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, questState, type BroadcastTab } from "@/lib/broadcasts";
+import { broadcastFeed, broadcastTabOf, formatQuestDay, localDateKey, markQuestsSeen, parseSeenQuestIds, questPopup, type BroadcastTab } from "@/lib/broadcasts";
 import { AppWindow, appMeta, minimumWindowSize, nodWindow, type AppId } from "@/components/portia-desktop-window";
-import { DesktopIcon, StartPanelButton, desktopShortcutOrder, placedShortcut, useShortcutPlacement, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
+import { PREVIEW_HIDE_MS, PREVIEW_SHOW_MS, TaskbarPreview, forgetWindowPicture, forgetWindowPictures, rememberWindowPicture, useTaskbarPreview } from "@/components/portia-desktop-taskbar";
+import { DesktopIcon, ShortcutGridContext, StartPanelButton, alignedShortcutPositions, desktopShortcutOrder, placedShortcut, useShortcutPlacement, type DesktopShortcutId, type ShortcutPosition } from "@/components/portia-desktop-shortcuts";
 import { PortiaPromotion } from "@/components/portia-promotion";
+import { PortiaTemplateBuilder } from "@/components/portia-template-builder";
+import { AssistantItems } from "@/components/portia-companion-items";
+import { CompanionItemsSettings } from "@/components/portia-companion-editor";
 import { AppDeniedPanel, AppFatalPanel, AppSkeleton, AppStaleBanner } from "@/components/portia-desktop-states";
 import { accessCheckFailedText, appViewState, contentSyncFailed, contentSyncSucceeded, emptyCopy, failureFromResponse, type AppFailure, type ContentSync } from "@/lib/app-state";
 import type { RetakeNotification } from "@/lib/portia-promotion-notifications";
-import { EmbeddedDocument, GuideApp, YoutubeFigure } from "@/components/portia-desktop-documents";
-import { FormattedText, LoadingState, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
+import { EmbeddedDocument, GuideApp } from "@/components/portia-desktop-documents";
+import { BroadcastCard, BroadcastsHeader, InfoArticle, broadcastTabs } from "@/components/portia-desktop-info";
+import { FormattedText, LoadingState, RowBadges, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
+import { TrashFileRow, TrashHeader, TrashListHead, TrashViewer } from "@/components/portia-desktop-trash";
 import { PortiaImage } from "@/components/portia-desktop-media";
 import { newRecommendationSeed, pickSearchRecommendations, seededRandom } from "@/lib/search-recommendations";
 import { infoCurrentTitle, infoNextTarget, infoOverviewVisible, infoSectionsButtonLabel, infoSectionsHitCount, revealInfoForSearch, toggleInfoExpanded, type InfoNextTarget } from "@/lib/info-phone-nav";
 import { startMenuCloseReason, type StartMenuEvent } from "@/lib/start-menu";
-import { availableRecordsLimit, broadcastType, buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, recycleFileBody, recycleFileType, searchKeyAction, searchKeyContext, type SearchItem } from "@/lib/search-index";
+import { resolveShortcutOverlaps, shortcutCell } from "@/lib/shortcut-layout";
+import { buildSearchIndex, globalSearchKeyAction, matchSearch, normalizeSearch, searchKeyAction, searchKeyContext, searchFirstPage, searchMaxShown, searchShownCount, type SearchItem } from "@/lib/search-index";
 
 // Phase 24, D-20/D-22: a record window whose record became closed keeps its place and shows the block; the slot of the placeholder
 // is what is remembered, never the record. A selection with an id is a normal one; the lost state counts only while the id is empty,
@@ -152,19 +159,20 @@ const WINDOW_FADE_OUT_MS = 120;
 const contentSyncMs = 30_000;
 const editorContentSyncMs = 10_000;
 type SaveState = "idle" | "saving" | "saved" | "error" | "conflict";
-type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; motion: string; spider: string; customAccent: string };
+type DesktopSettings = { accent: string; wallpaper: string; iconSize: string; iconGrid: string; motion: string; spider: string; customAccent: string };
 
-const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard", motion: "on", spider: "on", customAccent: "" };
+const defaultDesktopSettings: DesktopSettings = { accent: "teal", wallpaper: "radar", iconSize: "standard", iconGrid: "off", motion: "on", spider: "on", customAccent: "" };
 // Every value a setting may hold; the same ids the «Настройки» groups offer.
 const settingValues: Record<Exclude<keyof DesktopSettings, "customAccent">, readonly string[]> = {
   accent: [...accentIds, "custom"],
   wallpaper: ["radar", "grid", "gel", "cells", "flasks", "quiet"],
   iconSize: ["compact", "standard", "large"],
+  iconGrid: ["on", "off"],
   motion: motionModes,
   spider: spiderModes,
 };
 
-const globalSearchAppIds: AppId[] = ["archive", "employees", "info", "guide", "broadcasts", "trash", "promotion", "settings", "sheet", "charter"];
+const globalSearchAppIds: AppId[] = ["archive", "employees", "info", "guide", "broadcasts", "trash", "promotion", "template", "settings", "sheet", "charter"];
 // The one access filter of the index: «Редактор» is gated by canEdit and is not in the list; a «Устав» closed to the viewer is left out of the
 // index by searchApps below (D-11, LVL-05) while its icon stays on the desktop (a deliberate asymmetry). «Устав» is found by its name only (owner verdict 8).
 const globalSearchApps = globalSearchAppIds.map((id) => ({ id, label: appMeta[id].label, path: appMeta[id].path }));
@@ -182,6 +190,7 @@ const initialWindows: Record<AppId, WindowState> = {
   sheet: { open: false, minimized: false, maximized: false, z: 10 },
   charter: { open: false, minimized: false, maximized: false, z: 10 },
   editor: { open: false, minimized: false, maximized: false, z: 10 },
+  template: { open: false, minimized: false, maximized: false, z: 10 },
 };
 
 function createWindowGeometry(appId: AppId, cascadeIndex: number): WindowGeometry | undefined {
@@ -201,6 +210,7 @@ function createWindowGeometry(appId: AppId, cascadeIndex: number): WindowGeometr
     sheet: [1180, 760],
     charter: [980, 760],
     editor: [1120, 760],
+    template: [1120, 760],
   }[appId];
   const width = Math.min(preferred[0], workspaceWidth - 32);
   const height = Math.min(preferred[1], workspaceHeight - 24);
@@ -223,6 +233,9 @@ const shortcutPositionsStorageKey = "portia-desktop-shortcuts-v3";
 const taskbarOrderStorageKey = "portia-taskbar-order-v1";
 const TASKBAR_BOUNCE_MS = 520;
 const ASSISTANT_RECOVER_MS = 780;
+// Owner 2026-11-18: rights are taken away only after this many answers in a row say so, rechecked this fast in between.
+const accessLossConfirmations = 3;
+const accessRecheckMs = 2500;
 
 // A saved profile replaces its entry; an id not in the list yet is a newly added manual employee (appended).
 const withEmployee = (list: PortiaEmployee[], employee: PortiaEmployee) => list.some((item) => item.id === employee.id) ? list.map((item) => item.id === employee.id ? employee : item) : [...list, employee];
@@ -459,9 +472,11 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
   const [desktopSettings, setDesktopSettings] = useState<DesktopSettings>(defaultDesktopSettings);
   const [shortcutPositions, setShortcutPositions] = useState<Partial<Record<DesktopShortcutId, ShortcutPosition>>>({});
   const [shortcutPositionsLoaded, setShortcutPositionsLoaded] = useState(false);
-  // UI-09: at 521–900px one JS rule places the shortcuts inside nav.desktop-icons (PC and ≤520px keep their own layouts).
+  // UI-09: at 521–900px one JS rule places the shortcuts inside nav.desktop-icons; on the PC (owner 2026-11-21 items 29, 31) a shortcut without
+  // a saved place stands in its home cell of the desktop grid (homeShortcutPositions), so «Вернуть…» puts every shortcut into its cell. ≤520px keeps its CSS grid.
   const desktopIconsRef = useRef<HTMLElement>(null);
-  const shortcutPlacement = useShortcutPlacement(desktopIconsRef, desktopShortcutOrder, desktopSettings.iconSize, shortcutPositions);
+  const shortcutPlacement = useShortcutPlacement(desktopIconsRef, desktopShortcutOrder, desktopSettings.iconSize, shortcutPositions, desktopSettings.iconGrid === "on");
+  const shortcutOverlapsChecked = useRef(false);
   const [desktopSettingsLoaded, setDesktopSettingsLoaded] = useState(false);
   const [taskbarOrder, setTaskbarOrder] = useState<AppId[]>(() => Object.keys(appMeta) as AppId[]);
   const [taskbarOrderLoaded, setTaskbarOrderLoaded] = useState(false);
@@ -469,6 +484,10 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
   const bounceTimers = useRef<Partial<Record<AppId, number>>>({});
   const taskbarDrag = useRef<null | { app: AppId; pointerId: number; startX: number; moved: boolean }>(null);
   const suppressTaskbarClick = useRef(false);
+  // OWN-06: one preview for the taskbar; never on the phone and never while an entry is being dragged.
+  const preview = useTaskbarPreview<AppId>(() => !window.matchMedia("(max-width: 900px)").matches && !taskbarDrag.current);
+  // Giving the focus back to a taskbar button must not show its preview again.
+  const previewFocusGuard = useRef(false);
   const [settingsSavedVisible, setSettingsSavedVisible] = useState(false);
   const [wallpaperSaveFailed, setWallpaperSaveFailed] = useState(false);
   const [accentPickerOpen, setAccentPickerOpen] = useState(false);
@@ -668,10 +687,27 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     }
   }, [fetchContent]);
 
-  const fetchAccess = useCallback(async () => {
+  // Owner 2026-11-18: one slow or refused answer while editing must not swap the editor for «Доступ закрыт». A loss of rights (a failed check,
+  // or a refusal after the rights were granted) is applied only when accessLossConfirmations answers in a row agree; between them a quick recheck runs.
+  // The server still checks every save, so keeping the last good rights for a few seconds never lets an edit through that it would refuse.
+  const accessLossStreak = useRef(0);
+  const accessRecheckTimer = useRef<number | null>(null);
+  // The quick recheck calls the newest fetchAccess through this ref (set after each render).
+  const fetchAccessRef = useRef<() => Promise<void>>(async () => {});
+  useEffect(() => () => { if (accessRecheckTimer.current !== null) window.clearTimeout(accessRecheckTimer.current); }, []);
+  const fetchAccess = useCallback(async (): Promise<void> => {
     const seq = ++accessRequestSeq.current;
+    // True when the loss is applied now; false when it waits for a recheck.
+    const confirmLoss = () => {
+      accessLossStreak.current += 1;
+      if (accessLossStreak.current >= accessLossConfirmations || !canEditRef.current) return true;
+      if (accessRecheckTimer.current !== null) window.clearTimeout(accessRecheckTimer.current);
+      accessRecheckTimer.current = window.setTimeout(() => { accessRecheckTimer.current = null; void fetchAccessRef.current(); }, accessRecheckMs);
+      return false;
+    };
     const markFailed = () => {
       if (seq < accessAppliedSeq.current) return;
+      if (!confirmLoss()) return;
       accessAppliedSeq.current = seq;
       setAccessState("failed");
     };
@@ -682,6 +718,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
       if (!response.ok && !denied) { markFailed(); return; }
       const access: { canEdit?: boolean; canManageEditors?: boolean; openTabs?: unknown } = denied ? {} : await response.json();
       if (seq < accessAppliedSeq.current) return;
+      if (!access.canEdit && !confirmLoss()) return;
+      if (access.canEdit) accessLossStreak.current = 0;
       accessAppliedSeq.current = seq;
       setAccessState("ok");
       setCanEdit(Boolean(access.canEdit));
@@ -693,6 +731,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
       markFailed();
     }
   }, []);
+  useEffect(() => { fetchAccessRef.current = fetchAccess; }, [fetchAccess]);
 
   // Keeps the Personnel window in step with the editor without waiting for the next sync.
   const updateEmployee = useCallback((saved: PortiaEmployee) => {
@@ -882,6 +921,12 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     }
   }, [viewerKey, viewerPerson]);
 
+  // The pictures of the minimised windows hold what one viewer saw: another viewer (or another person) in the same tab, or the end of the desktop, drops them (26.1-REVIEW-2 WR-04).
+  useEffect(() => {
+    forgetWindowPictures();
+    return forgetWindowPictures;
+  }, [viewerKey, viewerPerson]);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const signature = broadcastSignature(content);
@@ -952,7 +997,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     try {
       const saved = window.localStorage.getItem(shortcutPositionsStorageKey);
       const parsed = saved ? JSON.parse(saved) as Record<string, ShortcutPosition> : {};
-      const allowed = new Set<DesktopShortcutId>(["search", "archive", "employees", "broadcasts", "info", "guide", "promotion", "settings", "charter", "sheet", "trash"]);
+      const allowed = new Set<DesktopShortcutId>(["search", "archive", "employees", "broadcasts", "info", "guide", "promotion", "settings", "charter", "sheet", "trash", "template"]);
       const restored = Object.fromEntries(Object.entries(parsed).filter(([key, value]) => allowed.has(key as DesktopShortcutId) && Number.isFinite(value?.x) && Number.isFinite(value?.y))) as Partial<Record<DesktopShortcutId, ShortcutPosition>>;
       restoreTimer = window.setTimeout(() => {
         setShortcutPositions(restored);
@@ -967,6 +1012,30 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     if (!shortcutPositionsLoaded) return;
     try { window.localStorage.setItem(shortcutPositionsStorageKey, JSON.stringify(shortcutPositions)); } catch {}
   }, [shortcutPositions, shortcutPositionsLoaded]);
+
+  // Owner 2026-11-21 item 30: once per page load, after the saved places and the settings are read back and the desktop is measured with the chosen
+  // icon size, saved places that lie on each other or outside the area move to the nearest free ones. The same key is rewritten only if one moved.
+  useEffect(() => {
+    if (shortcutOverlapsChecked.current || !shortcutPositionsLoaded || !desktopSettingsLoaded || !shortcutPlacement) return;
+    const cell = shortcutCell(desktopSettings.iconSize);
+    if (shortcutPlacement.cell.width !== cell.width || shortcutPlacement.cell.height !== cell.height) return;
+    // Only on the PC layout (>900px): a page opened narrow lays its shortcuts out on the fly and must not rewrite the places set on a PC.
+    if (!window.matchMedia("(min-width: 901px)").matches) {
+      shortcutOverlapsChecked.current = true;
+      return;
+    }
+    const { grid } = shortcutPlacement;
+    const gridOn = desktopSettings.iconGrid === "on";
+    const timer = window.setTimeout(() => {
+      shortcutOverlapsChecked.current = true;
+      setShortcutPositions((current) => {
+        const resolved = resolveShortcutOverlaps(current, desktopShortcutOrder, cell, grid, gridOn);
+        const moved = desktopShortcutOrder.some((id) => current[id] && (resolved[id]?.x !== current[id]?.x || resolved[id]?.y !== current[id]?.y));
+        return moved ? resolved : current;
+      });
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [shortcutPositionsLoaded, desktopSettingsLoaded, shortcutPlacement, desktopSettings.iconSize, desktopSettings.iconGrid]);
 
   useEffect(() => () => {
     if (assistantTipTimer.current) window.clearTimeout(assistantTipTimer.current);
@@ -1172,6 +1241,23 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     setShortcutPositions((current) => ({ ...current, [shortcutId]: position }));
   };
 
+  // Owner 22 (renamed by owner 2026-11-21 item 28): «Выровнять ярлыки по сетке» is saved with the other settings (field iconGrid); turning it on puts every shortcut into the nearest free cell.
+  const toggleIconGrid = () => {
+    const turnOn = desktopSettings.iconGrid !== "on";
+    updateDesktopSettings({ iconGrid: turnOn ? "on" : "off" });
+    if (!turnOn) { announceLayout("Выравнивание ярлыков по сетке выключено"); return; }
+    const nav = desktopIconsRef.current;
+    const aligned = nav ? alignedShortcutPositions(nav, desktopShortcutOrder, shortcutPlacement) : null;
+    if (aligned) setShortcutPositions(aligned);
+    announceLayout("Ярлыки выровнены по сетке");
+  };
+
+  // Owner 22: «Вернуть ярлыки в изначальное положение» forgets the saved places only (the saved-places key is rewritten by the effect above); the other settings stay.
+  const restoreShortcutPositions = () => {
+    setShortcutPositions({});
+    announceLayout("Ярлыки возвращены в изначальное положение");
+  };
+
   // The check window says aria-modal, so the rest of the desktop must neither take focus nor be read while it runs; the focus goes back where it was afterwards.
   useEffect(() => {
     if (!qualificationLocked) return;
@@ -1251,6 +1337,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     if (event.pointerType === "touch" || event.button !== 0) return;
     // Capture at once: the release always comes back here, even if the pointer left the button.
     event.currentTarget.setPointerCapture(event.pointerId);
+    preview.hide();
     taskbarDrag.current = { app, pointerId: event.pointerId, startX: event.clientX, moved: false };
   };
 
@@ -1291,7 +1378,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     suppressTaskbarClick.current = true;
     window.setTimeout(() => { suppressTaskbarClick.current = false; }, 0);
     if (!drag.moved) return;
-    const others = [...(button.parentElement?.querySelectorAll<HTMLElement>("[data-taskbar-app]") ?? [])].filter((element) => element !== button);
+    const others = [...(button.closest(".taskbar-apps")?.querySelectorAll<HTMLElement>("[data-taskbar-app]") ?? [])].filter((element) => element !== button);
     const before = others.find((element) => { const rect = element.getBoundingClientRect(); return event.clientX < rect.left + rect.width / 2; })?.dataset.taskbarApp as AppId | undefined;
     setTaskbarOrder((order) => {
       const without = order.filter((id) => id !== drag.app);
@@ -1393,6 +1480,10 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     // «Уменьшены» keeps a short fade so the window visibly leaves; «Выключены» removes it at once (the timer keeps one exit path).
     const motion = document.documentElement.dataset.motion;
     const duration = motion === "off" ? 0 : motion === "reduced" ? WINDOW_FADE_OUT_MS : kind === "close" ? WINDOW_CLOSE_MS : WINDOW_MINIMIZE_MS;
+    preview.hide();
+    // The picture a minimised window shows in the taskbar preview is taken now, while the window is still on the screen; a closed window keeps none (26.1-REVIEW-2 WR-04).
+    if (kind === "minimize") rememberWindowPicture(appId);
+    else forgetWindowPicture(appId);
     setWindows((state) => ({ ...state, [appId]: { ...state[appId], exiting: kind } }));
     // A timer, not animationend: in a hidden tab the animation event may never fire.
     exitTimers.current[appId] = window.setTimeout(() => {
@@ -1405,14 +1496,14 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
 
   const minimizeApp = (appId: AppId) => requestExit(appId, "minimize");
 
-  // Shrinking the browser refits every window so its frame and controls stay reachable.
+  // Shrinking the browser shrinks a window larger than the workspace; a window carried off the screen stays (OWN-06), the taskbar marks it.
   useEffect(() => {
     const refit = () => {
       if (window.innerWidth <= 900) return;
       const bounds = workspaceBounds();
       setWindows((state) => Object.fromEntries((Object.keys(state) as AppId[]).map((id) => {
         const geometry = state[id].geometry;
-        return [id, geometry ? { ...state[id], geometry: fitGeometry(geometry, bounds, minimumWindowSize(id)) } : state[id]];
+        return [id, geometry ? { ...state[id], geometry: refitGeometry(geometry, bounds, minimumWindowSize(id)) } : state[id]];
       })) as Record<AppId, WindowState>);
     };
     window.addEventListener("resize", refit);
@@ -1424,6 +1515,35 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     setWindows((state) => ({ ...state, [appId]: { ...state[appId], maximized: !state[appId].maximized } }));
     focusApp(appId);
   };
+
+  // OWN-06: the actions of the taskbar preview. The window that is out of reach is brought back before it is maximized,
+  // so that leaving the maximized state does not drop it behind the edge again.
+  const returnTaskbarFocus = (app: AppId) => {
+    previewFocusGuard.current = true;
+    document.querySelector<HTMLElement>(`[data-taskbar-app="${app}"]`)?.focus();
+    previewFocusGuard.current = false;
+  };
+
+  const maximizeFromPreview = (app: AppId) => {
+    preview.hide();
+    const state = windows[app];
+    const button = document.querySelector<HTMLElement>(`[data-taskbar-app="${app}"]`);
+    if (qualificationLocked && app === "promotion") { focusApp(app); return; }
+    const bounds = workspaceBounds();
+    setWindows((current) => {
+      const geometry = current[app].geometry;
+      if (!geometry || titlebarReachable(geometry, bounds)) return current;
+      return { ...current, [app]: { ...current[app], geometry: fitGeometry(geometry, bounds, minimumWindowSize(app)) } };
+    });
+    if (state.minimized || state.exiting) {
+      if (button) openApp(app, originOf(button, "taskbar")); else openApp(app);
+      setWindows((current) => ({ ...current, [app]: { ...current[app], maximized: true } }));
+    } else if (!state.maximized) toggleMaximize(app);
+    else { focusApp(app); }
+    returnTaskbarFocus(app);
+  };
+
+  const closeFromPreview = (app: AppId) => { preview.hide(); closeApp(app); };
 
   const updateWindowGeometry = (appId: AppId, geometry: WindowGeometry) => {
     setWindows((state) => ({ ...state, [appId]: { ...state[appId], geometry } }));
@@ -1734,7 +1854,10 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     recycleFiles: content.recycleFiles,
     recycledViruses,
   }), [content, employees, recycledViruses, rosterOutOfSearch, searchApps]);
-  const searchResults = useMemo(() => matchSearch(searchIndex, globalQuery, availableRecordsLimit(windows.search.maximized)), [searchIndex, globalQuery, windows.search.maximized]);
+  const searchResults = useMemo(() => matchSearch(searchIndex, globalQuery), [searchIndex, globalQuery]);
+  // Owner 2026-11-18 (round 2): 10 rows first, «Показать ещё» up to 25; the query changing folds the list again.
+  const [searchExpanded, setSearchExpanded] = useState(false);
+  const searchFocusAfterExpand = useRef(false);
 
   const isSearchHit = (type: string, id: string) => searchHit?.type === type && searchHit.id === id;
   const hitClass = (type: string, id: string) => isSearchHit(type, id) ? " search-hit" : "";
@@ -1851,12 +1974,20 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
 
   // A vanished record leaves its row for a moment as «Запись недоступна», in the place it had; the next input, click or a few seconds remove it.
   const searchRows = useMemo(() => {
-    const rows = searchResults.map((item) => ({ item, unavailable: false }));
+    const rows = searchResults.slice(0, searchShownCount(searchResults.length, searchExpanded)).map((item) => ({ item, unavailable: false }));
     for (const { item, position } of unavailableResults) {
       if (!searchResults.some((result) => result.key === item.key)) rows.splice(Math.min(position, rows.length), 0, { item, unavailable: true });
     }
     return rows;
-  }, [searchResults, unavailableResults]);
+  }, [searchResults, searchExpanded, unavailableResults]);
+  const searchHidden = Math.min(searchResults.length, searchMaxShown) - searchFirstPage;
+  const expandSearch = () => { searchFocusAfterExpand.current = true; setSearchExpanded(true); setSearchFocusIndex(searchFirstPage); };
+  // The first newly shown row takes the focus after the click (the button that was clicked has just left the page).
+  useEffect(() => {
+    if (!searchExpanded || !searchFocusAfterExpand.current) return;
+    searchFocusAfterExpand.current = false;
+    searchResultsRef.current?.querySelectorAll<HTMLElement>(".global-result[data-result-index]")[searchFirstPage]?.focus();
+  }, [searchExpanded]);
   useEffect(() => {
     if (!unavailableResults.length) return;
     const timer = window.setTimeout(() => setUnavailableResults([]), 3200);
@@ -1885,7 +2016,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
     if (action === "focus-input") searchInputRef.current?.focus();
     else if (action === "next") focusSearchResult(resultElement ? index + 1 : 0);
     else if (action === "prev") focusSearchResult(resultElement ? index - 1 : searchRows.length - 1);
-    else if (action === "clear") { setGlobalQuery(""); setUnavailableResults([]); setSearchFocusIndex(0); searchInputRef.current?.focus(); }
+    else if (action === "clear") { setGlobalQuery(""); setSearchExpanded(false); setUnavailableResults([]); setSearchFocusIndex(0); searchInputRef.current?.focus(); }
     else if (action === "close") closeApp("search");
     else {
       const at = resultElement ? index : 0;
@@ -1927,6 +2058,14 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
         : assistantTipIndex >= 0
           ? richTextLine(content.formattedText[portiaTextKey.assistantAdvice], content.assistantAdvice, assistantTipIndex)
           : undefined;
+  // OWN-06: a window whose title bar is out of reach is marked on its taskbar button.
+  const watchesReach = typeof document !== "undefined" && Object.values(windows).some((state) => state.open && !state.minimized && !state.maximized && Boolean(state.geometry));
+  const taskbarBounds = watchesReach ? workspaceBounds() : { width: 0, height: 0 };
+  const outOfReach = (app: AppId) => {
+    const state = windows[app];
+    if (!state.geometry || taskbarBounds.width <= 0) return false;
+    return state.open && !state.minimized && !state.maximized && !state.exiting && !titlebarReachable(state.geometry, taskbarBounds);
+  };
   return (
     <>
       <BootScreen visible={booting} level={viewerLevel} />
@@ -1941,6 +2080,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
 
         <main className={`workspace${windows[activeApp].open && !windows[activeApp].minimized ? " mobile-app-open" : ""}`} style={shortcutPlacement ? { "--shortcut-content-height": `${shortcutPlacement.contentHeight}px` } as React.CSSProperties : undefined}>
           <nav className="desktop-icons" ref={desktopIconsRef} aria-label="Рабочий стол PORTIA" style={desktopSettingsLoaded && shortcutPositionsLoaded ? undefined : { visibility: "hidden" }}>
+            <ShortcutGridContext.Provider value={desktopSettings.iconGrid === "on"}>
             <DesktopIcon app="search" onOpen={openApp} position={shortcutPositions.search} placed={placedShortcut(shortcutPlacement, "search")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="archive" onOpen={openApp} position={shortcutPositions.archive} placed={placedShortcut(shortcutPlacement, "archive")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="employees" onOpen={openApp} position={shortcutPositions.employees} placed={placedShortcut(shortcutPlacement, "employees")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
@@ -1948,10 +2088,12 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
             <DesktopIcon app="info" onOpen={openApp} position={shortcutPositions.info} placed={placedShortcut(shortcutPlacement, "info")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="guide" onOpen={openApp} position={shortcutPositions.guide} placed={placedShortcut(shortcutPlacement, "guide")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="promotion" onOpen={openApp} position={shortcutPositions.promotion} placed={placedShortcut(shortcutPlacement, "promotion")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
+            <DesktopIcon app="template" onOpen={openApp} position={shortcutPositions.template} placed={placedShortcut(shortcutPlacement, "template")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="settings" onOpen={openApp} position={shortcutPositions.settings} placed={placedShortcut(shortcutPlacement, "settings")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="charter" onOpen={openApp} position={shortcutPositions.charter} placed={placedShortcut(shortcutPlacement, "charter")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="sheet" onOpen={openApp} position={shortcutPositions.sheet} placed={placedShortcut(shortcutPlacement, "sheet")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} />
             <DesktopIcon app="trash" onOpen={openApp} position={shortcutPositions.trash} placed={placedShortcut(shortcutPlacement, "trash")} onMove={moveDesktopShortcut} onAnnounce={announceLayout} className="desktop-icon-trash" />
+            </ShortcutGridContext.Provider>
           </nav>
 
           {qualificationLocked && <div className="qualification-focus-backdrop" aria-hidden="true"><span>ИДЁТ КВАЛИФИКАЦИОННАЯ ПРОВЕРКА</span></div>}
@@ -2022,8 +2164,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
           <AppWindow app="search" state={windows.search} active={activeApp === "search"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="global-search-window" meta="ГЛОБАЛЬНЫЙ ПОИСК">
             <div className="global-search-app" onKeyDown={onSearchKeyDown}>
               <header className="global-search-header"><h1>Глобальный поиск</h1></header>
-              <label className="global-search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Глобальный поиск</span><input ref={searchInputRef} value={globalQuery} onChange={(event) => { setGlobalQuery(event.target.value); setUnavailableResults([]); setSearchFocusIndex(0); }} type="search" placeholder="Введите название, код или тему" /><kbd>Ctrl K</kbd></label>
-              {shownRecommendations.length > 0 && <div className="search-recommendations" aria-label="Рекомендации поиска"><span>РЕКОМЕНДАЦИИ</span><div>{shownRecommendations.map((index) => { const item = content.searchRecommendations[index]; return <button key={`${item}-${index}`} type="button" onClick={() => { setGlobalQuery(item); setUnavailableResults([]); setSearchFocusIndex(0); }}><FormattedText text={item} document={richTextLine(content.formattedText[portiaTextKey.searchRecommendations], content.searchRecommendations, index)} /></button>; })}</div></div>}
+              <label className="global-search-box"><span aria-hidden="true">⌕</span><span className="sr-only">Глобальный поиск</span><input ref={searchInputRef} value={globalQuery} onChange={(event) => { setGlobalQuery(event.target.value); setSearchExpanded(false); setUnavailableResults([]); setSearchFocusIndex(0); }} type="search" placeholder="Введите название, код или тему" /><kbd>Ctrl K</kbd></label>
+              {shownRecommendations.length > 0 && <div className="search-recommendations" aria-label="Рекомендации поиска"><span>РЕКОМЕНДАЦИИ</span><div>{shownRecommendations.map((index) => { const item = content.searchRecommendations[index]; return <button key={`${item}-${index}`} type="button" onClick={() => { setGlobalQuery(item); setSearchExpanded(false); setUnavailableResults([]); setSearchFocusIndex(0); }}><FormattedText text={item} document={richTextLine(content.formattedText[portiaTextKey.searchRecommendations], content.searchRecommendations, index)} /></button>; })}</div></div>}
               <div className="global-search-summary"><span>{!contentReady ? "Ищем…" : globalQuery ? `Результаты для «${globalQuery}»` : "Доступные записи"}</span>{contentReady && <strong>{String(searchResults.length).padStart(2, "0")}</strong>}</div>
               <div className="global-search-results" ref={searchResultsRef} aria-busy={!contentReady}>
                 {!contentReady ? <>
@@ -2040,6 +2182,8 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
                 {!searchRows.length && <div className="global-search-empty empty-state"><PortiaIllustration name="microscopeGuide" /><strong>Совпадений нет</strong><span>Измените запрос или выберите рекомендацию.</span></div>}
                 </>}
               </div>
+              {contentReady && !searchExpanded && searchHidden > 0 && <button type="button" className="global-search-more" onClick={expandSearch}>Показать ещё {searchHidden}</button>}
+              {contentReady && searchExpanded && searchResults.length > searchMaxShown && <p className="global-search-more-note">Уточните запрос, чтобы увидеть остальные</p>}
             </div>
           </AppWindow>
 
@@ -2074,19 +2218,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
                   </div>
                 );
               })}</nav>
-              <article className="info-document">{infoView === "stale" && contentStaleBanner}{infoLostShown ? <RedactedPlaceholder variant="block" level={infoLostShown.level} /> : infoNoOpen ? <div className="empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{levelCopy.sectionsNoOpen.heading}</strong><span>{levelCopy.sectionsNoOpen.body}</span></div> : selectedInfo ? (selectedSubsection
-                ? <div className="content-fade" key={selectedSubsection.id}><span className="eyebrow">{selectedInfo.title}</span><h1 tabIndex={infoPhone ? -1 : undefined}>{selectedSubsection.title || "БЕЗ НАЗВАНИЯ"}</h1><div className="info-blocks">{selectedSubsection.blocks.map((block) => block.type === "text"
-                  ? <FormattedText key={block.id} className="info-document-copy" text={block.text} document={content.formattedText[portiaTextKey.infoBlock(block.id)]} />
-                  : block.type === "table"
-                    ? <dl key={block.id} className="info-ledger info-classification">{block.rows.filter((row) => row.key || row.value).map((row, rowIndex) => <div key={rowIndex}><dt>{row.key}</dt><dd>{row.value}</dd></div>)}</dl>
-                    : block.type === "video" && block.videoId
-                      // nocookie embed, id validated by normalizePortiaContent (D-09); default referrer policy, YouTube refuses embeds without a Referer.
-                      ? <YoutubeFigure key={block.id} videoId={block.videoId} title={selectedSubsection.title} />
-                      : block.type === "photo" && block.url
-                        ? <figure key={block.id} className="info-block-photo"><PortiaImage src={block.url} alt={`Иллюстрация: ${selectedSubsection.title}`} recordId={block.id} priority="lazy" icon="info" framing={block.framing} /></figure>
-                        : null)}</div>{infoNext && <div className="info-next"><button type="button" onClick={() => goInfoNext(infoNext)}>Далее: {infoNext.title}</button></div>}</div>
-                : <div className="content-fade" key={selectedInfo.id}><h1 tabIndex={infoPhone ? -1 : undefined}>{selectedInfo.title}</h1><FormattedText className="info-document-copy" text={selectedInfo.body} document={content.formattedText[portiaTextKey.info(selectedInfo.id)]} />{infoNext && <div className="info-next"><button type="button" onClick={() => goInfoNext(infoNext)}>Далее: {infoNext.title}</button></div>}</div>
-              ) : null}</article>
+              <article className="info-document">{infoView === "stale" && contentStaleBanner}{infoLostShown ? <RedactedPlaceholder variant="block" level={infoLostShown.level} /> : infoNoOpen ? <div className="empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{levelCopy.sectionsNoOpen.heading}</strong><span>{levelCopy.sectionsNoOpen.body}</span></div> : selectedInfo ? <InfoArticle key={selectedSubsection?.id ?? selectedInfo.id} section={selectedInfo} subsection={selectedSubsection} formattedText={content.formattedText} phone={infoPhone} next={infoNext} onNext={goInfoNext} /> : null}</article>
             </div>}
           </AppWindow>
 
@@ -2097,25 +2229,24 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
           </AppWindow>
 
           <AppWindow app="promotion" state={windows.promotion} active={activeApp === "promotion"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window promotion-window" meta="Повышение" locked={qualificationLocked}>
-            <PortiaPromotion visible={activeApp === "promotion" && !windows.promotion.minimized} onRetakeReady={setPromotionRetakeToast} onQualificationLockChange={updateQualificationLock} />
+            <PortiaPromotion visible={activeApp === "promotion" && !windows.promotion.minimized} onRetakeReady={setPromotionRetakeToast} onQualificationLockChange={updateQualificationLock} onOpenTemplate={() => openApp("template")} />
+          </AppWindow>
+
+          {/* Owner 2026-11-18: «Шаблон» is a window of its own; like every window it unmounts when closed, so closing it ends the draft (the builder asks first when nothing was downloaded). */}
+          <AppWindow app="template" state={windows.template} active={activeApp === "template"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window template-window" meta="Шаблон досье">
+            <PortiaTemplateBuilder standalone onClose={() => closeApp("template")} />
           </AppWindow>
 
           <AppWindow app="broadcasts" state={windows.broadcasts} active={activeApp === "broadcasts"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window broadcasts-window" meta="КАНАЛ СТАНЦИИ">
             <div className="broadcasts-app">
-              <header><h1>Объявления</h1><p>Еженедельные квесты, задачи и новости.</p></header>
+              <BroadcastsHeader />
               {broadcastsView === "stale" && contentStaleBanner}
               {broadcastsView === "loading" ? <AppSkeleton shape="broadcasts" /> : broadcastsView === "fatal" ? contentFatal("flaskEmpty") : <>
               <div className="editor-tabs broadcast-tabs">
-                {([["news", "Новости"], ["quests", "Квесты"]] as const).map(([tab, label]) => <button key={tab} type="button" className={broadcastTab === tab ? "active" : ""} aria-pressed={broadcastTab === tab} onClick={() => setBroadcastTab(tab)}>{label} {broadcastFeed(content.broadcasts, tab, today).length}</button>)}
+                {broadcastTabs.map(([tab, label]) => <button key={tab} type="button" className={broadcastTab === tab ? "active" : ""} aria-pressed={broadcastTab === tab} onClick={() => setBroadcastTab(tab)}>{label} {broadcastFeed(content.broadcasts, tab, today).length}</button>)}
               </div>
               <div className="broadcast-grid">
-                {broadcastFeed(content.broadcasts, broadcastTab, today).map((item) => {
-                  const state = item.type === "quest" ? questState(item, today) : null;
-                  // D-19: a quest or task never shows ВАЖНО, whatever the stored data says.
-                  const important = item.type === "news" && item.important;
-                  const badge = state === "active" ? "АКТИВЕН" : state === "upcoming" ? `СКОРО · с ${formatQuestDay(item.startsAt).slice(0, 5)}` : "ЗАВЕРШЁН";
-                  return <article key={item.id} className={`broadcast-card ${item.type}${important ? " important" : ""}${state ? ` state-${state}` : ""}${hitClass("broadcast", item.id)}`} {...hitAttrs("broadcast", item.id)}><span>{broadcastType(item.type)}{important ? " · ВАЖНО" : ""}</span>{state && <em className="quest-badge">{badge}</em>}<h2>{item.title || "БЕЗ НАЗВАНИЯ"}</h2>{item.type === "quest" && (item.startsAt || item.endsAt) && <div className="broadcast-dates">{item.startsAt && <span>Начало: {formatQuestDay(item.startsAt)}</span>}{item.endsAt && <span>Окончание: {formatQuestDay(item.endsAt)}</span>}</div>}{item.type === "quest" && item.conditions && <div className="broadcast-conditions"><b>УСЛОВИЯ</b><p>{item.conditions}</p></div>}<FormattedText className="broadcast-card-copy" text={item.body} document={content.formattedText[portiaTextKey.broadcast(item.id)]} /></article>;
-                })}
+                {broadcastFeed(content.broadcasts, broadcastTab, today).map((item) => <BroadcastCard key={item.id} item={item} today={today} formattedText={content.formattedText} hit={isSearchHit("broadcast", item.id)} />)}
                 {!broadcastFeed(content.broadcasts, broadcastTab, today).length && <div className="broadcast-empty empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{emptyCopy[broadcastTab].heading}</strong><span>{emptyCopy[broadcastTab].body}</span></div>}
               </div></>}
             </div>
@@ -2132,38 +2263,26 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
           </AppWindow>)}
           <AppWindow app="trash" state={windows.trash} active={activeApp === "trash"} onFocus={focusApp} onMinimize={minimizeApp} onMaximize={toggleMaximize} onClose={closeApp} onGeometry={updateWindowGeometry} className="utility-window trash-window" meta={`ФАЙЛОВ ${String(trashRows.length).padStart(2, "0")}`}>
             <div className={`trash-app${activeTrashFile || activeTrashVirus || trashLostShown ? " is-viewing" : ""}`}>
-              <header><h1>Корзина</h1><p>Бесполезный хлам — кому вообще придет в голову его перебирать?</p></header>
+              <TrashHeader />
               {trashView === "stale" && contentStaleBanner}
               {trashView === "loading" ? <AppSkeleton shape="trash" /> : trashView === "fatal" ? contentFatal("flaskEmpty") : <div className="trash-layout">
                 <div className="trash-files">
-                  <div className="trash-list-head" aria-hidden="true"><span>ИМЯ</span><span>ИСХОДНОЕ РАСПОЛОЖЕНИЕ</span><span>ТИП</span></div>
+                  <TrashListHead />
                   {trashRows.map((row) => {
                     if (row.kind === "redacted") return <RedactedPlaceholder key={row.slot} variant="row" level={row.requiredLevel} index={String(row.position + 1).padStart(2, "0")} />;
                     const key = row.item;
                     if (key.startsWith("virus:")) {
                       const virus = recycledViruses.find((item) => item.id === key.slice(6));
-                      return virus ? <button key={key} className={`trash-file-row${activeTrashFileId === `virus:${virus.id}` ? " active" : ""}${hitClass("file", `virus:${virus.id}`)}`} {...hitAttrs("file", `virus:${virus.id}`)} type="button" onClick={() => openTrashVirus(virus)}><span className="trash-file-name"><i className="trash-file-icon virus">V</i><strong>{virus.name}</strong></span><span>C:\PORTIA\VIRUS_ARCHIVE</span><span>Вирус в корзине</span></button> : null;
+                      return virus ? <TrashFileRow key={key} entry={{ type: "virus", virus }} active={activeTrashFileId === `virus:${virus.id}`} hitClass={hitClass("file", `virus:${virus.id}`)} hitProps={hitAttrs("file", `virus:${virus.id}`)} onOpen={() => openTrashVirus(virus)} /> : null;
                     }
                     const file = trashFiles.find((item) => item.id === key.slice(5));
-                    return file ? <button key={key} className={`trash-file-row${activeTrashFileId === file.id ? " active" : ""}${hitClass("file", file.id)}`} {...hitAttrs("file", file.id)} type="button" onClick={() => openTrashFile(file)}><span className="trash-file-name"><i className={`trash-file-icon ${file.kind}`}>{file.kind === "virus" ? "V" : file.kind === "image" ? "IMG" : "TXT"}</i><strong>{file.name}</strong></span><span>{file.location}</span><span>{recycleFileType(file.kind)}</span></button> : null;
+                    return file ? <TrashFileRow key={key} entry={{ type: "file", file }} active={activeTrashFileId === file.id} hitClass={hitClass("file", file.id)} hitProps={hitAttrs("file", file.id)} onOpen={() => openTrashFile(file)} /> : null;
                   })}
                   {trashView === "empty" && <div className="editor-empty empty-state"><PortiaIllustration name="flaskEmpty" /><strong>{emptyCopy.trash.heading}</strong><span>{emptyCopy.trash.body}</span></div>}
                 </div>
                 {trashLostShown && <div className="trash-viewer doc-open"><div className="trash-viewer-head"><div /><button type="button" onClick={closeTrashFile} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body"><RedactedPlaceholder variant="block" level={trashLostShown.level} /></div></div>}
-                {activeTrashVirus && <div className="trash-viewer virus doc-open" key={activeTrashVirus.id}><div className="trash-viewer-head"><div><span>ВИРУС В КОРЗИНЕ</span><strong>{activeTrashVirus.name} / {activeTrashVirus.code}</strong></div><button type="button" onClick={closeTrashFile} aria-label="Закрыть файл">×</button></div><div className="trash-viewer-body trash-virus-document doc-print"><VirusRecord virus={activeTrashVirus} formattedText={content.formattedText} viewerLevel={shownViewerLevel(content, viewerLevel)} onOpenLog={() => undefined} /></div></div>}
-                {activeTrashFile && <div className={`trash-viewer ${activeTrashFile.kind} doc-open`} key={activeTrashFile.id}>
-                  <div className="trash-viewer-head"><div><span>ТОЛЬКО ДЛЯ ЧТЕНИЯ</span><strong>{activeTrashFile.name}</strong></div><button type="button" onClick={closeTrashFile} aria-label="Закрыть файл">×</button></div>
-                  <div className="trash-viewer-body doc-print">
-                    {activeTrashFile.kind === "image" ? (
-                      <figure className="trash-image-document">
-                        <PortiaImage src={activeTrashFile.image} alt={activeTrashFile.name} recordId={activeTrashFile.id} priority="lazy" icon="trash" framing={activeTrashFile.imageFraming} />
-                        {activeTrashFile.content && <figcaption><FormattedText text={activeTrashFile.content} document={content.formattedText[portiaTextKey.recycle(activeTrashFile.id)]} /></figcaption>}
-                      </figure>
-                    ) : (
-                       <article className="trash-text-document"><div className="trash-document-meta">{recycleFileType(activeTrashFile.kind)} / {activeTrashFile.location}</div>{activeTrashFile.kind === "virus" ? <>{recycleFileBody({ ...activeTrashFile, content: "" }, [...content.viruses, ...recycledViruses]) && <pre>{recycleFileBody({ ...activeTrashFile, content: "" }, [...content.viruses, ...recycledViruses])}</pre>}{activeTrashFile.content && <FormattedText className="trash-formatted-text" text={activeTrashFile.content} document={content.formattedText[portiaTextKey.recycle(activeTrashFile.id)]} />}{!recycleFileBody({ ...activeTrashFile, content: "" }, [...content.viruses, ...recycledViruses]) && !activeTrashFile.content && <span>Файл не содержит текста.</span>}</> : <FormattedText className="trash-formatted-text" text={activeTrashFile.content || "Файл не содержит текста."} document={content.formattedText[portiaTextKey.recycle(activeTrashFile.id)]} />}</article>
-                    )}
-                  </div>
-                </div>}
+                {activeTrashVirus && <TrashViewer key={activeTrashVirus.id} entry={{ type: "virus", virus: activeTrashVirus }} formattedText={content.formattedText} viruses={[...content.viruses, ...recycledViruses]} viewerLevel={shownViewerLevel(content, viewerLevel)} onClose={closeTrashFile} />}
+                {activeTrashFile && <TrashViewer key={activeTrashFile.id} entry={{ type: "file", file: activeTrashFile }} formattedText={content.formattedText} viruses={[...content.viruses, ...recycledViruses]} viewerLevel={shownViewerLevel(content, viewerLevel)} onClose={closeTrashFile} />}
               </div>}
             </div>
           </AppWindow>
@@ -2185,10 +2304,20 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
                 </div>}
               </SettingGroup>
               <SettingGroup title="Фон рабочего стола" values={[['radar','Паутина'],['grid','Спирали ДНК'],['gel','Гель'],['cells','Клетки'],['flasks','Лабораторные колбы'],['quiet','Чистый']]} current={desktopSettings.wallpaper} onSelect={chooseWallpaper}>{wallpaperSaveFailed && <p className="setting-hint" role="alert">Фон не сохранён. Остался прежний.</p>}</SettingGroup>
-              <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
-              <SettingGroup title="Анимации" values={[['on','Включены'],['reduced','Уменьшены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)}><p className="setting-hint">Системная настройка движения не учитывается.</p></SettingGroup>
+              {/* Owner 2026-11-21 item 28: one order for the groups — appearance, then motion, then the desktop, then the rest. */}
               <SettingGroup title="Паук" values={[['on','Показывать'],['off','Скрыть']]} current={desktopSettings.spider} onSelect={(value) => updateDesktopSetting("spider", value)} />
-              <section className="settings-section content-control-entry"><div><h2>Содержимое сайта</h2>{!canEdit && <p>Войдите в разрешённый аккаунт редактора.</p>}</div><div className="content-control-actions"><button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a></div></section>
+              <SettingGroup title="Анимации" values={[['on','Включены'],['reduced','Уменьшены'],['off','Выключены']]} current={desktopSettings.motion} onSelect={(value) => updateDesktopSetting("motion", value)}><p className="setting-hint">Системная настройка движения не учитывается.</p></SettingGroup>
+              <SettingGroup title="Размер ярлыков" values={[['compact','Компактный'],['standard','Стандартный'],['large','Крупный']]} current={desktopSettings.iconSize} onSelect={(value) => updateDesktopSetting("iconSize", value)} />
+              <SettingsCategory title="Ярлыки рабочего стола" className="icon-layout-options">
+                <button type="button" className={desktopSettings.iconGrid === "on" ? "selected" : ""} aria-pressed={desktopSettings.iconGrid === "on"} onClick={toggleIconGrid}><span>Выровнять ярлыки по сетке</span></button>
+                <button type="button" onClick={restoreShortcutPositions}><span>Вернуть ярлыки в изначальное положение</span></button>
+              </SettingsCategory>
+              {/* Owner 2026-11-18: things for Вивьян and for the spider; pictures of this device only, never uploaded. */}
+              <SettingsCategory title="Предметы" className="companion-settings-buttons"><CompanionItemsSettings /></SettingsCategory>
+              <SettingsCategory title="Содержимое сайта" sectionClassName="content-control-entry" className="content-control-actions">
+                <button type="button" disabled={!canEdit} onClick={() => openApp("editor")}>ОТКРЫТЬ РЕДАКТОР</button><a href="/owner-login">{canEdit ? "УПРАВЛЕНИЕ ВХОДОМ" : "ВОЙТИ В РЕДАКТОР"}</a>
+                {!canEdit && <p className="setting-hint">Войдите в разрешённый аккаунт редактора.</p>}
+              </SettingsCategory>
               <div className="settings-footer"><button className="factory-reset" type="button" onClick={resetDesktopSettings}>СБРОСИТЬ ДО ЗАВОДСКИХ</button><span className={`settings-saved-status${settingsSavedVisible ? " is-visible" : ""}`} role="status" aria-live="polite">Настройки сохранены</span></div>
             </div>
           </AppWindow>
@@ -2200,7 +2329,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
 
         <div className={`desktop-assistant${assistantSpeaking ? " is-speaking" : ""}${assistantOffended ? " is-offended" : ""}${assistantRecovering ? " is-recovering" : ""}`} data-mood={assistantMood || undefined} data-squish={assistantSquish ? (assistantSquish % 2 ? "a" : "b") : undefined} data-auto={assistantAutomaticKind ?? undefined}>
           {assistantSpeaking && <div className="assistant-bubble" role="status"><span>{assistantMessageHeading}</span><FormattedText className="assistant-formatted-text" text={assistantMessageText} document={assistantMessageDocument} trimLeadingBlankLines eagerMedia /></div>}
-          <button className="assistant-button" type="button" onClick={activateAssistant} onContextMenu={(event) => event.preventDefault()} aria-disabled={assistantOffended} aria-label="Получить совет Вивьян"><img src="/assets/portia-assistant.png" alt="" draggable={false} /></button>
+          <span className="assistant-figure"><button className="assistant-button" type="button" onClick={activateAssistant} onContextMenu={(event) => event.preventDefault()} aria-disabled={assistantOffended} aria-label="Получить совет Вивьян"><img src="/assets/portia-assistant.png" alt="" draggable={false} /></button><AssistantItems /></span>
           <span className="assistant-label">ВИВЬЯН // ПОМОЩНИК</span>
         </div>
 
@@ -2212,13 +2341,34 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
             if (opening && event.detail === 0) window.requestAnimationFrame(() => startPanelRef.current?.querySelector("button")?.focus());
           }} aria-expanded={startOpen}><img className="portia-mark" src="/assets/portia-logo.png" alt="" /><span>PORTIA</span></button>
           <div className="taskbar-apps" role="toolbar" aria-label="Открытые программы">
-            {taskbarOrder.filter((app) => windows[app].open).map((app) => <button key={app} data-taskbar-app={app} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}${bouncingApps[app] ? " is-bouncing" : ""}`} type="button" onKeyDown={onTaskbarKeyDown(app)} onPointerDown={beginTaskbarDrag(app)} onPointerMove={moveTaskbarDrag} onPointerUp={endTaskbarDrag} onPointerCancel={endTaskbarDrag} onLostPointerCapture={endTaskbarDrag} onClick={(event) => {
+            {taskbarOrder.filter((app) => windows[app].open).map((app) => <span key={app} className="taskbar-entry" onPointerEnter={(event) => {
+              if (event.pointerType === "touch") return;
+              preview.show(app, preview.shown ? 0 : PREVIEW_SHOW_MS);
+            }} onPointerLeave={(event) => {
+              if (event.pointerType === "touch") return;
+              // WR-06 (26.1 review): a preview that holds the keyboard focus (РАЗВЕРНУТЬ, ЗАКРЫТЬ) stays; the blur of the entry hides it when the focus leaves.
+              if (event.currentTarget.querySelector(".taskbar-preview")?.contains(document.activeElement)) return;
+              preview.hide(PREVIEW_HIDE_MS);
+            }} onFocus={(event) => {
+              if (!previewFocusGuard.current && event.target.matches(":focus-visible")) preview.show(app);
+            }} onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) preview.hide();
+            }} onKeyDown={(event) => {
+              if (event.key !== "Escape" || preview.shown !== app) return;
+              event.stopPropagation();
+              preview.hide();
+              returnTaskbarFocus(app);
+            }}><button data-taskbar-app={app} data-unreachable={outOfReach(app) ? "true" : undefined} aria-describedby={outOfReach(app) ? `taskbar-unreachable-${app}` : undefined} className={`taskbar-app${activeApp === app && !windows[app].minimized ? " active" : ""}${bouncingApps[app] ? " is-bouncing" : ""}`} type="button" onKeyDown={onTaskbarKeyDown(app)} onPointerDown={beginTaskbarDrag(app)} onPointerMove={moveTaskbarDrag} onPointerUp={endTaskbarDrag} onPointerCancel={endTaskbarDrag} onLostPointerCapture={endTaskbarDrag} onClick={(event) => {
               if (suppressTaskbarClick.current) { suppressTaskbarClick.current = false; return; }
+              preview.hide();
               // A window on its way out comes back, like a minimised one.
               if (windows[app].minimized || windows[app].exiting) openApp(app, originOf(event.currentTarget, "taskbar"));
               else if (activeApp === app) minimizeApp(app);
               else focusApp(app);
-            }}><span className="mini-app-icon"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].label}</span></button>)}
+            }}><span className="mini-app-icon"><PortiaIcon name={appMeta[app].icon} /></span><span>{appMeta[app].label}</span></button>
+              {outOfReach(app) && <span className="sr-only" id={`taskbar-unreachable-${app}`}>Окно за краем экрана</span>}
+              {preview.shown === app && <TaskbarPreview app={app} label={appMeta[app].label} icon={appMeta[app].icon} geometry={windows[app].maximized ? undefined : windows[app].geometry} bounds={workspaceBounds()} minimized={windows[app].minimized} onMaximize={() => maximizeFromPreview(app)} onClose={() => closeFromPreview(app)} onDismiss={() => { preview.hide(); returnTaskbarFocus(app); }} />}
+            </span>)}
           </div>
           <span className="sr-only" role="status" aria-live="polite">{layoutAnnouncement}</span>
         </footer>
@@ -2229,6 +2379,7 @@ export function PortiaDesktop({ initialContent, viewerKey = "", viewerPerson = "
           <StartPanelButton icon="virus" label="База вирусов" onClick={() => openApp("archive")} />
           <StartPanelButton icon="employees" label="Сотрудники" onClick={() => openApp("employees")} />
           <StartPanelButton icon="promotion" label="Повышение" onClick={() => openApp("promotion")} />
+          <StartPanelButton icon="template" label="Шаблон" onClick={() => openApp("template")} />
           <StartPanelButton icon="settings" label="Настройки" onClick={() => openApp("settings")} />
         </div>}
 
@@ -2256,14 +2407,6 @@ function BootScreen({ visible, level }: { visible: boolean; level: number | null
     <span>PORTIA OS</span><strong>Запуск лабораторного терминала</strong>
     <div className="boot-lines">{bootLines(level).map((line, index) => <p key={line} style={{ animationDelay: `${200 + index * 280}ms` }}>{line}</p>)}</div>
   </div></div>;
-}
-
-// In the archive list the badges stand alone, so each one names its term for screen readers and on hover.
-function RowBadges({ virus }: { virus: Virus }) {
-  const terms = [virus.classification.danger, virus.classification.spread, virus.classification.escapeRisk];
-  const badges = terms.flatMap((term) => { const icon = classificationIconFor(term); return icon ? [{ term, icon }] : []; });
-  if (!badges.length) return null;
-  return <span className="row-badges">{badges.map(({ term, icon }) => <span className="row-badge" key={term} title={term}><PortiaIcon name={icon} role="img" aria-hidden={false} aria-label={term} /></span>)}</span>;
 }
 
 // Non-modal corner notification: the owner asked for a side toast instead of a window (G-03.2-2b).
@@ -2323,7 +2466,12 @@ function PromotionRetakeToast({ onDismiss }: { onDismiss: (openPromotion: boolea
   </aside>;
 }
 
+/** Owner 2026-11-21 item 28: one markup for every group of «Настройки» — the heading, then one row of options and actions; `className` marks only the row content, `sectionClassName` only the place of the group in the pane. */
+function SettingsCategory({ title, children, className, sectionClassName }: { title: string; children: React.ReactNode; className?: string; sectionClassName?: string }) {
+  return <section className={`settings-section${sectionClassName ? ` ${sectionClassName}` : ""}`}><h2>{title}</h2><div className={`setting-options${className ? ` ${className}` : ""}`}>{children}</div></section>;
+}
+
 function SettingGroup({ title, values, current, onSelect, children }: { title: string; values: [string, string][]; current: string; onSelect: (value: string) => void; children?: React.ReactNode }) {
-  return <section className="settings-section"><h2>{title}</h2><div className={`setting-options${title === "Цвет интерфейса" ? " color-options" : ""}`}>{values.map(([value, label]) => <button key={value} type="button" className={current === value ? "selected" : ""} aria-pressed={current === value} onClick={() => onSelect(value)}>{title === "Цвет интерфейса" && <i className={`swatch ${value}`} />}<span>{label}</span></button>)}{children}</div></section>;
+  return <SettingsCategory title={title} className={title === "Цвет интерфейса" ? "color-options" : undefined}>{values.map(([value, label]) => <button key={value} type="button" className={current === value ? "selected" : ""} aria-pressed={current === value} onClick={() => onSelect(value)}>{title === "Цвет интерфейса" && <i className={`swatch ${value}`} />}<span>{label}</span></button>)}{children}</SettingsCategory>;
 }
 

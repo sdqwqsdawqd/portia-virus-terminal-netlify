@@ -524,7 +524,8 @@ test("UI-05: the window markup keeps three controls with close last and none on 
 const CORNER_SELECTORS = [".corner-close", ".custom-color-picker-head .corner-close", ".floating-text-format > header .corner-close"];
 // The five crosses under guard: the request card, the two notification toasts, the colour picker, the format panel.
 const cornerCrossSites = [
-  { file: "components/portia-access-gate.tsx", label: "Закрыть заявку", count: 1, keep: "access-close" },
+  // 26.1-19: the request card is drawn by components/portia-access-gate-screen.tsx now (the gate and the live «Доступ» of the editor share it)
+  { file: "components/portia-access-gate-screen.tsx", label: "Закрыть заявку", count: 1, keep: "access-close" },
   { file: "components/portia-access-gate.tsx", label: "Закрыть уведомление", count: 1, keep: "quest-toast-close" },
   { file: "components/portia-desktop.tsx", label: "Закрыть уведомление", count: 2, keep: "quest-toast-close" },
   { file: "components/custom-color-picker.tsx", label: "Закрыть выбор цвета", count: 1, keep: null },
@@ -713,7 +714,7 @@ test("quick 261117-bi1 R1: a maximized window is flush with the work area and sq
 // as tall as the visible area, under a bar of one row. The 218px is the sum of the stylesheet's own heights, proved below.
 const ONE_ROW_BAR = ".content-editor:not(:has(.etab-draft-label)):not(:has(.etab-banner)):not(:has(.editor-section-create:not([hidden])))";
 const FULL_LISTS = [
-  `${MAXIMIZED} ${ONE_ROW_BAR} > .etab-body:not(.employee-editor-layout) > .etab-list`,
+  `${MAXIMIZED} ${ONE_ROW_BAR} > .etab-body:not(.employee-editor-layout):not(.recycle-editor-layout) > .etab-list`,
   `${MAXIMIZED} ${ONE_ROW_BAR} > .users-tab > .etab-body > .etab-list`,
 ];
 const px = (value: string | undefined) => Number.parseFloat(value ?? "NaN");
@@ -759,7 +760,6 @@ const R3 = "min-width: 1281px";
 const R3_COLUMNS = "repeat(2, minmax(0, 1fr))";
 const LIST_COLUMN = "clamp(270px, 24%, 340px) minmax(0, 1fr)";
 const EDITOR_CARD_COLUMNS = "repeat(auto-fill, minmax(min(100%, var(--editor-card-width)), var(--editor-card-width)))";
-const guideR1 = R1_COLUMNS.replace("var(--card-min)", "220px");
 const documentsSource = lf(readFileSync(new URL("../components/portia-desktop-documents.tsx", import.meta.url), "utf8"));
 const at = (selector: string) => `${MAXIMIZED} ${selector}`;
 
@@ -833,12 +833,18 @@ const MAXIMIZED_WINDOWS: { app: string; outcome: "fixed" | "already conformant";
     assertFillsWindow(".info-library");
   } },
   { app: "guide", outcome: "fixed", check: () => {
-    assert.equal(lastDeclaration(portiaCss, at(".guide-grid"), "grid-template-columns", DESKTOP), guideR1);
-    assert.equal(lastDeclaration(portiaCss, at(".guide-grid"), "gap", DESKTOP), "8px");
-    // UAT 2026-11-16 gap 3 — владелец: статья в узкой колонке. The open article takes the whole pane of a maximized window;
-    // a normal window keeps the 820px reading column.
-    assert.equal(lastDeclaration(portiaCss, ".guide-page", "max-width"), "820px");
-    assert.equal(lastDeclaration(portiaCss, at(".guide-page"), "max-width", DESKTOP), "none");
+    // Owner 2026-11-20 supersedes 2026-11-18 round 2 (176px tiles, 820px card): up to 5 tiles a row over the whole width, no empty tail on the right.
+    // Round 3 (2026-11-18) dropped the sections column: the whole window holds the sections.
+    assert.doesNotMatch(portiaCss, /\.guide-index|\.guide-layout/, "no sections column");
+    assert.equal(lastDeclaration(portiaCss, ".guide-app", "height"), "calc(100% - 46px)");
+    assert.equal(lastDeclaration(portiaCss, at(".guide-grid"), "grid-template-columns", DESKTOP), undefined, "no maximized rule changes the tiles");
+    assert.equal(lastDeclaration(portiaCss, ".guide-grid", "grid-template-columns", DESKTOP), "repeat(auto-fill, minmax(max(132px, calc((100% - 4 * 12px) / 5)), 1fr))");
+    assert.equal(lastDeclaration(portiaCss, ".guide-grid", "gap", DESKTOP), "12px");
+    // The open card and the nested «Карточки» grid fill the window (OWN-02): no reading column, a lower photo (OWN-01).
+    assert.ok([undefined, "none"].includes(lastDeclaration(portiaCss, ".guide-page", "max-width")), "the open card has no column");
+    assert.equal(lastDeclaration(portiaCss, at(".guide-page"), "max-width", DESKTOP), undefined, "and no maximized rule adds one");
+    assert.equal(lastDeclaration(portiaCss, ".guide-photo", "max-width"), "100%");
+    assert.equal(lastDeclaration(portiaCss, ".guide-photo:not(.is-framed) img", "max-height"), "min(45svh, 400px)");
     assertFillsWindow(".guide-app");
   } },
   { app: "promotion", outcome: "fixed", check: () => {
@@ -884,6 +890,11 @@ const MAXIMIZED_WINDOWS: { app: string; outcome: "fixed" | "already conformant";
     assert.equal(lastDeclaration(portiaCss, ".trash-image-document", "width"), "min(800px, 100%)");
     assertFillsWindow(".trash-app");
   } },
+  // Owner 2026-11-18: «Шаблон» is its own window; maximized, the builder takes the whole width instead of a centred 1240px column.
+  { app: "template", outcome: "fixed", check: () => {
+    assert.equal(lastDeclaration(portiaCss, `${MAXIMIZED} .template-shell`, "width", DESKTOP), "auto");
+    assert.equal(lastDeclaration(portiaCss, `${MAXIMIZED} .template-shell`, "margin", DESKTOP), "0");
+  } },
   { app: "sheet", outcome: "already conformant", check: () => {
     assertFillsWindow(".document-app");
     assert.equal(lastDeclaration(portiaCss, ".document-app-viewport", "inset"), "0");
@@ -921,7 +932,7 @@ const MAXIMIZED_WINDOWS: { app: string; outcome: "fixed" | "already conformant";
 test("UI-06 / D-04: the audit list names every window of the desktop once", () => {
   const start = windowSource.indexOf("export const appMeta");
   const ids = [...windowSource.slice(start, windowSource.indexOf("};", start)).matchAll(/^ {2}([a-z]+): \{/gmu)].map((match) => match[1]);
-  assert.equal(ids.length, 12);
+  assert.equal(ids.length, 13);
   assert.deepEqual(MAXIMIZED_WINDOWS.map((entry) => entry.app).sort(), [...ids].sort());
 });
 
@@ -949,17 +960,15 @@ test("UI-06 / D-19: two columns only for flat forms; editor cards keep their 340
   }
 });
 
-test("UI-06 / D-02: no maximized rule stretches a control and the caps are 640/820/1320px or none for the guide article", () => {
+test("UI-06 / D-02: no maximized rule stretches a control and the caps are 640/820/1320px", () => {
   for (const [file, css] of ALL_STYLESHEETS) {
     for (const rule of rulesOf(css)) {
       if (!rule.selectors.some((selector) => selector.includes("is-maximized"))) continue;
       for (const [name, value] of declarations(rule.body)) {
         const stretches = (name === "width" && /^100%/u.test(value)) || (/^flex(?:-grow)?$/u.test(name) && /^[1-9]/u.test(value));
         assert.ok(!stretches, `${file}: ${rule.selectors.join(", ")} { ${name}: ${value} }`);
-        if (name === "max-width" && value === "none") {
-          // UAT 2026-11-16 gap 3: the open article of «Справочник» is the only column that a maximized window releases.
-          assert.deepEqual(rule.selectors, [at(".guide-page")], `${file}: only the guide article may drop its cap`);
-        } else if (name === "max-width") assert.match(value, /^(?:var\(--field-max\)|820px|1320px)$/u, `${file}: ${rule.selectors.join(", ")} cap`);
+        // Owner 2026-11-18 (round 2): the guide article exception is withdrawn, no maximized rule releases a cap any more.
+        if (name === "max-width") assert.match(value, /^(?:var\(--field-max\)|820px|1320px)$/u, `${file}: ${rule.selectors.join(", ")} cap`);
       }
     }
   }
@@ -1018,4 +1027,29 @@ test("UI-06 (UAT 2026-11-16 gap 3): the promotion gate and status fill a maximiz
   for (const rule of rulesOf(cascadeCss)) {
     for (const selector of rule.selectors) assert.ok(!(selector.includes("is-maximized") && selector.includes("template-card-preview")), selector);
   }
+});
+
+test("owner 2026-11-20 OWN-02: content columns fill the window (guide card, nested cards, editor lists), the deliberate columns stay", () => {
+  // Lifted: a reading column inside a window left the right part empty (screenshots 3 and 4 of the owner).
+  for (const selector of [".guide-page", ".guide-photo", ".recommendation-order-list", ".access-editor-list"]) {
+    const cap = lastDeclaration(portiaCss, selector, "max-width");
+    assert.ok(cap === undefined || cap === "none" || cap === "100%", `${selector} has no px column (${cap})`);
+    assert.ok(!/^\d+px$/u.test(cap ?? ""), selector);
+  }
+  assert.equal(lastDeclaration(portiaCss, ".guide-page .info-document-copy", "max-width"), "none", "the text of an open card takes the card width");
+  assert.equal(lastDeclaration(portiaCss, ".guide-page .info-block-video", "max-width"), "none", "owner 2026-11-20: a video inside a card takes the card width");
+  assert.equal(lastDeclaration(portiaCss, ".guide-app", "scrollbar-gutter"), "stable", "owner 2026-11-22: opening a section that brings the scrollbar does not narrow the sections and tiles");
+  // Kept on purpose, so that a later sweep does not lift them by mistake: «Информация» (owner: already fine there), a title, a lone media, a skeleton.
+  assert.equal(lastDeclaration(portiaCss, ".info-document-copy", "max-width"), "82ch");
+  assert.equal(lastDeclaration(portiaCss, ".info-document h1", "max-width"), "780px");
+  assert.equal(lastDeclaration(portiaCss, ".info-block-photo", "max-width"), "820px");
+  assert.equal(lastDeclaration(portiaCss, ".info-block-video", "max-width"), "820px");
+  assert.equal(lastDeclaration(portiaCss, ".global-search-header", "max-width"), "680px");
+});
+
+// owner 2026-11-21 item 27: the padding of the «Справочник» tiles is NOT narrowed (about 55 characters a line stay) — a guard on the value of 26.1-23.
+test("owner item 27: the «Справочник» tile padding stays as it is", () => {
+  assert.equal(lastDeclaration(portiaCss, ".guide-tile-title", "padding"), "6px 6px");
+  assert.equal(lastDeclaration(portiaCss, ".guide-tile-title", "padding", PHONE), "6px 6px", "no phone override narrows it");
+  assert.equal(lastDeclaration(portiaCss, ".guide-tile", "padding"), "0");
 });

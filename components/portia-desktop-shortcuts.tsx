@@ -1,12 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { PortiaIcon, type PortiaIconName } from "@/components/portia-icons";
 import { appMeta, type AppId } from "@/components/portia-desktop-window";
 import { originOf, type OpenOrigin } from "@/lib/window-open";
-import { clampShortcutPosition, placeShortcuts, shortcutCell, shortcutDropArea, type Rect, type ShortcutCell } from "@/lib/shortcut-layout";
+import { alignShortcutsToGrid, clampShortcutPosition, desktopGrid, freeGridCellAlong, homeShortcutPositions, placeShortcutDrop, placeShortcuts, resolveShortcutOverlaps, shortcutCell, type DesktopGrid, type DesktopShortcutId, type Rect, type ShortcutCell } from "@/lib/shortcut-layout";
 
-export type DesktopShortcutId = "search" | "archive" | "employees" | "broadcasts" | "info" | "guide" | "promotion" | "settings" | "charter" | "sheet" | "trash";
+export type { DesktopShortcutId } from "@/lib/shortcut-layout";
 export type ShortcutPosition = { x: number; y: number };
 type ShortcutLayoutStyle = React.CSSProperties & {
   "--shortcut-left": string;
@@ -17,6 +17,8 @@ type ShortcutLayoutStyle = React.CSSProperties & {
 
 // One independent home for every shortcut. Saved drag coordinates override only that shortcut;
 // adding an app can no longer inherit another icon's static/absolute position by accident.
+// Owner 2026-11-21 item 29: on the PC these CSS homes only stand until the desktop is measured; then every shortcut without a saved
+// place stands in its cell of the desktop grid (homeShortcutPositions in lib/shortcut-layout.ts, through useShortcutPlacement).
 const defaultShortcutLayout: Record<DesktopShortcutId, ShortcutLayoutStyle> = {
   search: shortcutLayout({ left: 14, top: 20 }),
   archive: shortcutLayout({ left: 14, top: 124 }),
@@ -26,6 +28,7 @@ const defaultShortcutLayout: Record<DesktopShortcutId, ShortcutLayoutStyle> = {
   settings: shortcutLayout({ left: 124, top: 20 }),
   guide: shortcutLayout({ left: 124, top: 124 }),
   promotion: shortcutLayout({ left: 124, top: 228 }),
+  template: shortcutLayout({ left: 124, top: 332 }),
   charter: shortcutLayout({ left: 14, bottom: 18 }),
   sheet: shortcutLayout({ left: 124, bottom: 18 }),
   trash: shortcutLayout({ right: 14, top: 20 }),
@@ -62,58 +65,103 @@ export const desktopShortcutOrder = Object.keys(defaultShortcutLayout) as Deskto
 // The stylesheet uses the same strings (app/portia.css: `(max-width: 520px)`, `(520px < width <= 900px)`, `(width > 900px)`).
 const phoneShortcutQuery = "(max-width: 520px)";
 const tabletShortcutQuery = "(520px < width <= 900px)";
-const shortcutGap = 8;
-const subscribeTabletShortcuts = (notify: () => void) => {
-  const query = window.matchMedia(tabletShortcutQuery);
-  query.addEventListener("change", notify);
-  return () => query.removeEventListener("change", notify);
+// Which of the three bands the page is in: the phone grid, the tablet placement or the PC desktop.
+type ShortcutBand = "phone" | "tablet" | "pc";
+const subscribeShortcutBand = (notify: () => void) => {
+  const queries = [window.matchMedia(phoneShortcutQuery), window.matchMedia(tabletShortcutQuery)];
+  for (const query of queries) query.addEventListener("change", notify);
+  return () => { for (const query of queries) query.removeEventListener("change", notify); };
 };
-const tabletShortcutsSnapshot = () => window.matchMedia(tabletShortcutQuery).matches;
-const tabletShortcutsServerSnapshot = () => false;
+const shortcutBandSnapshot = (): ShortcutBand => (window.matchMedia(phoneShortcutQuery).matches ? "phone" : window.matchMedia(tabletShortcutQuery).matches ? "tablet" : "pc");
+const shortcutBandServerSnapshot = (): ShortcutBand => "pc";
 
 export type ShortcutPlacementState = {
   positions: Partial<Record<DesktopShortcutId, ShortcutPosition>>;
   contentHeight: number;
   area: { width: number; height: number };
   cell: ShortcutCell;
+  grid: DesktopGrid;
 };
-export type PlacedShortcut = { position: ShortcutPosition; area: { width: number; height: number }; cell: ShortcutCell };
+export type PlacedShortcut = { position: ShortcutPosition; area: { width: number; height: number }; cell: ShortcutCell; grid: DesktopGrid; positions: Partial<Record<DesktopShortcutId, ShortcutPosition>> };
 
 /**
- * At 521–900px measures .desktop-icons (a ResizeObserver: rotation, window size, icon size) and places every shortcut through
- * placeShortcuts; null on the PC (≥901px, the approved absolute homes) and on a phone (≤520px, the CSS grid).
+ * Measures .desktop-icons (a ResizeObserver: rotation, window size, icon size) and places every shortcut. At 521–900px through placeShortcuts
+ * (UI-09); on the PC (≥901px, owner 2026-11-21 items 29, 31) every shortcut without a saved place stands in its home cell of the desktop grid
+ * and a saved place is held inside the area. null on a phone (≤520px, the CSS grid).
  */
 export function useShortcutPlacement(
   ref: React.RefObject<HTMLElement | null>,
   ids: readonly DesktopShortcutId[],
   iconSize: string,
   saved: Partial<Record<DesktopShortcutId, ShortcutPosition>>,
+  gridOn = false,
 ): ShortcutPlacementState | null {
-  const tablet = useSyncExternalStore(subscribeTabletShortcuts, tabletShortcutsSnapshot, tabletShortcutsServerSnapshot);
+  const band = useSyncExternalStore(subscribeShortcutBand, shortcutBandSnapshot, shortcutBandServerSnapshot);
   const [placement, setPlacement] = useState<ShortcutPlacementState | null>(null);
-  // A layout effect, so the first frame on this width already shows the placed shortcuts and not the PC homes.
+  // A layout effect, so the first frame already shows the placed shortcuts and not the CSS homes (no visible jump).
   useLayoutEffect(() => {
     const nav = ref.current;
-    if (!tablet || !nav) return;
+    if (band === "phone" || !nav) return;
     const cell = shortcutCell(iconSize);
     const measure = () => {
       // While an app window covers the desktop the nav is not drawn; the last placement stays until it comes back.
       if (!nav.clientWidth || !nav.clientHeight) return;
       const area = { width: nav.clientWidth, height: nav.clientHeight };
-      const next: ShortcutPlacementState = { ...placeShortcuts(ids, area, cell, shortcutGap, saved), area, cell };
+      let next: ShortcutPlacementState;
+      if (band === "tablet") {
+        next = { ...placeShortcuts(ids, area, cell, saved, gridOn), area, cell };
+      } else {
+        const grid = desktopGrid(area, cell);
+        const homes = homeShortcutPositions(grid);
+        const wanted: Partial<Record<DesktopShortcutId, ShortcutPosition>> = {};
+        for (const id of ids) wanted[id] = saved[id] ?? homes[id];
+        // Item 30: nothing is drawn on another shortcut. The saved places pick first, so a shortcut that was never moved gives way to one that was.
+        const order = [...ids.filter((id) => saved[id]), ...ids.filter((id) => !saved[id])];
+        const positions: Partial<Record<DesktopShortcutId, ShortcutPosition>> = resolveShortcutOverlaps(wanted, order, cell, grid, gridOn);
+        next = { positions, contentHeight: area.height, area, cell, grid };
+      }
       setPlacement((current) => (current && JSON.stringify(current) === JSON.stringify(next) ? current : next));
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(nav);
     return () => observer.disconnect();
-  }, [ref, tablet, ids, iconSize, saved]);
-  return tablet ? placement : null;
+  }, [ref, band, ids, iconSize, saved, gridOn]);
+  return band === "phone" ? null : placement;
+}
+
+/** Owner 22: while «Выровнять ярлыки по сетке» is on, a drop and an Alt+Arrow step end in a cell of the grid; the desktop provides it around the shortcuts. */
+export const ShortcutGridContext = createContext(false);
+
+// The desktop grid: the one the placement measured; before the first measurement, the workspace with the cell of the size the desktop set on the page root.
+const gridOf = (workspace: HTMLElement, placed?: { grid: DesktopGrid }): DesktopGrid => placed?.grid ?? desktopGrid({ width: workspace.clientWidth, height: workspace.clientHeight }, shortcutCell(document.documentElement.dataset.iconSize ?? "standard"));
+
+/**
+ * Where every shortcut stands now, put into the grid (the toggle «Выровнять ярлыки по сетке» was turned on): the places the tablet placement
+ * gave, or on the PC the places measured on the page. null on a phone (a CSS grid, nothing to move) or when the desktop has no size to measure.
+ */
+export function alignedShortcutPositions(nav: HTMLElement, ids: readonly DesktopShortcutId[], placement: ShortcutPlacementState | null): Partial<Record<DesktopShortcutId, ShortcutPosition>> | null {
+  if (window.matchMedia(phoneShortcutQuery).matches) return null;
+  const workspace = nav.closest<HTMLElement>(".workspace");
+  if (!workspace) return null;
+  const current: Partial<Record<DesktopShortcutId, ShortcutPosition>> = {};
+  if (placement) Object.assign(current, placement.positions);
+  else {
+    const origin = workspace.getBoundingClientRect();
+    for (const id of ids) {
+      const rect = nav.querySelector<HTMLElement>(`[data-shortcut="${id}"]`)?.getBoundingClientRect();
+      if (rect && rect.width > 0) current[id] = { x: rect.left - origin.left, y: rect.top - origin.top };
+    }
+  }
+  const grid = gridOf(workspace, placement ?? undefined);
+  if (grid.area.width <= 0 || grid.area.height <= 0) return null;
+  // The home places are cells of this grid already, so turning the grid on does not move a shortcut that was never moved (owner 2026-11-21 item 29).
+  return alignShortcutsToGrid(current, ids, grid);
 }
 
 export function placedShortcut(placement: ShortcutPlacementState | null, id: DesktopShortcutId): PlacedShortcut | undefined {
   const position = placement?.positions[id];
-  return placement && position ? { position, area: placement.area, cell: placement.cell } : undefined;
+  return placement && position ? { position, area: placement.area, cell: placement.cell, grid: placement.grid, positions: placement.positions } : undefined;
 }
 
 export function DesktopIcon({ app, onOpen, position, placed, onMove, onAnnounce, className = "", badge = false }: { app: Exclude<AppId, "editor">; onOpen: (app: AppId, origin?: OpenOrigin) => void; position?: ShortcutPosition; placed?: PlacedShortcut; onMove: (shortcutId: DesktopShortcutId, position: ShortcutPosition) => void; onAnnounce?: (message: string) => void; className?: string; badge?: boolean }) {
@@ -126,6 +174,15 @@ function shortcutObstacles(workspace: HTMLElement): Rect[] {
   return Array.from(document.querySelectorAll<HTMLElement>(".desktop-assistant, .global-format-launch")).map((element): Rect => {
     const rect = element.getBoundingClientRect();
     return { x: rect.left - workspaceRect.left, y: rect.top - workspaceRect.top, width: rect.width, height: rect.height };
+  });
+}
+
+// The other shortcuts as rectangles in the workspace: with the grid on, the cell of one of them is not free for the shortcut that is moved (26.1-REVIEW-2 WR-05).
+function shortcutNeighbours(workspace: HTMLElement, ownId: string): Rect[] {
+  const workspaceRect = workspace.getBoundingClientRect();
+  return Array.from(workspace.querySelectorAll<HTMLElement>("[data-shortcut]")).filter((element) => element.dataset.shortcut !== ownId).flatMap((element): Rect[] => {
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 ? [{ x: rect.left - workspaceRect.left, y: rect.top - workspaceRect.top, width: rect.width, height: rect.height }] : [];
   });
 }
 
@@ -175,14 +232,17 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, placed, onMov
   const dropTimer = useRef<number | null>(null);
   const [dragging, setDragging] = useState(false);
   const [dropping, setDropping] = useState(false);
+  // Owner 2026-11-21 item 30: while the shortcut is dragged it is drawn here only; the saved places change on the drop, so the others never move under it.
+  const [dragPosition, setDragPosition] = useState<ShortcutPosition | null>(null);
   const iconAnimation = useShortcutAnimation();
+  const grid = useContext(ShortcutGridContext);
 
   useEffect(() => () => {
     if (dropTimer.current !== null) window.clearTimeout(dropTimer.current);
   }, []);
 
-  // 521–900px: the cell and area of the placement, so a drop lands where the next placement keeps it; PC: the shortcut and the workspace.
-  const dropBounds = (workspace: HTMLElement, target: HTMLElement) => placed ? { size: placed.cell, area: shortcutDropArea(placed.area) } : { size: { width: target.offsetWidth, height: target.offsetHeight }, area: { width: workspace.clientWidth, height: workspace.clientHeight } };
+  // The cell and the area of the placement's grid, so a drop lands where the next placement keeps it; before the first measurement: the shortcut and the workspace.
+  const dropBounds = (workspace: HTMLElement, target: HTMLElement) => placed ? { size: placed.cell, area: placed.grid.area } : { size: { width: target.offsetWidth, height: target.offsetHeight }, area: { width: workspace.clientWidth, height: workspace.clientHeight } };
 
   const handlePointerDown = (event: React.PointerEvent<HTMLElement>) => {
     iconAnimation.play();
@@ -219,18 +279,29 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, placed, onMov
     event.preventDefault();
     const bounds = dropBounds(operation.workspace, operation.target);
     operation.last = clampShortcutPosition({ x: operation.originX + deltaX, y: operation.originY + deltaY }, bounds.size, bounds.area);
-    onMove(shortcutId, operation.last);
+    setDragPosition(operation.last);
   };
+
+  // The other shortcuts as rectangles: their places in the placement (what is drawn), before the first measurement as measured on the page.
+  const neighbourRects = (workspace: HTMLElement): Rect[] => placed
+    ? Object.entries(placed.positions).flatMap(([id, spot]): Rect[] => (id !== shortcutId && spot ? [{ ...spot, ...placed.cell }] : []))
+    : shortcutNeighbours(workspace, shortcutId);
 
   const finishDrag = (event: React.PointerEvent<HTMLElement>) => {
     const operation = dragRef.current;
     if (!operation || operation.pointerId !== event.pointerId) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
     if (operation.moved) {
-      // On drop the shortcut also leaves the assistant and the format button free.
-      const obstacles = shortcutObstacles(operation.workspace);
+      // On drop the shortcut also leaves the assistant and the format button free (and, before the first measurement, the other shortcuts as drawn).
+      const obstacles = [...shortcutObstacles(operation.workspace), ...(placed ? [] : shortcutNeighbours(operation.workspace, shortcutId))];
       const bounds = dropBounds(operation.workspace, operation.target);
-      onMove(shortcutId, clampShortcutPosition(operation.last, bounds.size, bounds.area, obstacles));
+      // Item 30: the drop never ends on another shortcut. With the grid on, the nearest FREE cell, which is a cell of the grid (26.1-REVIEW-2 WR-05);
+      // without it, the released place if it is free, otherwise the nearest free place. The screen reader hears when the shortcut did not land where it was released.
+      const desktop = gridOf(operation.workspace, placed);
+      const { position: landing, displaced } = placeShortcutDrop(shortcutId, operation.last, placed?.positions ?? {}, bounds.size, desktop, grid, obstacles);
+      setDragPosition(null);
+      onMove(shortcutId, landing);
+      if (displaced) onAnnounce?.(`Место занято — ярлык «${label}» рядом`);
       suppressActivation.current = true;
       window.setTimeout(() => { suppressActivation.current = false; }, 0);
       setDropping(true);
@@ -258,12 +329,23 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, placed, onMov
     const iconRect = event.currentTarget.getBoundingClientRect();
     const workspaceRect = workspace.getBoundingClientRect();
     const bounds = dropBounds(workspace, event.currentTarget);
-    onMove(shortcutId, clampShortcutPosition(
-      { x: iconRect.left - workspaceRect.left + deltaX, y: iconRect.top - workspaceRect.top + deltaY },
-      bounds.size,
-      bounds.area,
-      shortcutObstacles(workspace),
-    ));
+    const from = { x: iconRect.left - workspaceRect.left, y: iconRect.top - workspaceRect.top };
+    // With the grid on one press is one cell (Shift: four), counted from the cell the shortcut is in now.
+    const desktop = gridOf(workspace, placed);
+    const cells = event.shiftKey ? 4 : 1;
+    if (grid) {
+      // A taken cell is jumped over to the next free one that way; with none, the shortcut stays and says so (26.1-REVIEW-2 WR-05).
+      const free = freeGridCellAlong(from, { x: Math.sign(deltaX), y: Math.sign(deltaY) }, cells, desktop, [...shortcutObstacles(workspace), ...neighbourRects(workspace)]);
+      if (!free) { onAnnounce?.(`Ярлык «${label}» остался на месте: клетка занята`); return; }
+      onMove(shortcutId, free);
+      onAnnounce?.(`Ярлык «${label}» перемещён`);
+      return;
+    }
+    // Without the grid the step is held inside the area and, like a drop, never ends on another shortcut (owner 2026-11-21 item 30).
+    const target = clampShortcutPosition({ x: from.x + deltaX, y: from.y + deltaY }, bounds.size, bounds.area);
+    const { position, displaced } = placeShortcutDrop(shortcutId, target, placed?.positions ?? {}, bounds.size, desktop, false, [...shortcutObstacles(workspace), ...(placed ? [] : shortcutNeighbours(workspace, shortcutId))]);
+    onMove(shortcutId, position);
+    if (displaced) { onAnnounce?.(`Место занято — ярлык «${label}» рядом`); return; }
     onAnnounce?.(`Ярлык «${label}» перемещён`);
   };
 
@@ -280,7 +362,8 @@ function DraggableDesktopIcon({ shortcutId, label, icon, position, placed, onMov
     className: `desktop-icon${className ? ` ${className}` : ""}${dragging ? " is-dragging" : ""}${dropping ? " is-dropping" : ""}${iconAnimation.playing ? " is-icon-animating" : ""}`,
     "data-shortcut": shortcutId,
     // 521–900px: the spot placeShortcuts gave it. Otherwise a position saved on a bigger screen is held inside the desktop so the icon never disappears.
-    style: placed ? placedShortcutLayout(placed.position) : position ? savedShortcutLayout(position) : defaultShortcutLayout[shortcutId],
+    // While dragged: the place under the pointer, drawn by this shortcut only.
+    style: dragPosition ? placedShortcutLayout(dragPosition) : placed ? placedShortcutLayout(placed.position) : position ? savedShortcutLayout(position) : defaultShortcutLayout[shortcutId],
     onPointerDown: handlePointerDown,
     onPointerMove: handlePointerMove,
     onPointerUp: finishDrag,

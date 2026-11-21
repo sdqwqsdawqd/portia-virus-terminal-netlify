@@ -9,6 +9,10 @@ const family = componentFamily("portia-editor");
 const shellPart = family.find((part) => part.file === "portia-editor-tab-shell.tsx");
 const shell = shellPart?.text ?? "";
 const editor = family[0].text;
+// 26.1-02 (OWN-07): «Сотрудники» moved out of the editor file into its own seam (D-21).
+const employeesSeam = family.find((part) => part.file === "portia-editor-employees.tsx")?.text ?? "";
+// 26.1-08 (OWN-09): the order button and the hold gesture live in the dossier seam.
+const dossierSeam = family.find((part) => part.file === "portia-editor-dossier.tsx")?.text ?? "";
 const styles = lf(readFileSync(new URL("../app/portia.css", import.meta.url), "utf8"));
 const PHONE = "max-width: 900px";
 
@@ -89,9 +93,9 @@ test("D-13b: the bar has a nav slot only when given, a polite status slot and an
 test("D-13b: the editor renders one action bar under the tab strip for the draft tabs, with the old buttons", () => {
   assert.match(editor, /import \{ EditorActionBar[^}]*\} from "@\/components\/portia-editor-tab-shell";/);
   const code = stripComments(editor);
-  // Two calls since 26-07: the draft tabs share one bar; «Сотрудники» renders its own with its own save (D-12).
-  assert.equal(code.split("<EditorActionBar").length - 1, 2, "one bar for the draft tabs and one for «Сотрудники»");
-  assert.equal(code.slice(0, code.indexOf("function EmployeeProfilesEditor(")).split("<EditorActionBar").length - 1, 1, "one call for the draft tabs");
+  // Two bars since 26-07: the draft tabs share one; «Сотрудники» renders its own with its own save (D-12). Since 26.1-02 the second one lives in the seam.
+  assert.equal(code.split("<EditorActionBar").length - 1, 1, "one bar for the draft tabs in the editor file");
+  assert.equal(stripComments(employeesSeam).split("<EditorActionBar").length - 1, 1, "one bar for «Сотрудники» in its seam");
   const bar = editorSlice('<nav className="editor-tabs" aria-label="Разделы редактора"', "{refusedShown.map(");
   assert.match(bar, /<\/nav>\n\s*\{editorSections\.some\(\(section\) => section === tab\) && \(\n\s*<EditorActionBar/, "the bar follows the tab strip, only in a draft tab");
   for (const prop of ["label={sectionLabels[tab as EditorSection]}", "statusText={statusText}", "tone={status}", "unsavedCount={dirty ? shownChanged.length : 0}", "notice={saveNotice}"]) {
@@ -118,7 +122,7 @@ test("WR-01: a tab outside the draft tabs shows the unsaved draft through the co
   const provider = editorSlice("<EditorDraftBarContext.Provider value={draftBar}>", "</EditorDraftBarContext.Provider>");
   for (const tab of ["employees", "users", "promo"]) assert.ok(provider.includes(`{tab === "${tab}"`), `${tab} sits under the provider`);
   assert.ok(provider.includes('{tab === "access" && canManageEditors && <EditorDraftBar />}'), "the access tab has no bar of its own, so it renders the draft bar");
-  assert.equal(code.split("<EditorActionBar").length - 1, 2, "no third action bar: the other tabs reuse their own");
+  assert.equal(code.split("<EditorActionBar").length - 1, 1, "no second action bar in the editor file: the other tabs reuse their own («Сотрудники» has its own in its seam)");
   assert.match(shell, /export const EditorDraftBarContext = createContext<EditorDraftBarState \| null>\(null\)/);
   assert.match(stripComments(shell), /export function EditorDraftBar\(\{ banner \}/);
   const bar = stripComments(shell);
@@ -320,11 +324,16 @@ test("UAT 2026-11-16 gap 5: every section tab carries the drag handle of the sub
   assert.ok(tabs.includes("<nav aria-label={label} ref={navRef}>"), "the nav keeps its ref and the scroll effect");
   assert.equal(declared(".editor-section-tabs nav > .editor-section-tab", "display"), "inline-flex");
   assert.equal(declared(".editor-section-tabs nav > .editor-section-tab", "flex"), "none");
-  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "width"), "24px");
-  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "min-width"), "24px");
+  // owner 2026-11-20 (OWN-09): the 24px / tap-target handle is gone; the button of a tab is invisible until the keyboard focuses it.
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "position"), "absolute", "out of the tab's layout");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "width"), "1px");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "height"), "1px");
   assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "padding"), "0");
-  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "width", PHONE), "var(--tap-target)");
-  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "min-width", PHONE), "var(--tap-target)");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "min-height"), "0", "the tab button rules (36/40px, tap target) do not size it");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "clip-path"), "inset(50%)");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle", "width", PHONE), "1px", "no phone size (tap target) for a button nobody sees");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle:focus-visible", "clip-path"), "none", "keyboard focus shows it");
+  assert.equal(declared(".editor-section-tabs nav .order-drag-handle:focus-visible", "width"), "24px");
   assert.doesNotMatch(styles, /editor-section-tab-order/, "the dead arrow group has no rule left");
 });
 
@@ -489,8 +498,16 @@ test("D-13a: the broadcast group nav sits flush in the bar", () => {
 
 // ---- 26-07 Task 3 (D-12): «Сотрудники» — its own action bar, the employee list on the left, the profile on the right ----
 
+/** The component of «Сотрудники» in its seam, comments stripped, from its first line to the end of the file. */
+function employeesComponent() {
+  const code = stripComments(employeesSeam);
+  const start = code.indexOf("export function EmployeeProfilesEditor(");
+  assert.ok(start >= 0, "export function EmployeeProfilesEditor( is in components/portia-editor-employees.tsx");
+  return code.slice(start);
+}
+
 test("D-12: «Сотрудники» renders its own action bar with the profile save and its own status; no editor draft buttons", () => {
-  const employees = editorSlice("function EmployeeProfilesEditor(", "type TabLists =");
+  const employees = employeesComponent();
   const ret = employees.slice(employees.indexOf("  return <>\n    <EditorActionBar"));
   assert.ok(ret.length > 0, "the bar opens the component's markup, above the layout");
   const bar = ret.slice(0, ret.indexOf('<div className="virus-editor-layout employee-editor-layout etab-body"'));
@@ -501,18 +518,88 @@ test("D-12: «Сотрудники» renders its own action bar with the profile
   assert.ok(bar.includes('href="/owner-login">ВОЙТИ СНОВА</a>'), "the sign-in link after an expired session stays beside it");
   for (const gone of ["↶", "ОТМЕНИТЬ", 'setDialog("discard")', "editor-undo-step"]) assert.ok(!bar.includes(gone), `${gone}: no editor draft action on this bar`);
   assert.ok(!employees.includes("employee-editor-save"), "the old save line under the profile is gone");
-  assert.ok(employees.includes("leaving: boolean;") && employees.includes("onLeave(true);") && employees.includes('title="Несохранённые правки сотрудника"'), "the leave guard is unchanged");
+  assert.ok(employees.includes("leaving: boolean;") && employees.includes("onLeave(true);") && employees.includes('title="Сохранить изменения?"'), "the close question is asked by the seam");
   assert.match(employees, /<\/div>\n {2}<\/>;\n\}/, "the fragment closes after the layout");
 });
 
 test("D-12: «Сотрудники» is a list/detail body; the picked employee is the current row", () => {
-  const employees = editorSlice("function EmployeeProfilesEditor(", "type TabLists =");
+  const employees = employeesComponent();
   assert.ok(employees.includes('<div className="virus-editor-layout employee-editor-layout etab-body" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>'));
   assert.ok(employees.includes('<aside className="editor-record-list etab-list">'));
   assert.ok(employees.includes('aria-current={employee.id === selected?.id ? "true" : undefined}'), "the picked employee is aria-current");
   assert.ok(employees.includes('<div className="editor-form employee-profile-editor etab-detail">'));
   assert.ok(employees.includes("editor-back-to-list"), "the phone back button stays");
   assert.doesNotMatch(styles, /\.employee-editor-save/, "no rule of the retired save line");
+});
+
+// ---- 26.1-02 (OWN-07): «Сотрудники» keep one draft per employee and ask once, when the window closes ----
+
+test("OWN-07: the component lives in its seam only; the editor imports it and the draft store and hands the store to the tab", () => {
+  assert.equal(editor.split("function EmployeeProfilesEditor(").length - 1, 0, "the function is gone from the editor file");
+  assert.match(employeesSeam, /^"use client";/);
+  assert.match(employeesSeam, /export function EmployeeProfilesEditor\(/);
+  assert.match(employeesSeam, /export function useEmployeeDraftStore\(/);
+  assert.doesNotMatch(employeesSeam, /from "@\/components\/portia-editor"/, "the seam never imports the editor");
+  assert.doesNotMatch(employeesSeam, /from "@\/components\/portia-desktop/, "the seam imports nothing of the desktop family");
+  assert.ok(editor.includes('import { EmployeeProfilesEditor, useEmployeeDraftStore } from "@/components/portia-editor-employees";'));
+  assert.ok(editor.includes("const employeeDrafts = useEmployeeDraftStore();"), "the store is made by PortiaEditor, so it outlives the tab");
+  assert.match(editor, /<EmployeeProfilesEditor [^\n]*drafts=\{employeeDrafts\} \/>/);
+});
+
+test("OWN-07: another employee opens without a question and the draft of the one left stays in the store", () => {
+  const employees = employeesComponent();
+  const choose = employees.slice(employees.indexOf("const chooseEmployee ="), employees.indexOf("const continueLeave ="));
+  assert.ok(choose.length > 0, "chooseEmployee is found");
+  assert.ok(!employees.includes("pendingEmployeeId") && !employees.includes("setPendingEmployeeId"), "no question when another employee is picked (D-02 is retired)");
+  assert.ok(choose.includes("openEmployee(employee);"), "an employee opens at once");
+  assert.ok(!choose.includes("setDraft") && !choose.includes("store.drop") && !choose.includes("store.reset"), "opening another employee never touches a draft");
+  assert.ok(employees.includes("store.update(selected,"), "typing writes to the draft of the open employee, by id");
+  assert.ok(employees.includes("store.settle(sent, merged,"), "a save answer settles the draft of the employee it was sent for");
+  assert.ok(!employees.includes("onDirtyChange(false)"), "leaving the tab does not clear the dirty flag: the drafts live on");
+  assert.ok(employees.includes("onDirtyChange(dirtyCount > 0)"), "the dirty flag is the count of employees with edits");
+});
+
+test("OWN-07: leaving the tab asks nothing; the one question is asked by the seam when the window closes", () => {
+  const code = stripComments(editor);
+  assert.equal(code.split("setLeaveTo(").length - 1, 0, "no pending tab switch: the editor never asks when a tab is left");
+  assert.ok(!code.includes("leaveTo"), "the pending-tab state is gone");
+  assert.ok(code.includes("const switchTab = (id: EditorTab) => showTab(id);"), "a tab opens at once");
+  assert.ok(code.includes("const leaving = employeeDirty && closeAsked;"), "the question is for the window close only");
+  assert.ok(code.includes('if (closeAsked && employeeDirty && tab !== "employees" && stripTabs.some(([id]) => id === "employees")) showTab("employees");'), "a close with unsaved employee drafts goes to the tab that asks");
+  const employees = employeesComponent();
+  assert.ok(employees.includes('title="Сохранить изменения?"'));
+  for (const label of ["СОХРАНИТЬ ВСЕ", "НЕ СОХРАНЯТЬ", "ОТМЕНА"]) assert.ok(employees.includes(`label: "${label}"`), label);
+  assert.ok(employees.includes("{leaving && dirtyCount > 0 && ("), "the question shows only for a close with something unsaved");
+});
+
+test("OWN-07: «СОХРАНИТЬ ВСЕ» saves one employee after another through the one PATCH path and stops at the first refusal", () => {
+  const employees = employeesComponent();
+  const all = employees.slice(employees.indexOf("const saveAll = async"), employees.indexOf("const addEmployee = async"));
+  assert.ok(all.length > 0, "saveAll is found");
+  assert.ok(all.includes("for (const id of saveQueue(store.dirtyIds(), selectedIdRef.current))"), "the open employee first, then the list order");
+  assert.ok(all.includes("if (!(await save(id, true)))"), "each save is awaited before the next starts, through the same save() as the single button");
+  assert.ok(!all.includes("Promise.all") && !all.includes("forEach") && !all.includes(".map("), "not in parallel");
+  assert.ok(all.includes("return false;") && all.includes("setSelectedId(id);"), "the first refusal stops the run and shows that employee");
+  assert.ok(employees.includes("setErrorMessage(named ? `${employee.nickname}: ${text}` : text);"), "the error carries the name of the employee");
+  assert.equal(employees.split('fetch("/api/employees", {\n        method: "PATCH"').length - 1, 1, "one PATCH call serves the single and the all-save");
+  const dialog = employees.slice(employees.indexOf('title="Сохранить изменения?"'));
+  assert.ok(dialog.includes("void saveAll().then((saved) => {") && dialog.includes("if (saved) onLeave(true);") && dialog.includes("else cancelLeave();"), "all saved closes; a refusal keeps the window and the drafts");
+  // 26.1 WR-07: «НЕ СОХРАНЯТЬ» answers the employee question only; the drafts are dropped when the editor goes away, so a cancelled outer «Закрыть редактор?» keeps them.
+  const leave = employees.slice(employees.indexOf("const continueLeave ="), employees.indexOf("const cancelLeave ="));
+  assert.ok(leave.includes("const continueLeave = () => {\n    onLeave(true);"), "«НЕ СОХРАНЯТЬ» lets the close go on");
+  assert.ok(!leave.includes("store.reset()"), "and does not drop the drafts before the editor closes");
+  const hook = employeesSeam.replace(/\r\n/g, "\n");
+  const hookBody = hook.slice(hook.indexOf("export function useEmployeeDraftStore"), hook.indexOf("const emptyDetails"));
+  assert.ok(hookBody.length > 0);
+  assert.ok(hookBody.includes("store.reset();") && hookBody.indexOf("off();") < hookBody.indexOf("store.reset();"), "the drafts go with the editor (unmount of the hook's owner)");
+});
+
+test("OWN-07: an employee with unsaved edits has a dot in the list and a name for a screen reader", () => {
+  const employees = employeesComponent();
+  assert.ok(employees.includes('<i className="tab-dot" aria-hidden="true" />'), "the same mark as the tab strip");
+  assert.ok(employees.includes("aria-label={unsaved ? employeeRowName(employee, true) : undefined}"), "the name of the row says there are unsaved edits");
+  assert.ok(employees.includes("{dirtyCount > 1 && <button"), "«СОХРАНИТЬ ВСЕ · N» shows from two drafts");
+  assert.ok(employees.includes("`СОХРАНИТЬ ВСЕ · ${dirtyCount}`"));
 });
 
 // ---- 26-08 (D-12, D-13): «Повышение» — the branches in the bar's nav slot, the queue and the banks as list/detail ----
@@ -541,8 +628,11 @@ test("D-13b: «Повышение» renders the shared action bar: the branches 
   assert.ok(bar.includes("aria-label={`${label}: ${count}`} onKeyDown={moveButtonTab}"), "the accessible name with its count and the arrow keys stay");
   assert.ok(bar.includes('{label}<span className="tab-count" aria-hidden="true">{count}</span>'), "the count is the house plaque");
   assert.ok(bar.includes("['requests','ЗАПРОСЫ',ordinaryCount + qualificationCount],['tasks','ЗАДАНИЯ',banks.taskBanks.length],['qualification','КВАЛИФИКАЦИЯ',qualificationCount]"), "the same three branches and counts");
-  assert.ok(bar.includes('statusText={message} tone={message ? (note.ok ? "saved" : "error") : ""} />'), "the queue message is the polite status of the bar; WR-04: a success is not red");
-  for (const gone of ["actions=", "СОХРАНИТЬ", "ОТМЕНИТЬ", "unsavedCount"]) assert.ok(!bar.includes(gone), `${gone}: no editor draft action on this bar`);
+  assert.ok(bar.includes('statusText={message} tone={message ? (note.ok ? "saved" : "error") : ""} '), "the queue message is the polite status of the bar; WR-04: a success is not red");
+  // 26.1-16 (owner 2026-11-21, item 13): the one thing in the actions slot is the toggle of the live mode; the draft buttons are still not here
+  // 26.1-27 (owner item 26, WR-03): not on «Запросы» — the queue has no live view
+  assert.ok(bar.includes('actions={branch === "requests" ? undefined : <LiveModeToggle on={live} onToggle={() => setLive((current) => !current)} />} />'), "the live toggle is the only action of the bar, outside «Запросы»");
+  for (const gone of ["СОХРАНИТЬ", "ОТМЕНИТЬ", "unsavedCount"]) assert.ok(!bar.includes(gone), `${gone}: no editor draft action on this bar`);
   assert.ok(!promotionMain.includes("promotion-editor-message"), "the old message line is gone");
   assert.doesNotMatch(styles, /\.promotion-editor-message/, "and so is its rule");
   // T-26-16: the closed workspace is returned before the bar is ever drawn.
@@ -676,4 +766,483 @@ test("D-12: «Пользователи» styles — the bar lies on the top edge
   assert.equal(declared(".users-pick-row", "width"), "100%", "the row button fills its row");
   assert.equal(declared('.users-row:has(> .users-pick-row[aria-current="true"])', "background"), "var(--teal-soft)");
   assert.equal(declared('.users-row:has(> .users-pick-row[aria-current="true"])', "border-color"), "var(--teal-dim)");
+});
+
+// ---- 26.1-08 (OWN-09): hold to drag, no drawn handle ----
+
+const dossierCode = stripComments(dossierSeam);
+const handleSource = (() => {
+  const start = dossierCode.indexOf("let dragHandoff");
+  const end = dossierCode.indexOf("export function ArchivedVirusEditor(");
+  assert.ok(start >= 0 && end > start, "OrderDragHandle is found in the dossier seam");
+  return dossierCode.slice(start, end);
+})();
+
+test("OWN-09: the row itself is held to drag: the hold model, the zone of the row, a lifted marker, no timer of 170 ms on the button", () => {
+  assert.match(dossierSeam, /import \{[^}]*\bHOLD_MS\b[^}]*\bholdStep\b[^}]*\} from "@\/lib\/hold-gesture"/, "the seam uses the pure model");
+  assert.ok(handleSource.includes("holdStep("), "the gesture advances through holdStep");
+  assert.ok(handleSource.includes("holdTargetAllowed("), "a field, a link or an action button never starts a hold");
+  assert.ok(handleSource.includes('closest<HTMLElement>("[data-sort-index]")'), "the row is the element that is held");
+  assert.ok(handleSource.includes('querySelector<HTMLElement>(":scope > .nested-editor-head")'), "a card is held by its head");
+  assert.ok(handleSource.includes('zone.addEventListener("pointerdown"'), "the press is listened to on the zone of the row");
+  assert.ok(!/onPointerDown/.test(handleSource), "the button no longer starts the gesture");
+  assert.ok(!handleSource.includes(", 170)"), "the 170 ms wait on the handle is replaced by HOLD_MS");
+  assert.ok(handleSource.includes("HOLD_MS"), "the wait is HOLD_MS");
+  assert.ok(handleSource.includes('row.dataset.lifted = "true"') && handleSource.includes("delete row.dataset.lifted"), "the row is marked lifted while it is dragged");
+  assert.ok(handleSource.includes('button.current.dataset.dragging = "true"') && handleSource.includes("dataset.dragId"), "one drag is still one undo step: the button carries data-dragging and data-drag-id (editKeyFor)");
+});
+
+test("OWN-09: the click after a drag is swallowed once, the page does not scroll or select while the element is lifted", () => {
+  assert.ok(/addEventListener\("click", [a-zA-Z]+, \{ capture: true \}\)/.test(handleSource), "a one-shot click listener in the capture phase");
+  assert.ok(handleSource.includes("suppressClick"), "the model says when the click is swallowed");
+  assert.ok(handleSource.includes('"touchmove"') && handleSource.includes("passive: false"), "a non-passive touchmove stops the page scroll once lifted");
+  assert.ok(handleSource.includes('"selectstart"'), "no text selection while dragging");
+  // 26.1 WR-05: the browser decides at touchstart whether the touch can be cancelled, so a standing non-passive listener sits on the zone from mount and
+  // refuses the scroll only while the hold is lifted; the one added at the lift stays as a second line.
+  assert.ok(handleSource.includes('zone.addEventListener("touchmove", refuseScrollWhileLifted, { passive: false })'), "a standing non-passive touchmove on the zone");
+  assert.ok(handleSource.includes('zone.removeEventListener("touchmove", refuseScrollWhileLifted)'), "removed with the effect");
+  assert.ok(handleSource.includes('hold.current.phase === "lifted" && event.cancelable'), "it refuses only while lifted");
+  assert.ok(handleSource.indexOf("refuseScrollWhileLifted, { passive: false }") < handleSource.indexOf('zone.addEventListener("pointerdown"'), "registered with the effect, before any press");
+});
+
+test("OWN-09: the order button stays for the keyboard: label, arrows, the ≡ only inside the plaque", () => {
+  assert.ok(handleSource.includes("aria-label={`Изменить порядок: ${label}`}"));
+  assert.ok(handleSource.includes('className="order-drag-handle"'));
+  assert.ok(handleSource.includes('aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight"'), "left and right are synonyms of up and down (tabs and columns read sideways)");
+  assert.ok(!handleSource.includes("title="), "no tooltip (D-18)");
+  assert.ok(dossierSeam.includes("owner 2026-11-20 (OWN-09): the row itself is held to drag; the button is the keyboard and screen reader way"), "the seam says why");
+});
+
+test("OWN-09: the handle is invisible, the lifted element is visible", () => {
+  assert.equal(declared("button.order-drag-handle", "position"), "absolute");
+  assert.equal(declared("button.order-drag-handle", "width"), "1px");
+  assert.equal(declared("button.order-drag-handle", "height"), "1px");
+  assert.equal(declared("button.order-drag-handle", "overflow"), "hidden");
+  assert.equal(declared("button.order-drag-handle", "clip-path"), "inset(50%)");
+  assert.equal(declared(".order-drag-handle:focus-visible", "clip-path"), "none", "a plaque when the keyboard is on it");
+  assert.equal(declared(".order-drag-handle:focus-visible", "width"), "24px");
+  assert.equal(declared(".order-drag-handle:focus-visible", "height"), "24px");
+  const lifted = '[data-sort-index][data-lifted="true"]';
+  assert.equal(declared(lifted, "z-index"), "5");
+  assert.equal(declared(lifted, "cursor"), "grabbing");
+  assert.match(declared(lifted, "box-shadow") ?? "", /^0 10px 24px/, "the shadow is always there");
+  assert.equal(declared(lifted, "translate"), undefined, "the rise is not in the plain rule: reduced and off keep only the shadow");
+  assert.equal(declared(`html[data-motion="full"] ${lifted}`, "translate"), "0 -2px");
+  assert.equal(declared(`html[data-motion="full"] ${lifted}`, "scale"), "1.015");
+  assert.equal(declared(lifted, "user-select"), "none");
+});
+
+test("OWN-09: the grids that kept a column for the handle give it up", () => {
+  assert.equal(declared(".editor-record-row", "grid-template-columns"), "minmax(0, 1fr)");
+  assert.equal(declared(".info-table-row", "grid-template-columns"), "minmax(0, 1fr) minmax(0, 1fr) auto");
+  assert.equal(declared(".info-table-head", "grid-template-columns"), "minmax(0, 1fr) minmax(0, 1fr) auto");
+  assert.equal(declared(".info-table-row", "grid-template-columns", PHONE), "minmax(0, 1fr)");
+  assert.equal(declared(".recommendation-order-row", "grid-template-columns", PHONE), "minmax(0, 1fr)");
+});
+
+test("OWN-09: arrows on the order button: ↑ and ← one step back, ↓ and → one step on, the button keeps the focus", () => {
+  assert.ok(handleSource.includes('event.key === "ArrowUp" || event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : 0'));
+  assert.ok(handleSource.includes("onMove(index, index + step)"));
+  assert.ok(editor.includes("keepSectionHandleFocus"), "the editor still returns the focus to the button after a keyboard move");
+});
+
+test("OWN-09: where a hold may start: the head of a card, the whole row of a list or a table; never a field, a link, the action buttons or the delete button", () => {
+  assert.ok(handleSource.includes('element.closest("input, textarea, select, a")'), "fields and links");
+  assert.ok(handleSource.includes('element.closest(".nested-editor-actions, .info-table-row > button, .live-tools")'), "the actions of a card, the delete button of a table row and the tools of the live mode (26.1-10)");
+  assert.ok(handleSource.includes("nested !== null && nested !== row"), "a nested row belongs to its own handle");
+  assert.ok(handleSource.includes("isContentEditable"), "editable text");
+});
+
+test("OWN-09: on a mouse the hold zones show a grab hand, fields keep their own cursor; a lifted element shows grabbing everywhere inside", () => {
+  const MOUSE = "hover: hover";
+  assert.equal(declared(".editor-section-tabs nav > .editor-section-tab > button:not(.order-drag-handle)", "cursor", MOUSE), "grab");
+  assert.equal(declared("[data-sort-index] > .nested-editor-head", "cursor", MOUSE), "grab");
+  assert.equal(declared("[data-sort-index] > .nested-editor-head > .nested-editor-toggle", "cursor", MOUSE), "grab");
+  assert.equal(declared(".editor-record-row[data-sort-index] > button:not(.order-drag-handle)", "cursor", MOUSE), "grab");
+  assert.equal(declared(".info-table-row[data-sort-index]", "cursor", MOUSE), "grab");
+  assert.equal(declared(".info-table-head > [data-column]", "cursor", MOUSE), "grab");
+  assert.equal(declared(".info-table-row input", "cursor", MOUSE), undefined, "a field in a table row keeps the text cursor");
+  assert.match(declared('[data-sort-index][data-lifted="true"] *', "cursor") ?? "", /^grabbing/);
+  // The touch-action of a card head is not changed: a finger scrolls the page until the element is lifted.
+  assert.equal(declared(".nested-editor-head", "touch-action"), undefined);
+  assert.equal(declared("[data-sort-index] > .nested-editor-head", "touch-action"), undefined);
+});
+
+test("OWN-09: the e2e drag holds the head of the card 450 ms and no longer grabs the handle", () => {
+  const spec = lf(readFileSync(new URL("../tests/e2e/specs/editor-layout.spec.ts", import.meta.url), "utf8"));
+  assert.ok(!spec.includes("nested-editor-head .order-drag-handle"), "no helper drags by the handle");
+  assert.ok(spec.includes("button.nested-editor-toggle"), "the head of the card is the thing held");
+  assert.ok(spec.includes("waitForTimeout(450)"), "the hold lasts longer than 400 ms");
+  assert.ok(spec.includes('toHaveAttribute("data-lifted", "true")'), "the lifted card is checked before the move");
+});
+
+test("OWN-09: ColumnSwapHandle lives in the dossier seam, is held by the header cell and keeps the arrows; the editor only imports it", () => {
+  const start = dossierCode.indexOf("export function ColumnSwapHandle(");
+  assert.ok(start >= 0, "exported from the seam");
+  const swap = dossierCode.slice(start, dossierCode.indexOf("export function ", start + 10) >= 0 ? dossierCode.indexOf("export function ", start + 10) : undefined);
+  assert.ok(!editor.includes("function ColumnSwapHandle"), "no copy in the protected editor file (D-21)");
+  assert.match(editor, /import \{[^}]*\bColumnSwapHandle\b[^}]*\} from "@\/components\/portia-editor-dossier";/, "the editor imports it from the seam");
+  assert.equal(editor.split("<ColumnSwapHandle ").length - 1, 2, "the two calls in TableBlockEditor stay");
+  assert.ok(swap.includes("holdStep("), "the header is held through the same model");
+  assert.ok(swap.includes('closest<HTMLElement>("[data-column]")'), "the header cell is the zone and the thing that is lifted");
+  assert.ok(swap.includes('cell.addEventListener("pointerdown"'));
+  assert.ok(swap.includes('cell.dataset.lifted = "true"') && swap.includes("delete cell.dataset.lifted"));
+  assert.ok(swap.includes('dataset.dragging = "column"'), "'column', not 'true': editKeyFor folds only row drags, a swap is one change on drop");
+  assert.ok(swap.includes("onSwapRef.current()"), "a drop on the other header swaps");
+  assert.ok(swap.includes("Переставить столбец «${label}»") && swap.includes('aria-keyshortcuts="ArrowLeft ArrowRight"'), "the name and the arrows are as before");
+  assert.ok(swap.includes('event.key !== "ArrowLeft" && event.key !== "ArrowRight"'));
+  assert.ok(swap.includes("owner 2026-11-20 (OWN-09)") || dossierSeam.includes("Two table columns swap"), "the comment moved with the function");
+  assert.ok(!swap.includes("title="), "no tooltip (D-18)");
+});
+
+test("OWN-09: a lifted column header looks lifted too", () => {
+  const lifted = '.info-table-head > [data-column][data-lifted="true"]';
+  assert.equal(declared(lifted, "z-index"), "5");
+  assert.equal(declared(lifted, "cursor"), "grabbing");
+  assert.match(declared(lifted, "box-shadow") ?? "", /^0 10px 24px/);
+  assert.equal(declared(lifted, "translate"), undefined);
+  assert.equal(declared(`html[data-motion="full"] ${lifted}`, "translate"), "0 -2px");
+  assert.match(declared(`${lifted} *`, "cursor") ?? "", /^grabbing/);
+});
+
+// ---- 26.1-15 (OWN-09, owner 2026-11-20 after 26.1-08): «нельзя переносить, хотя появляется курсор захвата» ----
+// Root cause: a mouse press that is dragged at once drifts past 6 px long before the 400 ms of the hold, the model cancelled it, and the open hand was shown all the time.
+
+const swapSource = (() => {
+  const start = dossierCode.indexOf("export function ColumnSwapHandle(");
+  assert.ok(start >= 0, "ColumnSwapHandle is found in the dossier seam");
+  return dossierCode.slice(start);
+})();
+
+test("OWN-09 (26.1-15): both gestures tell the model which pointer pressed, so a mouse lifts by moving and a finger by holding", () => {
+  assert.ok(handleSource.includes("pointerType: event.pointerType"), "OrderDragHandle passes the kind of pointer on the press");
+  assert.ok(swapSource.includes("pointerType: event.pointerType"), "ColumnSwapHandle passes the kind of pointer on the press");
+  assert.ok(handleSource.includes("pressed: event.buttons !== 0") && swapSource.includes("pressed: event.buttons !== 0"), "a missed release (button up, no pointerup) ends the press instead of dragging with no button down");
+});
+
+test("OWN-09 (26.1-15): the tracker follows the pointer after the lift whether or not the hold timer is still set (it is cleared at the lift)", () => {
+  assert.ok(!/holdTimer\.current === null\) return/.test(handleSource), "OrderDragHandle: the tracker does not stop when the lift timer is cleared");
+  assert.ok(!/timer === null\) return/.test(swapSource), "ColumnSwapHandle: the tracker does not stop when the lift timer is cleared");
+  assert.ok(handleSource.includes('hold.current.phase === "idle"'), "OrderDragHandle: the tracker is gated by the phase of the hold");
+  assert.ok(swapSource.includes('state.phase === "idle"'), "ColumnSwapHandle: the tracker is gated by the phase of the hold");
+  assert.ok(handleSource.includes("liftPressed()") && /const liftPressed = \(\) => \{[^}]*window\.clearTimeout\(holdTimer\.current\)/.test(handleSource), "a lift by a move cancels the 400 ms timer, so it cannot fire a second lift");
+});
+
+test("OWN-09 (26.1-15): a lift by a move starts following the pointer in the same event", () => {
+  const track = handleSource.slice(handleSource.indexOf("const onTrack"));
+  assert.ok(track.indexOf("liftPressed()") >= 0 && track.indexOf("liftPressed()") < track.indexOf("if (active.current) moveTo("), "lift first, then the swap under the pointer, in one move event");
+});
+
+test("OWN-09 (26.1-15): the e2e spec has the second gesture, press and drag at once, next to the 450 ms hold", () => {
+  const spec = lf(readFileSync(new URL("../tests/e2e/specs/editor-layout.spec.ts", import.meta.url), "utf8"));
+  assert.ok(spec.includes("press and drag at once"), "a test named for the immediate drag");
+  assert.ok(spec.includes("// OWN-09 (26.1-15): no pause between the press and the move"), "the drag begins right after the press: no waitForTimeout between down and move");
+});
+
+test("OWN-09 (26.1-15): a row with nowhere to go (the selected card under its tab strip) is marked, shows no open hand and starts no hold", () => {
+  assert.match(dossierSeam, /import \{[^}]*\bhasPlaceToGo\b[^}]*\} from "@\/lib\/hold-gesture"/, "the seam uses the pure rule");
+  assert.equal(handleSource.split("hasPlaceToGo(").length - 1, 1, "one call: the helper that counts the places");
+  assert.ok(handleSource.split("movable(").length - 1 >= 3, "the helper is used by the press and by the marker");
+  assert.ok(handleSource.includes('row.dataset.sortAlone = "true"') && handleSource.includes("delete row.dataset.sortAlone"), "the row is marked while it is alone");
+  assert.ok(handleSource.includes("|| !movable()) return;"), "a lone row never starts a hold");
+  const MOUSE = "hover: hover";
+  assert.equal(declared("[data-sort-index][data-sort-alone] > .nested-editor-head", "cursor", MOUSE), "auto");
+  assert.equal(declared("[data-sort-index][data-sort-alone] > .nested-editor-head > .nested-editor-toggle", "cursor", MOUSE), "pointer");
+  assert.equal(declared(".editor-section-tabs nav > [data-sort-alone] > button:not(.order-drag-handle)", "cursor", MOUSE), "pointer");
+  assert.equal(declared(".editor-card-tabs nav > .editor-card-tab[data-sort-alone] > button:not(.order-drag-handle)", "cursor", MOUSE), "pointer");
+  assert.equal(declared(".editor-record-row[data-sort-alone] > button:not(.order-drag-handle)", "cursor", MOUSE), "pointer");
+  assert.equal(declared(".info-table-row[data-sort-alone]", "cursor", MOUSE), "auto");
+});
+
+// 26.1-09 (OWN-10): the cards of a section are tabs, like the sections; the strip and its selection live in a seam (D-21), the editor only calls it.
+const cardTabsSeam = family.find((part) => part.file === "portia-editor-card-tabs.tsx")?.text ?? "";
+const cardTabsCode = stripComments(cardTabsSeam);
+
+test("owner 2026-11-20 OWN-10: the card tab strip is a seam: tabs of the same markup as the section tabs, the order button only with onMove, the selection by the pure rule", () => {
+  assert.ok(cardTabsSeam, "components/portia-editor-card-tabs.tsx exists and belongs to the portia-editor family");
+  assert.match(cardTabsSeam, /^"use client";/);
+  assert.match(cardTabsCode, /export function CardTabs\(/);
+  assert.match(cardTabsCode, /export function useCardTabSelection\(/);
+  assert.match(cardTabsCode, /export const cardTabsCopy = \{/);
+  assert.ok(cardTabsCode.includes('<div className="editor-card-tabs">') && cardTabsCode.includes("<nav aria-label={label} ref={navRef}>"), "div.editor-card-tabs > nav[aria-label]");
+  assert.ok(cardTabsCode.includes('className="editor-card-tab"'), "one span per tab");
+  assert.ok(cardTabsCode.includes('aria-current={item.id === activeId ? "true" : undefined}'), "the selected tab is aria-current");
+  assert.ok(cardTabsCode.includes("{onMove && <OrderDragHandle index={index} label={item.title || cardTabsCopy.item} onMove={onMove} />}"), "the order button only when the tabs can move");
+  assert.ok(cardTabsCode.includes("data-sort-index={onMove ? index : undefined}"), "a tab that cannot move is no sort row");
+  assert.ok(cardTabsCode.includes("item.title || cardTabsCopy.untitled"), "an empty title reads «Без названия»");
+  assert.ok(cardTabsCode.includes("if (items.length === 0 && !add) return null;"), "no strip without cards (26.1-20: unless the strip carries the add action)");
+  assert.match(cardTabsCode, /import \{ resolveCardTab[^}]*\} from "@\/lib\/card-tab-selection"/, "the choice is the pure rule");
+  assert.ok(cardTabsCode.includes("getBoundingClientRect") && !cardTabsCode.includes("scrollIntoView"), "only the strip scrolls sideways, the page does not jump");
+  assert.doesNotMatch(cardTabsCode, /dangerouslySetInnerHTML|title=\{/, "T-26.1-19: titles are text through React, no tooltip (D-18)");
+});
+
+test("owner 2026-11-20 OWN-10: guide cards are tabs: the strip before the list, only the selected card under it, a new card and a jump from the contents select it", () => {
+  assert.match(editor, /import \{ CardTabs, cardTabsCopy, useCardTabSelection \} from "@\/components\/portia-editor-card-tabs";/);
+  assert.ok(editor.includes("  const cardTabs = useCardTabSelection();\n"), "the selection is kept in the editor");
+  const guide = editorSlice('{tab === "guide" && (', '{tab === "recycle"');
+  const strip = guide.indexOf("<CardTabs label={cardTabsCopy.cards}");
+  const list = guide.indexOf('<div className="info-subsection-list" data-sort-group="guide-cards"');
+  assert.ok(strip > 0 && list > strip, "the strip stands before the list of cards");
+  const stripText = guide.slice(strip, list);
+  assert.ok(stripText.includes("items={section.cards.map((card) => ({ id: card.id, title: card.title }))}"), "the titles go as data");
+  assert.ok(stripText.includes("activeId={cardTabs.active(section.id, section.cards.map((card) => card.id))}"));
+  assert.ok(stripText.includes("moveArrayItem(target.cards, from, to)"), "a tab is moved among the cards of the section");
+  assert.ok(guide.includes("section.cards.map((card, cardIndex) => card.id === cardTabs.active(section.id, section.cards.map((item) => item.id)) && ("), "only the selected card is drawn");
+  assert.ok(stripText.includes("cardTabs.select(section.id, id)") && stripText.includes("setOpen([id], true)"), "a click selects and opens the card");
+  assert.ok(editor.includes("if (found?.card) cardTabs.select(found.section.id, id);"), "a jump from the contents selects the tab");
+  assert.ok(!editor.includes('"Карточки раздела"'), "D-58: the strip's name lives in the seam");
+});
+
+test("T-26.1-20: leaving a card by its tab closes the format panel for the fields of the section's cards; the draft is shared, hiding only stops drawing", () => {
+  const guide = editorSlice('{tab === "guide" && (', '{tab === "recycle"');
+  const strip = guide.slice(guide.indexOf("<CardTabs label={cardTabsCopy.cards}"), guide.indexOf('<div className="info-subsection-list" data-sort-group="guide-cards"'));
+  assert.ok(strip.includes("closeFormatterFor(...section.cards.flatMap((card) => card.blocks.map((block) => portiaTextKey.guideBlock(block.id))))"));
+  assert.ok(strip.indexOf("closeFormatterFor(") < strip.indexOf("cardTabs.select("), "the panel closes before the other card shows");
+});
+
+test("OWN-10: the card tab strip is one row that scrolls sideways, the current tab is accent-coloured, a phone tab has the tap target; the order button stays hidden", () => {
+  assert.equal(declared(".editor-card-tabs nav", "overflow-x"), "auto");
+  assert.equal(declared(".editor-card-tabs nav", "flex-wrap"), "nowrap");
+  assert.equal(declared(".editor-card-tabs nav button:not(.order-drag-handle)", "min-height"), "32px");
+  assert.equal(declared(".editor-card-tabs nav button:not(.order-drag-handle)", "min-height", PHONE), "var(--tap-target)");
+  assert.equal(declared('.editor-card-tabs nav button[aria-current="true"]', "color"), "var(--teal)");
+  assert.match(declared('.editor-card-tabs nav button[aria-current="true"]', "box-shadow") ?? "", /var\(--teal\)/);
+  assert.ok(!rules.some((rule) => rule.selectors.some((selector) => selector.startsWith(".editor-card-tabs") && /(^|[ >])button(\[|$)/.test(selector) && !selector.includes(":not(.order-drag-handle)") && !selector.includes("[aria-current")) ), "no rule resizes every button of the strip, the order button included");
+  assert.ok(styles.indexOf(".editor-card-tabs nav") < styles.indexOf("/* ui-unify:start"), "the block of ui-unify stays the last");
+  assert.ok(styles.trimEnd().endsWith("/* ui-unify:end */"));
+  assert.ok(styles.includes(".editor-card-tabs nav > .editor-card-tab[data-sort-index] > button:not(.order-drag-handle)"), "a movable tab shows the open hand on a mouse");
+});
+
+test("owner 2026-11-20 OWN-10: the subsections of an «Информация» section are tabs: the strip before the list, only the selected one under it, a jump from the contents selects it", () => {
+  const info = editorSlice('{tab === "info" && (', '{tab === "guide" && (');
+  const strip = info.indexOf("<CardTabs label={cardTabsCopy.subsections}");
+  const list = info.indexOf('<div className="info-subsection-list">');
+  assert.ok(strip > 0 && list > strip, "the strip stands before the list of subsections");
+  const stripText = info.slice(strip, list);
+  assert.ok(stripText.includes("items={section.subsections.map((subsection) => ({ id: subsection.id, title: subsection.title }))}"), "the titles go as data");
+  assert.ok(stripText.includes("moveArrayItem(target.subsections, from, to)"), "a tab is moved among the subsections of the section");
+  assert.ok(stripText.includes("closeFormatterFor(...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id))))"), "T-26.1-20: the panel closes before another subsection shows");
+  assert.ok(info.includes("subsection.id === cardTabs.active(section.id, section.subsections.map((item) => item.id)) && ("), "only the selected subsection is drawn");
+  assert.ok(editor.includes("if (found?.subsection) cardTabs.select(found.section.id, id);"), "a jump from the contents selects the tab");
+  assert.ok(!editor.includes('"Подразделы"'), "D-58: the strip's name lives in the seam");
+});
+
+// Mutations have no id (their texts are bound to the number), so their tabs only switch; scientist records are tabs by id. A selected tab is the only card drawn.
+test("owner 2026-11-20 OWN-10: the mutations and the scientist records of a virus are tabs; the mutation tabs have no order button, the panel closes on a switch", () => {
+  const virus = editorSlice('{dossierTab === "mutations" && <EditorGroup title="Мутации" stack>', '{tab === "info" && (');
+  const mutations = virus.slice(virus.indexOf("<CardTabs label={cardTabsCopy.mutations}"), virus.indexOf("\n                {selectedVirus.mutations.map("));
+  assert.ok(mutations.length > 0 && mutations.includes("items={selectedVirus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))}"), "a mutation tab is its number, its title is the name");
+  assert.ok(!mutations.includes("onMove"), "no order for mutations: the texts are bound to the number");
+  assert.ok(mutations.includes("setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:mutations`, id);"), "T-26.1-20: the panel closes before another mutation shows");
+  assert.ok(virus.includes("{selectedVirus.mutations.map((mutation, index) => String(index) === cardTabs.active(`${selectedVirus.id}:mutations`, Object.keys(selectedVirus.mutations)) && ("), "only the selected mutation is drawn");
+  const logs = virus.slice(virus.indexOf("<CardTabs label={cardTabsCopy.logs}"), virus.indexOf("\n                {selectedVirus.scientistLogs.map("));
+  assert.ok(logs.includes("items={selectedVirus.scientistLogs.map((log) => ({ id: log.id, title: log.title }))}") && !logs.includes("onMove"), "a record tab is its id; the records have no order either");
+  assert.ok(logs.includes("setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:logs`, id);"));
+  assert.ok(virus.includes("{selectedVirus.scientistLogs.map((log, index) => log.id === cardTabs.active(`${selectedVirus.id}:logs`, selectedVirus.scientistLogs.map((item) => item.id)) && ("), "only the selected record is drawn");
+});
+
+test("owner 2026-11-20 OWN-10: the full record of a virus in the recycle bin has the same tabs; the groups are told apart by the virus", () => {
+  const archived = stripComments(dossierSeam);
+  assert.match(archived, /import \{ CardTabs, cardTabsCopy, useCardTabSelection \} from "@\/components\/portia-editor-card-tabs";/);
+  assert.ok(archived.includes("  const cardTabs = useCardTabSelection();\n  return <div className=\"editor-form virus-editor-form etab-detail\">"), "its own selection");
+  assert.ok(archived.includes("<CardTabs label={cardTabsCopy.mutations} items={virus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))} activeId={cardTabs.active(`${virus.id}:mutations`, Object.keys(virus.mutations))}"));
+  assert.ok(archived.includes("<CardTabs label={cardTabsCopy.logs} items={virus.scientistLogs.map((log) => ({ id: log.id, title: log.title }))} activeId={cardTabs.active(`${virus.id}:logs`, virus.scientistLogs.map((log) => log.id))}"));
+  assert.ok(archived.includes("String(index) === cardTabs.active(`${virus.id}:mutations`, Object.keys(virus.mutations)) && <div") && archived.includes("log.id === cardTabs.active(`${virus.id}:logs`, virus.scientistLogs.map((item) => item.id)) && <div"), "only the selected one is drawn");
+  assert.equal(archived.split("<CardTabs ").length - 1, 2, "no strip for what is not a long list of cards");
+  assert.ok(!archived.includes("<CardTabs label={cardTabsCopy.mutations} items={virus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))} activeId={cardTabs.active(`${virus.id}:mutations`, Object.keys(virus.mutations))} onMove"), "no order for mutations");
+});
+
+test("owner 2026-11-20 OWN-10: the mutations of «Шаблон» are tabs of their own selection; the panel closes on a switch", () => {
+  const builder = stripComments(readFileSync(new URL("../components/portia-template-builder.tsx", import.meta.url), "utf8"));
+  assert.match(builder, /import \{ CardTabs, cardTabsCopy, useCardTabSelection \} from "@\/components\/portia-editor-card-tabs";/);
+  assert.ok(builder.includes('  const [dossierTab, setDossierTab] = useState<DossierTab>("main");\n  const cardTabs = useCardTabSelection();'), "the selection lives in the builder");
+  const strip = builder.slice(builder.indexOf("<CardTabs label={cardTabsCopy.mutations}"), builder.indexOf("{virus.mutations.map((mutation, index) => String(index)"));
+  assert.ok(strip.length > 0 && !strip.includes("onMove"), "the tabs only switch");
+  assert.ok(strip.includes('onSelect={(id) => { closeFormatter(); cardTabs.select("template:mutations", id); }}'), "T-26.1-20: the panel closes on a switch");
+  assert.ok(builder.includes('String(index) === cardTabs.active("template:mutations", Object.keys(virus.mutations)) && ('), "only the selected mutation is drawn");
+});
+
+test("owner 2026-11-20 OWN-10: where the strip is not drawn: blocks inside a card, the feed, the lists that are already list and detail, the recommendations", () => {
+  const all = stripComments(editor);
+  // Blocks of a card and a subsection stay a page feed, in the card; the order of a feed is its content.
+  assert.equal(all.split("<CardTabs ").length - 1, 4, "the guide cards, the info subsections, the mutations and the records of the viruses: four strips, no other place in the editor");
+  const feed = editorSlice('{tab === "broadcasts" && (', '{tab === "recycle" && (');
+  assert.ok(!feed.includes("<CardTabs"), "«Сводка» is a feed by date with its own filter and contents");
+  const recycle = editorSlice('{tab === "recycle" && (', '{tab === "search" && (');
+  assert.ok(!recycle.includes("<CardTabs"), "the recycle bin is a list and a detail already");
+});
+
+// ---- 26.1-20 (owner 2026-11-21, item 16): «Корзина» — список на всю высоту вкладки при любом размере окна ----
+test("owner 2026-11-21 item 16: the recycle bin list fills the whole height of the tab on a PC window, the long list scrolls inside the column", () => {
+  const maximized = ".app-window.is-maximized";
+  const layout = ".content-editor > .recycle-editor-layout";
+  assert.equal(declared(layout, "flex", DESKTOP), "1 1 0", "the bin takes the rest of the editor height, as «Сотрудники»");
+  assert.equal(declared(layout, "min-height", DESKTOP), "320px");
+  assert.equal(declared(".virus-editor-layout.recycle-editor-layout", "align-items", DESKTOP), "stretch");
+  assert.equal(declared(".virus-editor-layout.recycle-editor-layout", "grid-template-rows", DESKTOP), "minmax(0, 1fr)");
+  const column = ".recycle-editor-layout > .editor-record-list";
+  assert.equal(declared(column, "min-height", DESKTOP), "0");
+  assert.equal(declared(column, "overflow-y", DESKTOP), "auto");
+  assert.equal(declared(column, "align-content", DESKTOP), "start");
+  assert.equal(declared(column, "max-height", DESKTOP), "none", "the 62svh / 620px cap of the common list does not stop the column");
+  assert.equal(declared(".recycle-editor-layout > :not(.editor-record-list):not(.editor-back-to-list)", "min-height", DESKTOP), "0", "the detail is scrolled inside, so the row stays one fr tall");
+  assert.equal(declared(".recycle-editor-layout > :not(.editor-record-list):not(.editor-back-to-list)", "overflow-y", DESKTOP), "auto");
+  // The sticky column of the maximized window (quick 261117-bi1) names the bin out, as it names out «Сотрудники».
+  const sticky = rules.filter((rule) => rule.selectors.some((selector) => selector.startsWith(maximized) && selector.includes("> .etab-body:not(.employee-editor-layout)")));
+  assert.ok(sticky.length > 0, "the maximized sticky rules are found");
+  for (const rule of sticky) {
+    for (const selector of rule.selectors.filter((item) => item.includes("> .etab-body:not(.employee-editor-layout)"))) {
+      assert.ok(selector.includes(":not(.recycle-editor-layout)"), `${selector} leaves the bin to its own full-height layout`);
+    }
+  }
+  // Nothing of it is outside the PC query, and the phone list stays one column of its own.
+  assert.equal(declared(layout, "flex"), undefined);
+  assert.equal(declared(column, "overflow-y"), undefined);
+  // «База вирусов» keeps the page-scroll list and detail: its long form scrolls the page, the column sticks (quick 261117-bi1), so no fixed-height row.
+  assert.equal(declared(".content-editor > .virus-editor-layout:not(.recycle-editor-layout):not(.employee-editor-layout)", "flex", DESKTOP), undefined);
+});
+
+// ---- 26.1-20 (owner 2026-11-21, item 17): «+ ДОБАВИТЬ КАРТОЧКУ» — в конце полосы вкладок карточек ----
+test("owner 2026-11-21 item 17: the strip of card tabs ends with the add action: the button and the limit note in the seam, without `add` the strip is as before", () => {
+  assert.ok(cardTabsCode.includes('addCard: "+ ДОБАВИТЬ КАРТОЧКУ"'), "the label lives in the seam (D-58)");
+  assert.ok(cardTabsCode.includes("add?: { onAdd: () => void; disabled: boolean; note?: ReactNode; label?: string }"), "the add action is optional data (26.1-26: with the label of what is added)");
+  assert.ok(cardTabsCode.includes("if (items.length === 0 && !add) return null;"), "no strip without cards, unless there is the add action: an empty section shows the same button");
+  assert.ok(cardTabsCode.includes('className="editor-card-tab-add"') && cardTabsCode.includes("const addLabel = add?.label ?? cardTabsCopy.addCard;") && cardTabsCode.includes("{addLabel}"), "button.editor-card-tab-add with the label of the seam, the card by default");
+  assert.ok(cardTabsCode.includes("disabled={add.disabled}") && cardTabsCode.includes("onClick={add.onAdd}"), "the editor's action and its limit");
+  assert.ok(cardTabsCode.includes("aria-describedby={add.note ? noteId : undefined}") && cardTabsCode.includes("id={noteId}"), "the button is described by the limit note");
+  const navEnd = cardTabsCode.indexOf("</nav>");
+  const button = cardTabsCode.indexOf('className="editor-card-tab-add"');
+  assert.ok(navEnd > 0 && button > navEnd, "the action stands after the scrolling strip, at its end, so many tabs never push it out of sight");
+  assert.match(cardTabsCode.slice(button - 80, button + 40), /type="button"/, "a button of the strip submits nothing");
+  assert.equal(declared(".editor-card-tabs > .editor-card-tab-add-bar", "flex"), "none");
+  assert.equal(declared(".editor-card-tabs button.editor-card-tab-add", "min-height"), "32px", "as tall as a tab");
+  assert.equal(declared(".editor-card-tabs button.editor-card-tab-add", "min-height", PHONE), "var(--tap-target)");
+  assert.equal(declared(".editor-card-tabs", "flex-wrap", PHONE), "nowrap", "26.1-26: a phone strip keeps the action in the same row; the tabs scroll");
+  assert.ok(styles.indexOf(".editor-card-tab-add") < styles.indexOf("/* users-tab:start"), "the new rules stand before users-tab");
+  assert.ok(styles.trimEnd().endsWith("/* ui-unify:end */"), "the block of ui-unify stays the last");
+});
+
+// ---- 26.1-26 (owner 2026-11-21, item 34): «+ Добавить…» — в конце каждой полосы вкладок, без наложений ----
+test("owner 2026-11-21 item 34: the seam holds the labels of every strip; the strip is one row of scrolling tabs and a fixed add button; a narrow phone shows only «+»", () => {
+  for (const [key, text] of [["addCard", "+ ДОБАВИТЬ КАРТОЧКУ"], ["addSubsection", "+ ПОДРАЗДЕЛ"], ["addMutation", "+ ДОБАВИТЬ МУТАЦИЮ"], ["addLog", "+ ДОБАВИТЬ ЗАПИСЬ"]]) {
+    assert.ok(cardTabsCode.includes(`${key}: "${text}"`), `${key} is the label of the old button, word for word (D-58)`);
+  }
+  assert.ok(cardTabsCode.includes("aria-label={addLabel}"), "the name of the button is the whole label, also when only «+» is seen");
+  assert.ok(cardTabsCode.includes('<span className="editor-card-tab-add-full" aria-hidden="true">{addLabel}</span><span className="editor-card-tab-add-short" aria-hidden="true">{cardTabsCopy.addShort}</span>'), "the full and the short label");
+  // One row: the tabs take what is left and scroll, the button and the note never shrink and never wrap.
+  assert.equal(declared(".editor-card-tabs", "display"), "flex");
+  assert.equal(declared(".editor-card-tabs", "align-items"), "center");
+  assert.equal(declared(".editor-card-tabs", "gap"), "8px");
+  assert.equal(declared(".editor-card-tabs", "flex-wrap"), "nowrap");
+  assert.equal(declared(".editor-card-tabs", "flex-wrap", PHONE), "nowrap", "no second row on a phone either");
+  assert.equal(declared(".editor-card-tabs nav", "flex"), "1 1 auto");
+  assert.equal(declared(".editor-card-tabs nav", "min-width"), "0");
+  assert.equal(declared(".editor-card-tabs nav", "overflow-x"), "auto");
+  assert.equal(declared(".editor-card-tabs > nav", "flex", PHONE), undefined, "the phone rule that pushed the button under the tabs is gone");
+  assert.equal(declared(".editor-card-tabs > .editor-card-tab-add-bar", "flex"), "none");
+  assert.equal(declared(".editor-card-tabs > .editor-card-tab-add-bar", "flex", PHONE), "none");
+  assert.equal(declared(".editor-card-tab-add > .editor-card-tab-add-short", "display"), "none", "the full label on a PC");
+  assert.equal(declared(".editor-card-tab-add > .editor-card-tab-add-full", "display", "max-width: 520px"), "none");
+  assert.equal(declared(".editor-card-tab-add > .editor-card-tab-add-short", "display", "max-width: 520px"), "inline");
+  assert.equal(declared(".editor-card-tabs button.editor-card-tab-add", "min-width", "max-width: 520px"), "var(--tap-target)", "the «+» is a whole tap target");
+  // The tail of the sheet keeps fonts of 11px or more.
+  const tail = styles.slice(styles.indexOf("/* 26.1-26 (owner item 34)"), styles.indexOf("/* users-tab:start"));
+  for (const size of tail.matchAll(/(?:font-size:|font:[^;]*?)\s*(\d+)px/g)) assert.ok(Number(size[1]) >= 11, `font ${size[1]}px in the 26.1-26 rules`);
+  assert.ok(styles.indexOf("/* 26.1-26 (owner item 34)") < styles.indexOf("/* users-tab:start"), "the new rules stand before users-tab");
+  assert.ok(styles.trimEnd().endsWith("/* ui-unify:end */"), "the block of ui-unify stays the last");
+});
+
+test("owner 2026-11-21 item 34: the strip of the scientist records of a virus ends with «+ ДОБАВИТЬ ЗАПИСЬ»; the button under the records is gone", () => {
+  const logsGroup = editorSlice('{dossierTab === "logs" && <EditorGroup title="Записи учёных" stack>', '{tab === "info" && (');
+  const strip = logsGroup.slice(logsGroup.indexOf("<CardTabs label={cardTabsCopy.logs}"), logsGroup.indexOf("\n                {selectedVirus.scientistLogs.map("));
+  assert.ok(strip.includes("add={{ onAdd: () => { setFormatTarget(null); setFormatterOpen(false); updateVirus((virus) => virus.scientistLogs.push({ id: makeId(\"log\")"), "the same add action; the format panel closes as on a switch");
+  assert.ok(strip.includes("disabled: selectedVirus.scientistLogs.length >= MAX_SCIENTIST_LOGS, label: cardTabsCopy.addLog, note: `${selectedVirus.scientistLogs.length} / ${MAX_SCIENTIST_LOGS}` }}"), "the limit, the label of the seam and the count");
+  const records = logsGroup.slice(0, logsGroup.indexOf("</EditorGroup>}"));
+  assert.ok(!records.includes("scientist-log-actions") && !records.includes("+ ДОБАВИТЬ ЗАПИСЬ"), "no button under the records");
+});
+
+test("owner 2026-11-21 item 34: every strip of tabs — the guide cards, the info subsections, the mutations and records of a virus, the full record in the bin, «Шаблон» — ends with its add button; no old button under a list", () => {
+  const strips = (code: string) => code.split("<CardTabs ").slice(1).map((part) => part.slice(0, part.indexOf("/>\n")));
+  const builder = stripComments(lf(readFileSync(new URL("../components/portia-template-builder.tsx", import.meta.url), "utf8")));
+  const places = [...strips(stripComments(editor)), ...strips(stripComments(dossierSeam)), ...strips(builder)];
+  assert.equal(places.length, 7, "four strips in the editor, two in the bin record, one in «Шаблон»");
+  for (const strip of places) assert.ok(strip.includes("add={{ onAdd: "), `the strip ${strip.slice(0, 60)}… has its add action`);
+  const labelled = places.map((strip) => strip.match(/label: cardTabsCopy\.(\w+)/)?.[1] ?? "addCard (default)");
+  assert.deepEqual(labelled, ["addMutation", "addLog", "addSubsection", "addCard (default)", "addMutation", "addLog", "addMutation"], "each strip names what it adds with a label of the seam");
+  for (const [name, code] of [["editor", stripComments(editor)], ["bin record", stripComments(dossierSeam)], ["«Шаблон»", builder]] as const) {
+    for (const old of [">+ ДОБАВИТЬ МУТАЦИЮ</button>", ">+ ДОБАВИТЬ ЗАПИСЬ</button>", ">+ ПОДРАЗДЕЛ</button>", ">+ ДОБАВИТЬ КАРТОЧКУ</button>"]) assert.ok(!code.includes(old), `${name}: no ${old} under a list`);
+  }
+  // A new item is selected at once: the add pushes a new id (the rule of useCardTabSelection picks the grown id); the subsection opens as before.
+  const info = editorSlice('{tab === "info" && (', '{tab === "guide" && (');
+  assert.ok(info.includes('const id = makeId("info"); changeDraft((next) => { updateById(next.infoSections, section.id, (item) => { item.subsections.push({ id, title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }); }); }); setOpen([id], true); }, disabled: section.subsections.length >= MAX_SUBSECTIONS, label: cardTabsCopy.addSubsection, note: <LimitNote id={`limit-subsections-${section.id}`}'), "the same add-subsection action, limit and note");
+  assert.ok(builder.includes("add={{ onAdd: () => { closeFormatter(); change(addTemplateMutation); }, disabled: false, label: cardTabsCopy.addMutation }}"), "«Шаблон» adds through the same pure step, the panel closes");
+  assert.ok(stripComments(dossierSeam).includes("disabled: virus.scientistLogs.length >= MAX_SCIENTIST_LOGS, label: cardTabsCopy.addLog, note: `${virus.scientistLogs.length} / ${MAX_SCIENTIST_LOGS}`"), "the bin record keeps the limit of the records and shows the count, as the editor");
+  // «Корзина» is a list and a detail, not a strip: its add buttons stand at the end of the list column, where «+ ДОБАВИТЬ ВИРУС» stands in «База вирусов».
+  const recycle = editorSlice('{tab === "recycle" && (', '{tab === "search" && (');
+  const column = recycle.slice(recycle.indexOf('<aside className="editor-record-list etab-list">'), recycle.indexOf("</aside>"));
+  assert.ok(column.indexOf(">+ ДОБАВИТЬ ФАЙЛ</button>") > column.indexOf("orderedRecycleKeys.map("), "the add file button ends the list column");
+  const viruses = editorSlice('{tab === "viruses" && (', "</aside>");
+  assert.ok(viruses.indexOf(">+ ДОБАВИТЬ ВИРУС</button>") > viruses.indexOf("draft.viruses.map("), "… as the add virus button ends its column");
+});
+
+test("owner 2026-11-21 item 17: the editor gives the strip of the guide cards its add action and no longer draws the button under the list", () => {
+  const guide = editorSlice('{tab === "guide" && (', '{tab === "recycle"');
+  const strip = guide.slice(guide.indexOf("<CardTabs label={cardTabsCopy.cards}"), guide.indexOf('<div className="info-subsection-list" data-sort-group="guide-cards"'));
+  assert.ok(strip.includes("add={{ onAdd: () => { const id = makeId(\"card\"); changeDraft((next) => { updateById(next.guideSections, section.id, (item) => { item.cards.push({ id, title: \"НОВАЯ КАРТОЧКА\", cover: \"\", blocks: [] }); }); }); setOpen([id], true); }, disabled: section.cards.length >= MAX_SUBSECTIONS, note: <LimitNote id={`limit-cards-${section.id}`} count={section.cards.length} max={MAX_SUBSECTIONS} /> }}"), "the same add action, the limit and the note");
+  assert.ok(!guide.includes("limit-add\" type=\"button\" disabled={section.cards.length >= MAX_SUBSECTIONS}"), "the old button under the list is gone");
+  assert.equal(guide.split("limit-cards-").length - 1, 1, "one limit note of the cards");
+  assert.ok(guide.includes("В разделе нет карточек. Добавьте первую кнопкой «+ ДОБАВИТЬ КАРТОЧКУ»."), "the empty section still names the button");
+  assert.ok(!stripComments(editor).includes("<button className=\"secondary-control limit-add\" type=\"button\" disabled={section.cards.length"), "no limit-add button of the cards left in the file");
+});
+
+// ---- 26.1-20 (owner 2026-11-21, item 20): несохранённые изменения — компактная отметка справа вверху ----
+test("owner 2026-11-21 item 20: what took the room of the section tabs on «Информация» is named: a no-wrap status line of about forty characters, and the reasons as full-width rows", () => {
+  // The finding of 26.1-20 Task 3, held as facts of the sheet: in the bar the status paragraph is not shrinkable text but a no-wrap line that stands beside the nav and the buttons.
+  assert.equal(declared(".etab-bar .etab-status.editor-save-status", "white-space"), "nowrap", "the long status stays one line, so it keeps its width instead of wrapping");
+  assert.equal(declared(".etab-nav", "flex"), "1 1 auto", "the section tabs get what is left");
+  assert.equal(declared(".etab-nav", "min-width"), "0");
+  assert.equal(declared(".etab-message", "padding"), "0 16px", "a reason is a row of the whole bar width under it");
+});
+
+test("owner 2026-11-21 item 20: the unsaved changes are a small mark at the right end of the bar; the full line and the reasons are in the details, one live region stays", () => {
+  const code = stripComments(shell);
+  assert.ok(code.includes('className="etab-unsaved"') && code.includes("Не сохранено: ${unsavedCount}"), "the mark says «Не сохранено: N» and nothing about sections");
+  assert.ok(code.includes("const compact = unsavedCount > 0 || Boolean(notice);"), "the mark replaces the long line while there is something unsaved or a notice; otherwise nothing changes");
+  assert.match(code, /className=\{`etab-status editor-save-status \$\{notice \? "saved" : tone\}`\} role="status" aria-live="polite" data-compact=\{compact \|\| undefined\}/, "the one live region keeps the full text, only its look changes");
+  const barStart = code.indexOf('<section className="etab-bar" aria-label={label}>');
+  const barEnd = code.indexOf("</section>", barStart);
+  const bar = code.slice(barStart, barEnd);
+  assert.ok(bar.indexOf('className="etab-actions"') < bar.indexOf("<UnsavedMark"), "the mark is the last of the row, the right corner");
+  assert.ok(bar.includes("{compact && <UnsavedMark"), "no mark without something unsaved");
+  assert.ok(!bar.includes("<BarMessages"), "the reasons are not drawn as rows of the bar");
+  const mark = code.slice(code.indexOf("function UnsavedMark"), code.indexOf("export function EditorActionBar"));
+  assert.ok(mark.includes('type="button"') && mark.includes("aria-expanded={open}") && mark.includes("aria-controls={detailsId}"), "the mark is a button that tells whether the details are shown");
+  assert.ok(mark.includes("onMouseEnter") && mark.includes("onMouseLeave") && mark.includes("onFocus") && mark.includes("onBlur"), "details on hover and on focus");
+  assert.ok(mark.includes('event.key !== "Escape"') && mark.includes("setOpen(false)"), "Escape closes the details");
+  assert.ok(mark.includes('className="etab-unsaved-details"') && mark.includes("data-open={open || undefined}"), "the details are always in the tree and shown by data-open, so a screen reader reads the reasons and the keyboard reaches their buttons");
+  assert.ok(mark.includes("<BarMessages messages={messages} />") && mark.includes("{status}"), "the details hold the full line and the reasons, each reason still role=alert");
+  assert.ok(mark.includes("data-tone={"), "T-26.1-48: the mark changes colour with the state of the save");
+  assert.doesNotMatch(code, /dangerouslySetInnerHTML/);
+  // The old rows stay where they were for a bar without the mark.
+  assert.ok(code.includes("{compact ? null : <BarMessages messages={messages} />}") || code.includes("{!compact && <BarMessages messages={messages} />}"), "without the mark the reasons are rows as before");
+  assert.equal(code.split('role="status"').length - 1, 1, "R05: one live region in the shell (the draft row is not live)");
+});
+
+test("owner 2026-11-21 item 20: the mark is 28px on a PC and a tap target on a phone, 11-13px font; the long status goes out of the row without leaving the tree; the details are a popup", () => {
+  assert.equal(declared(".etab-bar > .etab-unsaved", "flex"), "none");
+  assert.equal(declared(".etab-unsaved > .etab-unsaved-mark", "min-height"), "28px");
+  assert.equal(declared(".etab-unsaved > .etab-unsaved-mark", "min-height", PHONE), "var(--tap-target)");
+  const size = Number.parseFloat((declared(".etab-unsaved > .etab-unsaved-mark", "font") ?? "").match(/(\d+)px/)?.[1] ?? "NaN");
+  assert.ok(size >= 11 && size <= 13, "font 11-13px");
+  assert.equal(declared(".etab-status[data-compact]", "position"), "absolute", "the long line leaves the row, so the tabs get its width");
+  assert.equal(declared(".etab-status[data-compact]", "clip"), "rect(0, 0, 0, 0)", "but stays read by a screen reader");
+  assert.equal(declared(".etab-unsaved-details", "position"), "absolute");
+  assert.equal(declared(".etab-unsaved-details", "right"), "0");
+  assert.equal(declared(".etab-unsaved-details:not([data-open])", "clip-path"), "inset(50%)", "closed: out of sight, in the tree");
+  assert.equal(declared(".etab-unsaved-details .etab-message", "padding"), "0", "the reasons in the details are not rows of the bar width");
+  for (const tone of ["error", "conflict", "saved", "partial"]) {
+    assert.ok(styles.includes(`.etab-unsaved-mark[data-tone="${tone}"]`) || styles.includes(`[data-tone="${tone}"]`), `${tone} has its colour`);
+  }
+  assert.ok(styles.indexOf(".etab-unsaved") < styles.indexOf("/* users-tab:start"), "the new rules stand before users-tab");
+  assert.ok(styles.trimEnd().endsWith("/* ui-unify:end */"), "the block of ui-unify stays the last");
 });

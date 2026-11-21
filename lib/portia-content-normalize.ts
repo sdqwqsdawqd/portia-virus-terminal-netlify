@@ -23,6 +23,7 @@ import { isAllowedMediaUrl } from "./media-url.ts";
 import { type ImageFraming, normalizeImageFraming } from "./image-framing.ts";
 import { MIN_ACCESS_LEVEL, requiredLevelOf, type AccessLevel } from "./access-levels.ts";
 import { normalizeContentRedaction } from "./level-placeholders.ts";
+import { canonicalTransmission } from "./transmission-routes.ts";
 
 // Every save and every cached read passes through here: unknown input in, a complete PortiaContent out.
 // It coerces shape and never cuts or drops user content (D-01); the limits in content-limits.ts only drive editor warnings.
@@ -271,11 +272,17 @@ function normalizeGuideBlock(value: unknown, cardId: string, index: number): Gui
         ...(value.align === "left" || value.align === "center" || value.align === "right" ? { align: value.align } : {}),
         ...(typeof value.focusX === "number" && Number.isFinite(value.focusX) ? { focusX: Math.min(100, Math.max(0, Math.round(value.focusX))) } : {}),
         ...(typeof value.focusY === "number" && Number.isFinite(value.focusY) ? { focusY: Math.min(100, Math.max(0, Math.round(value.focusY))) } : {}),
+        ...framingEntry("framing", normalizeMediaUrl(value.url), value.framing),
       }];
     case "video":
       return [{ id, type: "video", videoId: typeof value.videoId === "string" && youtubeIdPattern.test(value.videoId) ? value.videoId : "" }];
     case "callout":
       return [{ id, type: "callout", label: asText(value.label), text: asText(value.text) }];
+    case "cards": {
+      // Only plain ids, each once, at most 24; the card itself is never listed (a page that opens itself).
+      const ids = Array.isArray(value.cardIds) ? value.cardIds.filter((entry): entry is string => typeof entry === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(entry) && entry !== cardId) : [];
+      return [{ id, type: "cards", cardIds: [...new Set(ids)].slice(0, 24) }];
+    }
     default:
       return [];
   }
@@ -344,7 +351,8 @@ export function normalizePortiaContent(value: unknown): PortiaContent | null {
       physiology: textOf(virus.physiology),
       ppu: { health: textOf(ppu.health), speed: textOf(ppu.speed), abilities: textOf(ppu.abilities) },
       classification: Object.fromEntries(
-        Object.keys(classificationOptions).map((key) => [key, canonicalClassificationName(textOf(classification[key]))]),
+        // OWN-03: the routes of transmission are a list; old names are translated and the list is put in the owner's order on every read and save.
+        Object.keys(classificationOptions).map((key) => [key, key === "transmission" ? canonicalTransmission(textOf(classification[key])) : canonicalClassificationName(textOf(classification[key]))]),
       ) as Virus["classification"],
       infectedImage,
       ...framingEntry("infectedImageFraming", infectedImage, virus.infectedImageFraming),

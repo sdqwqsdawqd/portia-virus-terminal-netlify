@@ -9,6 +9,8 @@ import test from "node:test";
 
 const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replace(/\r\n/g, "\n");
 const fieldLines = (text: string) => text.split("\n").filter((line) => line.includes("<ImageEditorField"));
+// 26.1-02: «Фото сотрудника» moved with the employee editor into its seam; it is still one of the eight fields of the editor family.
+const editorFamilyFields = () => [...fieldLines(read("components/portia-editor.tsx")), ...fieldLines(read("components/portia-editor-employees.tsx"))];
 
 /** The decision of 20-52 about the employee photo: `employee_framing: a` or `b` in its SUMMARY. */
 function employeeFraming(): "a" | "b" {
@@ -22,8 +24,8 @@ const hasFraming = (line: string) => /\sframing=\{/.test(line) && /\sframingBox=
 const hasNoFraming = (line: string) => !/\s(framing|framingBox|onFramingChange)=/.test(line);
 
 test("D-63: every picture field of the editor file offers the visible part, except the card page photo block and (variant b) the employee photo", () => {
-  const lines = fieldLines(read("components/portia-editor.tsx"));
-  assert.equal(lines.length, 8, "the editor file has eight picture fields");
+  const lines = editorFamilyFields();
+  assert.equal(lines.length, 8, "the editor file and the employee seam have eight picture fields");
   const employee = employeeFraming();
   for (const line of lines) {
     const label = /label="([^"]*)"/.exec(line)?.[1] ?? "";
@@ -41,7 +43,7 @@ test("D-63: both picture fields of the archived virus editor offer the visible p
 });
 
 test("D-63: the frame kinds match the surfaces of the site (band, cover tile, pictures that lie as they are)", () => {
-  const lines = fieldLines(read("components/portia-editor.tsx"));
+  const lines = editorFamilyFields();
   const kindOf = (label: string) => /\sframingBox="(\w+)"/.exec(lines.find((line) => line.includes(`label="${label}"`)) ?? "")?.[1];
   assert.equal(kindOf("Фото раздела"), "band");
   assert.equal(kindOf("Обложка"), "tile");

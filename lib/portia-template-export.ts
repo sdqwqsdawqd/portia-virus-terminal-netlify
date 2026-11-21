@@ -13,9 +13,30 @@
  */
 
 export const emptyTemplateText = "Не заполнено";
-export const templateFileName = "shablon-dosye.html";
-export const templatePngFileName = "shablon-dosye.png";
+/** The old fixed file name stem: used when the virus has no usable name (OWN-12). */
+export const templateFileStem = "shablon-dosye";
+export const templateFileName = `${templateFileStem}.html`;
 export const templateDefaultTitle = "Шаблон досье";
+
+const templateFileNameMaxLength = 80;
+// Path separators and the characters Windows forbids, the C0/C1 controls, the combining acute accent (U+0301) and the invisible direction marks.
+const templateFileNameForbidden = /[<>:"/\\|?*\u0000-\u001f\u007f-\u009f́​-‏‪-‮⁦-⁩﻿]/g;
+const templateFileNameReserved = /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?=\.|$)/i;
+
+/**
+ * OWN-12 (owner 2026-11-21, item 24): the downloaded «Шаблон» is named after the virus, `{name}.html` or `{name}.png`.
+ * The name is user input that reaches the `download` attribute, so path separators and forbidden characters are removed, edge spaces and
+ * trailing dots are trimmed, Cyrillic stays, the length is cut at 80 characters (never inside a surrogate pair) and a reserved Windows name
+ * gets a «_». A name with nothing usable left falls back to the old `shablon-dosye`.
+ */
+export function templateDownloadName(virusName: string, extension: "html" | "png"): string {
+  // Leading dots go too: once the separators are gone «../x» must not turn into a hidden or dot-only name.
+  const trim = (text: string) => text.replace(/^[\s.]+|[\s.]+$/gu, "");
+  const cleaned = trim(virusName.replace(templateFileNameForbidden, ""));
+  const cut = trim(Array.from(cleaned).slice(0, templateFileNameMaxLength).join(""));
+  const stem = cut === "" ? templateFileStem : cut.replace(templateFileNameReserved, "$1_");
+  return `${stem}.${extension}`;
+}
 
 /* ---------------------------------------------------------------- local image (D-24) */
 
@@ -215,6 +236,8 @@ export type TemplateCssRule = Readonly<{ selector: string; declarations: string;
 const cardClasses: ReadonlySet<string> = new Set([
   "record-view", "record-body", "record-header", "record-code", "record-status", "record-document", "record-hero", "record-footer",
   "classification-panel", "classification-grid", "class-cell", "class-badge",
+  // OWN-03: the routes of transmission of the card (components/portia-virus-card.tsx) travel into the file with their look.
+  "route-list", "route-item", "route-description",
   "danger", "spread", "escape", "transmission", "mind", "appearance", "behavior", "level-1", "level-2", "level-3",
   "section-kicker", "dossier-section", "lead-copy", "metric-grid", "mutation-grid", "mutation-card", "mutation-index", "mutation-copy",
   "subject-media", "media-empty", "portia-image", "is-loaded", "is-fill", "formatted-content", "formatted-empty",

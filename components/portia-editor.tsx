@@ -1,9 +1,12 @@
 "use client";
 
+import { ImageFramingEditor } from "@/components/portia-image-framing";
+import { CardTabs, cardTabsCopy, useCardTabSelection } from "@/components/portia-editor-card-tabs";
 import { useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { AccessLiveTab, LiveSurface, useLiveMode } from "@/components/portia-editor-live";
 import { changedDossierTabs, changedSections, deniedSections, editorSections, revertSections, sectionLabels, type DossierTab, type EditorSection } from "@/lib/editor-changes";
-import { draftEdits, employeeRequestFailure, partialSave, rebaseDecision, SaveConflictError, SectionClosedError, saveStatusText, type DraftEdit, type SaveStatus } from "@/lib/editor-save-status";
+import { draftEdits, partialSave, rebaseDecision, SaveConflictError, SectionClosedError, saveStatusText, type DraftEdit, type SaveStatus } from "@/lib/editor-save-status";
 import { closedMessage, closedSectionsOf, openTabIds, tabRegistry, type TabDef } from "@/lib/editor-tabs";
 import { shortcutOf } from "@/lib/editor-shortcuts";
 import { columnMajor } from "@/lib/editor-columns";
@@ -33,7 +36,8 @@ import {
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
 import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS, MAX_TABLE_ROWS, bodyTooLargeMessage, contentBodyBytes, limitStatus, limitText, oversizeFields, oversizeMessage } from "@/lib/content-limits";
 import { compactRuns, expandStyles } from "@/lib/rich-text-style";
-import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, settleDraft, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";
+import { type PortiaEmployee } from "@/lib/portia-employees";
+import { EmployeeProfilesEditor, useEmployeeDraftStore } from "@/components/portia-editor-employees";
 import { ActiveFormatContext, FloatingTextFormatPanel, FormatLaunchButton, FormattedTextarea, findFormatField, replaceRichText, type EditorPreviewSurface, type FormatTarget } from "@/components/portia-editor-rich-text";
 import { PromotionEditor } from "@/components/portia-promotion-editor";
 import { LevelPicker } from "@/components/portia-level-picker";
@@ -43,7 +47,7 @@ import { useImageRewrite } from "@/components/portia-image-rewrite";
 import { AppDeniedPanel } from "@/components/portia-desktop-states";
 import { UsersTab, UsersTabCount, useUsersPendingCount } from "@/components/portia-users-tab";
 import { accessCheckFailedText } from "@/lib/app-state";
-import { ArchivedVirusEditor, ClassificationField, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
+import { ArchivedVirusEditor, ClassificationField, ColumnSwapHandle, ConfirmDialog, DossierTabs, EditorGroup, Field, ImageEditorField, OrderDragHandle } from "@/components/portia-editor-dossier";
 import { cardToggleName } from "@/lib/card-toggle-name";
 import { EditorActionBar, EditorDraftBar, EditorDraftBarContext, EditorEmptyDetail, EditorTabBody, type EditorDraftBarState } from "@/components/portia-editor-tab-shell";
 
@@ -91,6 +95,7 @@ const guideBlockHeads = {
   photo: { label: "фото", title: "ФОТО" },
   video: { label: "видео", title: "ВИДЕО" },
   callout: { label: "врезка", title: "ВРЕЗКА" },
+  cards: { label: "карточки", title: "КАРТОЧКИ" },
 } as const;
 
 const clone = (content: PortiaContent) => JSON.parse(JSON.stringify(content)) as PortiaContent;
@@ -141,7 +146,7 @@ function findGuideBlock(content: PortiaContent, cardId: string, blockId: string)
 
 const guideNo = (index: number) => String(index + 1).padStart(2, "0");
 const firstLine = (value: string) => value.split("\n").map((line) => line.trim()).find(Boolean);
-const guideBlockTitle = (block: GuideBlock) => (block.type === "heading" || block.type === "text" ? firstLine(block.text) : block.type === "callout" ? firstLine(block.label) ?? firstLine(block.text) : undefined);
+const guideBlockTitle = (block: GuideBlock) => (block.type === "heading" || block.type === "text" ? firstLine(block.text) : block.type === "callout" ? firstLine(block.label) ?? firstLine(block.text) : block.type === "cards" && block.cardIds.length ? `${block.cardIds.length} шт.` : undefined);
 
 function editGuideTableRows(content: PortiaContent, cardId: string, blockId: string, edit: (rows: { id: string; key: string; value: string }[]) => void) {
   const block = findGuideBlock(content, cardId, blockId);
@@ -158,49 +163,6 @@ function recycleKeys(content: PortiaContent) {
     ...content.recycleFiles.map((file) => `file:${file.id}`),
     ...(content.recycledViruses ?? []).map((virus) => `virus:${virus.id}`),
   ])];
-}
-
-// Two table columns swap, so a header ≡ is dropped on the other header (or moved with ArrowLeft/ArrowRight) instead of sorting live.
-function ColumnSwapHandle({ label, onSwap }: { label: string; onSwap: () => void }) {
-  const otherCell = (button: HTMLElement, x: number, y: number) => {
-    const cell = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-column]") ?? null;
-    return cell && cell !== button.closest("[data-column]") && cell.closest(".info-table-head") === button.closest(".info-table-head") ? cell : null;
-  };
-  const clear = (button: HTMLElement) => {
-    delete button.dataset.dragging;
-    button.closest(".info-table-head")?.querySelectorAll("[data-drop-target]").forEach((cell) => cell.removeAttribute("data-drop-target"));
-  };
-  return <button
-    className="order-drag-handle column-swap-handle"
-    type="button"
-    aria-label={`Переставить столбец «${label}»`}
-    aria-keyshortcuts="ArrowLeft ArrowRight"
-    onPointerDown={(event) => {
-      if (!event.isPrimary || event.button !== 0) return;
-      event.currentTarget.setPointerCapture(event.pointerId);
-      // "column", not "true": editKeyFor folds only row drags into one step, and a column swap is a single change on drop.
-      event.currentTarget.dataset.dragging = "column";
-    }}
-    onPointerMove={(event) => {
-      const button = event.currentTarget;
-      if (!button.dataset.dragging) return;
-      const cell = otherCell(button, event.clientX, event.clientY);
-      button.closest(".info-table-head")?.querySelectorAll("[data-column]").forEach((item) => item.toggleAttribute("data-drop-target", item === cell));
-    }}
-    onPointerUp={(event) => {
-      const button = event.currentTarget;
-      const dropped = button.dataset.dragging && otherCell(button, event.clientX, event.clientY);
-      clear(button);
-      if (dropped) onSwap();
-    }}
-    onPointerCancel={(event) => clear(event.currentTarget)}
-    onLostPointerCapture={(event) => clear(event.currentTarget)}
-    onKeyDown={(event) => {
-      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-      event.preventDefault();
-      onSwap();
-    }}
-  ><span aria-hidden="true">≡</span></button>;
 }
 
 function normalizePhraseLines(lines: string[], document: RichTextDocument | undefined, fallback: string) {
@@ -292,27 +254,56 @@ function SectionTabs({ label, sections, activeId, onSelect, onMove }: {
   </div>;
 }
 
+// Owner 2026-11-18: one standard for every picture — the photo block of a card is framed in the same window «Видимая часть» as covers and bands
+// (a free frame: its proportions are dragged by the handles), not by the old sliders «Кадр по горизонтали / вертикали». Applying a frame drops the
+// old height and focus numbers of the block, so the site shows exactly what the window showed.
 function GuidePhotoLayoutEditor({ block, onChange }: {
   block: Extract<GuideBlock, { type: "photo" }>;
   onChange: (edit: (photo: Extract<GuideBlock, { type: "photo" }>) => void) => void;
 }) {
   const width = block.width ?? 100;
-  const height = block.height ?? 0;
-  const align = block.align ?? "center";
-  const focusX = block.focusX ?? 50;
-  const focusY = block.focusY ?? 50;
+  const align = block.align ?? "left";
   return <div className="guide-photo-layout">
-    <strong>Расположение и видимая часть фото</strong>
+    <strong>Расположение фото</strong>
     <div className="guide-photo-layout-controls">
       <label>Ширина: {width}%<input type="range" min="40" max="100" step="5" value={width} onChange={(event) => onChange((photo) => { photo.width = Number(event.target.value); })} /></label>
-      <label>Высота: {height ? `${height} px` : "по изображению"}<input type="range" min="0" max="600" step="20" value={height} onChange={(event) => onChange((photo) => { photo.height = Number(event.target.value); })} /></label>
       <label>Положение<select value={align} onChange={(event) => onChange((photo) => { photo.align = event.target.value as "left" | "center" | "right"; })}><option value="left">Слева</option><option value="center">По центру</option><option value="right">Справа</option></select></label>
-      <label>Кадр по горизонтали: {focusX}%<input type="range" min="0" max="100" step="5" value={focusX} onChange={(event) => onChange((photo) => { photo.focusX = Number(event.target.value); })} /></label>
-      <label>Кадр по вертикали: {focusY}%<input type="range" min="0" max="100" step="5" value={focusY} onChange={(event) => onChange((photo) => { photo.focusY = Number(event.target.value); })} /></label>
     </div>
-    <div className={`guide-photo-layout-preview guide-photo-${align}`} style={{ width: `${width}%` }}>
-      {block.url ? <img src={block.url} alt="Предпросмотр расположения фото" loading="lazy" style={{ width: "100%", height: height ? `${height}px` : "auto", objectPosition: `${focusX}% ${focusY}%` }} /> : <span>Выберите фото, чтобы увидеть результат.</span>}
-    </div>
+    {block.url && <ImageFramingEditor src={block.url} framing={block.framing} box="free" label="Фото" onChange={(framing) => onChange((photo) => {
+      if (framing) photo.framing = framing; else delete photo.framing;
+      delete photo.height; delete photo.focusX; delete photo.focusY;
+    })} />}
+  </div>;
+}
+
+// Owner 2026-11-18: the block «Карточки» — other cards of «Справочник» shown inside this card. Picked from one list grouped by section, kept in the chosen order.
+function GuideCardsBlockEditor({ block, cardId, sections, onChange }: {
+  block: Extract<GuideBlock, { type: "cards" }>;
+  cardId: string;
+  sections: PortiaContent["guideSections"];
+  onChange: (cardIds: string[]) => void;
+}) {
+  const titleOf = (id: string) => {
+    const found = findGuide(sections, id);
+    return found?.card ? `${found.card.title || "Без названия"} · ${found.section.title || "Без названия"}` : "Карточка удалена";
+  };
+  return <div className="guide-cards-editor">
+    {block.cardIds.length ? <ol className="guide-cards-editor-list">
+      {block.cardIds.map((id, index) => <li key={id}>
+        <span>{titleOf(id)}</span>
+        <button type="button" className="secondary-control" aria-label={`Выше: ${titleOf(id)}`} disabled={index === 0} onClick={() => { const next = [...block.cardIds]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; onChange(next); }}>↑</button>
+        <button type="button" className="secondary-control" aria-label={`Убрать: ${titleOf(id)}`} onClick={() => onChange(block.cardIds.filter((item) => item !== id))}>×</button>
+      </li>)}
+    </ol> : <p className="guide-section-empty">Карточки ещё не выбраны</p>}
+    <label className="editor-field">
+      <span>Добавить карточку</span>
+      <select value="" disabled={block.cardIds.length >= 24} onChange={(event) => { if (event.target.value) onChange([...block.cardIds, event.target.value]); }}>
+        <option value="">Выберите карточку…</option>
+        {sections.map((section) => <optgroup key={section.id} label={section.title || "Без названия"}>
+          {section.cards.filter((item) => item.id !== cardId && !block.cardIds.includes(item.id)).map((item) => <option key={item.id} value={item.id}>{item.title || "Без названия"}</option>)}
+        </optgroup>)}
+      </select>
+    </label>
   </div>;
 }
 
@@ -505,8 +496,9 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   const [handledCloseRequest, setHandledCloseRequest] = useState(closeRequest);
   const closeAsked = closeRequest !== handledCloseRequest;
   const [employeeDirty, setEmployeeDirty] = useState(false);
-  const [leaveTo, setLeaveTo] = useState<EditorTab | null>(null);
-  const leaving = employeeDirty && (leaveTo !== null || closeAsked);
+  const cardTabs = useCardTabSelection();
+  const employeeDrafts = useEmployeeDraftStore();
+  const leaving = employeeDirty && closeAsked;
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
   const [formatterOpen, setFormatterOpen] = useState(false);
   const [dossierTab, setDossierTab] = useState<DossierTab>("main");
@@ -601,13 +593,13 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
       const { baseline, present } = closureRef.current.history;
       const lost: string[] = deniedSections(baseline, present, closed);
       if (wasEmployeeDirty && added.includes("employees")) lost.push("employees");
+      if (added.includes("employees")) { employeeDrafts.reset(); setEmployeeDirty(false); }
       if (closed.length) dispatch({ type: "restrict", project: (content) => revertSections(baseline, content, closed) });
       if (!added.length) return;
       setFormatTarget(null);
       setFormatterOpen(false);
       setRecordOpen(false);
       setPreviewSurface(null);
-      setLeaveTo(null);
       if (!lost.length) return;
       const names = lost.map((id) => `«${id === "employees" ? "Сотрудники" : sectionLabels[id as EditorSection]}»`);
       setClosureNotice(lost.length === 1
@@ -615,7 +607,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
         : `Владелец закрыл разделы ${names.join(", ")}, несохранённые правки в них сброшены`);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [closedKey, employeesClosed]);
+  }, [closedKey, employeesClosed, employeeDrafts]);
 
   const selectedVirusIndex = useMemo(
     () => draft.viruses.findIndex((virus) => virus.id === selectedVirusId),
@@ -756,6 +748,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   };
   // The panel's stored commit for a deleted item would write its formatting back; peers too (CR-01).
   const closeFormatterFor = (...keys: string[]) => dropFormatFields((key) => keys.includes(key));
+  const live = useLiveMode(tab, () => { setFormatTarget(null); setFormatterOpen(false); });
 
   // The format panel keeps a target in the tab being hidden; leaving it open could write old text back (Pitfall 7).
   const selectDossierTab = (id: DossierTab) => {
@@ -784,6 +777,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   const infoCardIds = draft.infoSections.flatMap((section) => [section.id, ...section.subsections.flatMap((subsection) => [subsection.id, ...subsection.blocks.map((block) => block.id)])]);
   const jumpInfo = (id: string) => {
     const found = findInfo(draft.infoSections, id);
+    if (found?.subsection) cardTabs.select(found.section.id, id);
     setOpen(found ? [found.section.id, id] : [id], true);
     jumpToCard(id);
   };
@@ -798,6 +792,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   const guideCardIds = draft.guideSections.flatMap((section) => [section.id, ...section.cards.flatMap((card) => [card.id, ...card.blocks.map((block) => block.id)])]);
   const jumpGuide = (id: string) => {
     const found = findGuide(draft.guideSections, id);
+    if (found?.card) cardTabs.select(found.section.id, id);
     setOpen(found ? [found.section.id, id] : [id], true);
     jumpToCard(id);
   };
@@ -897,23 +892,21 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
     setFormatTarget(null);
     setFormatterOpen(false);
   };
-  // An unsaved employee draft is asked about before leaving the tab (D-02).
-  const switchTab = (id: EditorTab) => {
-    if (tab === "employees" && id !== "employees" && employeeDirty) setLeaveTo(id);
-    else showTab(id);
-  };
-  // The answer of the employee question: continue the pending tab switch or window close, or drop it.
+  // Employee drafts live in the store and survive leaving the tab: no question here (owner 2026-11-20, OWN-07).
+  const switchTab = (id: EditorTab) => showTab(id);
+  // The answer of the employee question, asked once when the window closes.
   const onEmployeeLeave = (ok: boolean) => {
     if (ok) setEmployeeDirty(false);
-    if (leaveTo !== null) {
-      setLeaveTo(null);
-      if (ok) showTab(leaveTo);
-    } else if (closeAsked) {
+    if (closeAsked) {
       // With dirty content the «Закрыть редактор?» dialog follows by itself.
       if (!ok || !dirty) setHandledCloseRequest(closeRequest);
       if (ok && !dirty) onCloseApproved();
     }
   };
+  // A close with unsaved employee drafts asks its question on the tab of the employees; from another tab the editor goes there first.
+  useEffect(() => {
+    if (closeAsked && employeeDirty && tab !== "employees" && stripTabs.some(([id]) => id === "employees")) showTab("employees");
+  });
 
   const uploadImage = async (file: File, onUploaded: (url: string) => void) => {
     if (uploadState === "uploading") return;
@@ -1143,6 +1136,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
   const statusText = saveStatusText(status, partial ?? undefined);
   // Review WR-01: the draft is shared by every tab. The draft tabs have the bar below; on any other tab the same buttons and reasons go through EditorDraftBarContext into that tab's bar.
   const draftActions = <>
+    {live.toggle}
     <button type="button" className="secondary-control editor-undo-step" aria-label="Отменить последнее действие" disabled={!history.past.length} onClick={() => step("undo")}>↶</button>
     <button type="button" className="secondary-control" disabled={!dirty} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") setDialog("discard"); }}>ОТМЕНИТЬ</button>
     <button type="button" className="primary-control" disabled={!dirty || saveBlocked} aria-disabled={saveState === "saving" || undefined} onClick={() => { if (saveState !== "saving") void save(); }}>СОХРАНИТЬ</button>
@@ -1293,6 +1287,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
 
       <FormatLaunchButton target={formatTarget} open={formatterOpen} onToggle={() => setFormatterOpen((current) => !current)} />
 
+      {live.on ? <LiveSurface tab={tab} bridge={{ draft, changeDraft, changeFormattedText, activateFormatter, closeFormatterFor, uploadImage, uploadState, uploadMessage, guideSection: activeGuideSection, setGuideSection: setSelectedGuideSection, infoSection: activeInfoSection, setInfoSection: setSelectedInfoSection, virusId: selectedVirusId, setVirusId: setSelectedVirusId, recycledVirusId: selectedRecycledVirusId, setRecycledVirusId: setSelectedRecycledVirusId, recycleFileId: selectedRecycleFileId, setRecycleFileId: setSelectedRecycleFileId, broadcastTab: broadcastEditorTab, setBroadcastTab: selectBroadcastTab }} /> : <>
       {tab === "viruses" && (
         <div className="virus-editor-layout etab-body" ref={layoutRef} data-mobile-view={recordOpen && selectedVirus ? "record" : "list"}>
           <button type="button" className="secondary-control editor-back-to-list" onClick={() => showRecord(false)}>← К списку</button>
@@ -1350,7 +1345,10 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
 
               {dossierTab === "mutations" && <EditorGroup title="Мутации" stack>
                 {/* A delete shifts the later mutations' index keys, so it closes the format panel. shortcut: mutations have no id, so delete is blocked while an upload runs; an undo mid-upload can still shift its index — give Mutation an id if that matters. */}
-                {selectedVirus.mutations.map((mutation, index) => (
+                <CardTabs label={cardTabsCopy.mutations} items={selectedVirus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))} activeId={cardTabs.active(`${selectedVirus.id}:mutations`, Object.keys(selectedVirus.mutations))}
+                  onSelect={(id) => { setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:mutations`, id); }}
+                  add={{ onAdd: () => { setFormatTarget(null); setFormatterOpen(false); updateVirus((virus) => virus.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" })); }, disabled: false, label: cardTabsCopy.addMutation }} />
+                {selectedVirus.mutations.map((mutation, index) => String(index) === cardTabs.active(`${selectedVirus.id}:mutations`, Object.keys(selectedVirus.mutations)) && (
                   <div className="nested-editor-card" key={index}>
                     <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={uploadState === "uploading"} onClick={() => { setFormatTarget(null); setFormatterOpen(false); changeDraft((next) => updateById(next.viruses, selectedVirus.id, (virus) => removeMutation(next, virus, index))); }}>Удалить</button></div>
                     <Field label="Название"><input value={mutation.name} onChange={(event) => updateVirus((virus) => { virus.mutations[index].name = event.target.value; })} /></Field>
@@ -1358,13 +1356,15 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                     <ImageEditorField label="Изображение или GIF мутации" value={mutation.image} placement="mutation" maxHint="На странице: максимум 420 × 360 px" uploadState={uploadState} uploadMessage={uploadMessage} framing={mutation.imageFraming} framingBox="natural" onFramingChange={(frame) => updateVirus((virus) => { const item = virus.mutations[index]; if (!item) return; if (frame) item.imageFraming = frame; else delete item.imageFraming; })} onChange={(value) => updateVirus((virus) => { virus.mutations[index].image = value; })} onUpload={(file) => uploadImage(file, (url) => updateVirus((virus) => { const item = virus.mutations[index]; if (item) item.image = url; }))} />
                   </div>
                 ))}
-                <button className="secondary-control" type="button" onClick={() => updateVirus((virus) => virus.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }))}>+ ДОБАВИТЬ МУТАЦИЮ</button>
               </EditorGroup>}
 
               {dossierTab === "logs" && <EditorGroup title="Записи учёных" stack>
                 <p className="editor-guidance">Можно оставить досье без записей или добавить до пяти. Если текст не выделен, оформление применяется ко всей записи.</p>
                 {selectedVirus.scientistLogs.length === 0 && <p className="editor-guidance">{levelCopy.logsEmptyEditor}</p>}
-                {selectedVirus.scientistLogs.map((log, index) => (
+                <CardTabs label={cardTabsCopy.logs} items={selectedVirus.scientistLogs.map((log) => ({ id: log.id, title: log.title }))} activeId={cardTabs.active(`${selectedVirus.id}:logs`, selectedVirus.scientistLogs.map((log) => log.id))}
+                  onSelect={(id) => { setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:logs`, id); }}
+                  add={{ onAdd: () => { setFormatTarget(null); setFormatterOpen(false); updateVirus((virus) => virus.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 1, content: [""], richContent: { runs: [{ text: "" }] } })); }, disabled: selectedVirus.scientistLogs.length >= MAX_SCIENTIST_LOGS, label: cardTabsCopy.addLog, note: `${selectedVirus.scientistLogs.length} / ${MAX_SCIENTIST_LOGS}` }} />
+                {selectedVirus.scientistLogs.map((log, index) => log.id === cardTabs.active(`${selectedVirus.id}:logs`, selectedVirus.scientistLogs.map((item) => item.id)) && (
                   <div className="nested-editor-card" key={log.id}>
                     <div className="nested-editor-head"><strong>ЗАПИСЬ {String(index + 1).padStart(2, "0")}</strong><button type="button" onClick={() => updateVirus((virus) => { virus.scientistLogs.splice(index, 1); })}>Удалить</button></div>
                     <Field label="Название"><input value={log.title} onChange={(event) => updateVirus((virus) => { virus.scientistLogs[index].title = event.target.value; })} /></Field>
@@ -1373,7 +1373,6 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                     <FormattedTextarea area="scientist" label="Текст записи" value={scientistLogPlainText(log)} document={log.richContent} formatKey={`scientist:${log.id}`} onActivate={activateFormatter} onChange={(value, document) => updateVirus((virus) => { virus.scientistLogs[index].content = value.split(/\n\s*\n/); virus.scientistLogs[index].richContent = document; })} />
                   </div>
                 ))}
-                <div className="scientist-log-actions"><button className="secondary-control" type="button" disabled={selectedVirus.scientistLogs.length >= MAX_SCIENTIST_LOGS} onClick={() => updateVirus((virus) => virus.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 1, content: [""], richContent: { runs: [{ text: "" }] } }))}>+ ДОБАВИТЬ ЗАПИСЬ</button><span>{selectedVirus.scientistLogs.length} / {MAX_SCIENTIST_LOGS}</span></div>
               </EditorGroup>}
             </div>
           ) : draft.viruses.length ? <EditorEmptyDetail /> : <div className="editor-empty">Добавьте первую запись вируса.</div>}
@@ -1400,8 +1399,12 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                 setRaisedNotice(raised > 0 ? { parentId: section.id, text: levelCopy.raisedSubsections(level, raised) } : null);
               }} />
               <FormattedTextarea area="info" label="Текст" tall value={section.body} document={draft.formattedText[portiaTextKey.info(section.id)]} formatKey={portiaTextKey.info(section.id)} onActivate={activateFormatter} onChange={(value, document) => changeFormattedText(portiaTextKey.info(section.id), value, document, (next, text) => updateById(next.infoSections, section.id, (item) => { item.body = text; }))} />
+              <CardTabs label={cardTabsCopy.subsections} items={section.subsections.map((subsection) => ({ id: subsection.id, title: subsection.title }))} activeId={cardTabs.active(section.id, section.subsections.map((subsection) => subsection.id))}
+                onSelect={(id) => { closeFormatterFor(...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id)))); cardTabs.select(section.id, id); setOpen([id], true); }}
+                onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, section.id)?.section; if (target) moveArrayItem(target.subsections, from, to); })}
+                add={{ onAdd: () => { closeFormatterFor(...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id)))); const id = makeId("info"); changeDraft((next) => { updateById(next.infoSections, section.id, (item) => { item.subsections.push({ id, title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }); }); }); setOpen([id], true); }, disabled: section.subsections.length >= MAX_SUBSECTIONS, label: cardTabsCopy.addSubsection, note: <LimitNote id={`limit-subsections-${section.id}`} count={section.subsections.length} max={MAX_SUBSECTIONS} /> }} />
               <div className="info-subsection-list">
-                {section.subsections.map((subsection, subIndex) => (
+                {section.subsections.map((subsection, subIndex) => subsection.id === cardTabs.active(section.id, section.subsections.map((item) => item.id)) && (
                   <CollapsibleCard key={subsection.id} id={subsection.id} sortIndex={subIndex} label={`ПОДРАЗДЕЛ ${String(subIndex + 1).padStart(2, "0")}`} title={subsection.title} open={isOpen(subsection.id)} onToggle={() => toggleCard(subsection.id)}
                     handle={<OrderDragHandle index={subIndex} label={subsection.title || "подраздел"} onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, subsection.id)?.section; if (target) moveArrayItem(target.subsections, from, to); })} />}
                     actions={<div className="nested-editor-actions"><button type="button" onClick={() => { subsection.blocks.forEach((block) => closeFormatterFor(portiaTextKey.infoBlock(block.id))); changeDraft((next) => removeInfoSubsection(next, section.id, subsection.id)); }}>Удалить</button></div>}>
@@ -1431,10 +1434,6 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                   </CollapsibleCard>
                 ))}
               </div>
-              <div className="scientist-log-actions">
-                <button className="secondary-control limit-add" type="button" disabled={section.subsections.length >= MAX_SUBSECTIONS} aria-describedby={`limit-subsections-${section.id}`} onClick={() => { const id = makeId("info"); changeDraft((next) => { updateById(next.infoSections, section.id, (item) => { item.subsections.push({ id, title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }); }); }); setOpen([id], true); }}>+ ПОДРАЗДЕЛ</button>
-                <LimitNote id={`limit-subsections-${section.id}`} count={section.subsections.length} max={MAX_SUBSECTIONS} />
-              </div>
             </CollapsibleCard>
           ))}</div>
         </div>
@@ -1460,9 +1459,13 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
               <ImageEditorField label="Фото раздела" value={section.photo} placement="guide" maxHint="За заголовком раздела: низкая полоса во всю ширину" removeLabel="Убрать фото" uploadState={uploadState} uploadMessage={uploadMessage} framing={section.photoFraming} framingBox="band" onFramingChange={(frame) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { if (frame) item.photoFraming = frame; else delete item.photoFraming; }))}
                 onChange={(value) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.photo = value; }))}
                 onUpload={(file) => uploadImage(file, (url) => changeDraft((next) => updateById(next.guideSections, section.id, (item) => { item.photo = url; })))} />
+              <CardTabs label={cardTabsCopy.cards} items={section.cards.map((card) => ({ id: card.id, title: card.title }))} activeId={cardTabs.active(section.id, section.cards.map((card) => card.id))}
+                onSelect={(id) => { closeFormatterFor(...section.cards.flatMap((card) => card.blocks.map((block) => portiaTextKey.guideBlock(block.id)))); cardTabs.select(section.id, id); setOpen([id], true); }}
+                onMove={(from, to) => changeDraft((next) => { const target = findGuide(next.guideSections, section.id)?.section; if (target) moveArrayItem(target.cards, from, to); })}
+                add={{ onAdd: () => { const id = makeId("card"); changeDraft((next) => { updateById(next.guideSections, section.id, (item) => { item.cards.push({ id, title: "НОВАЯ КАРТОЧКА", cover: "", blocks: [] }); }); }); setOpen([id], true); }, disabled: section.cards.length >= MAX_SUBSECTIONS, note: <LimitNote id={`limit-cards-${section.id}`} count={section.cards.length} max={MAX_SUBSECTIONS} /> }} />
               <div className="info-subsection-list" data-sort-group="guide-cards" data-group-id={section.id}>
                 {section.cards.length === 0 && <div className="editor-empty compact-empty">В разделе нет карточек. Добавьте первую кнопкой «+ ДОБАВИТЬ КАРТОЧКУ».</div>}
-                {section.cards.map((card, cardIndex) => (
+                {section.cards.map((card, cardIndex) => card.id === cardTabs.active(section.id, section.cards.map((item) => item.id)) && (
                   <CollapsibleCard key={card.id} id={card.id} sortIndex={cardIndex} label={`КАРТОЧКА ${guideNo(cardIndex)}`} title={card.title} open={isOpen(card.id)} onToggle={() => toggleCard(card.id)}
                     handle={<OrderDragHandle index={cardIndex} label={card.title || "карточка"} itemId={card.id} onMoveAcross={(groupId, toIndex) => changeDraft((next) => moveGuideCard(next, card.id, groupId, toIndex))}
                       onMove={(from, to) => {
@@ -1489,7 +1492,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                           {block.type === "table" && <TableBlockEditor blockId={block.id} rows={block.rows} onEdit={(edit) => changeDraft((next) => editGuideTableRows(next, card.id, block.id, edit))} />}
                           {block.type === "photo" && (
                             <>
-                              <ImageEditorField label="Фото" value={block.url} placement="guide" maxHint="Размер и кадр настраиваются ниже" showPreview={false} uploadState={uploadState} uploadMessage={uploadMessage}
+                              <ImageEditorField label="Фото" value={block.url} placement="guide" maxHint="Размер и видимая часть настраиваются ниже" showPreview={false} uploadState={uploadState} uploadMessage={uploadMessage}
                                 onChange={(value) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "photo") item.url = value; })}
                                 onUpload={(file) => uploadImage(file, (url) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "photo") item.url = url; }))} />
                               <GuidePhotoLayoutEditor block={block} onChange={(edit) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "photo") edit(item); })} />
@@ -1497,6 +1500,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                             </>
                           )}
                           {block.type === "video" && <YoutubeField videoId={block.videoId} onChange={(videoId) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "video") item.videoId = videoId; })} />}
+                          {block.type === "cards" && <GuideCardsBlockEditor block={block} cardId={card.id} sections={draft.guideSections} onChange={(cardIds) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "cards") item.cardIds = cardIds; })} />}
                           {block.type === "callout" && (
                             <>
                               <Field label="Подпись врезки"><input maxLength={300} value={block.label} onChange={(event) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === "callout") item.label = event.target.value; })} /></Field>
@@ -1514,15 +1518,12 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
                         <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "photo", url: "", caption: "" }))}>+ ФОТО</button>
                         <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "video", videoId: "" }))}>+ ВИДЕО</button>
                         <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "callout", label: "", text: "" }))}>+ ВРЕЗКА</button>
+                        <button className="secondary-control limit-add" type="button" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: "cards", cardIds: [] }))}>+ КАРТОЧКИ</button>
                       </div>
                       <LimitNote id={`limit-blocks-${card.id}`} count={card.blocks.length} max={MAX_BLOCKS} />
                     </div>
                   </CollapsibleCard>
                 ))}
-              </div>
-              <div className="scientist-log-actions">
-                <button className="secondary-control limit-add" type="button" disabled={section.cards.length >= MAX_SUBSECTIONS} aria-describedby={`limit-cards-${section.id}`} onClick={() => { const id = makeId("card"); changeDraft((next) => { updateById(next.guideSections, section.id, (item) => { item.cards.push({ id, title: "НОВАЯ КАРТОЧКА", cover: "", blocks: [] }); }); }); setOpen([id], true); }}>+ ДОБАВИТЬ КАРТОЧКУ</button>
-                <LimitNote id={`limit-cards-${section.id}`} count={section.cards.length} max={MAX_SUBSECTIONS} />
               </div>
             </CollapsibleCard>
           ))}</div>
@@ -1701,9 +1702,10 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
           <p className="editor-guidance">Если за выбранный промежуток пользователь ничего не делал, Вивьян выберет фразу бездействия. Если он нажимал, печатал, прокручивал страницу или двигал указатель — фразу активности</p>
         </div>
       )}
+      </>}
 
       <EditorDraftBarContext.Provider value={draftBar}>
-        {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} uploadMessage={uploadMessage} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}
+        {tab === "employees" && <EmployeeProfilesEditor onSaved={onEmployeeSaved} onRemoved={onEmployeeRemoved} uploadState={uploadState} uploadMessage={uploadMessage} onUpload={uploadImage} onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} drafts={employeeDrafts} />}
 
         {tab === "users" && openTabs.includes("users") && <UsersTab visible={active && !minimized} canManageEditors={canManageEditors} onPendingCount={usersPending.report} />}
 
@@ -1712,7 +1714,7 @@ export function PortiaEditor({ accessFailed, content, revision, saveState, canMa
         {tab === "access" && canManageEditors && <EditorDraftBar />}
       </EditorDraftBarContext.Provider>
 
-      {tab === "access" && canManageEditors && <EditorAccessManager />}
+      {tab === "access" && canManageEditors && <AccessLiveTab manager={<EditorAccessManager />} />}
       {formatterOpen && formatTarget && !minimized && createPortal(<FloatingTextFormatPanel key={formatTarget.key} target={formatTarget} previewSurface={previewSurface} onPreviewSurface={setPreviewSurface} onUpdate={setFormatTarget} onBatch={runBatch} onClose={() => setFormatterOpen(false)} />, document.getElementById("desktop") ?? document.body)}
       {/* Review WR-05: one live region for the save status. On the draft tabs it is the status of the bar; on the other tabs the draft row is not live and this hidden line is. */}
       {!editorSections.some((section) => section === tab) && <p className="sr-only" role="status" aria-live="polite">{`${statusText}${dirty ? `${status === "dirty" ? ":" : ". Не сохранено:"} ${shownChanged.map((id) => sectionLabels[id]).join(", ")}` : ""}`}</p>}
@@ -1817,424 +1819,6 @@ function ConflictPanel({ ready, onLoadTheirs, onReplace }: { ready: boolean; onL
       {!ready && <p>Загружаем их версию…</p>}
     </section>
   );
-}
-
-const detailsOf = (employee: PortiaEmployee) => ({ title: employee.title, rank: employee.rank, callsign: employee.callsign });
-
-function EmployeeProfilesEditor({ onSaved, onRemoved, uploadState, uploadMessage, onUpload, onDirtyChange, leaving, onLeave }: {
-  onSaved: (employee: PortiaEmployee) => void;
-  onRemoved: (id: string) => void;
-  uploadState: "idle" | "uploading" | "error";
-  uploadMessage?: string;
-  onUpload: (file: File, onUploaded: (url: string) => void) => void;
-  onDirtyChange: (dirty: boolean) => void;
-  /** The editor wants to leave this tab or close; the unsaved draft has to be answered first. */
-  leaving: boolean;
-  onLeave: (ok: boolean) => void;
-}) {
-  const [employees, setEmployees] = useState<PortiaEmployee[]>([]);
-  const [selectedId, setSelectedId] = useState("");
-  const [draft, setDraft] = useState<EmployeeProfile | null>(null);
-  const [ratingsPending, setRatingsPending] = useState(false);
-  const [state, setState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [errorMessage, setErrorMessage] = useState("");
-  // Loading the list and saving a card are separate: a load error replaces the tab, a save error stays on the save line.
-  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
-  const [loadError, setLoadError] = useState("");
-  const [loadAttempt, setLoadAttempt] = useState(0);
-  const [recordOpen, setRecordOpen] = useState(false);
-  const layoutRef = useRef<HTMLDivElement>(null);
-  const [pendingEmployeeId, setPendingEmployeeId] = useState<string | null>(null);
-  // The add form has its own state: the profile draft and its unsaved-edits guard stay untouched.
-  const [addOpen, setAddOpen] = useState(false);
-  const [addDraft, setAddDraft] = useState({ nickname: "", title: "", rank: "", callsign: "" });
-  const [addState, setAddState] = useState<"idle" | "adding">("idle");
-  const [addError, setAddError] = useState("");
-  const [deleteAsked, setDeleteAsked] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  // Title, rank and callsign of a person outside the sheet; sheet employees take them from the sheet.
-  const [details, setDetails] = useState({ title: "", rank: "", callsign: "" });
-  const [detailsPending, setDetailsPending] = useState(false);
-  const selected = employees.find((employee) => employee.id === selectedId) ?? employees[0] ?? null;
-  // An upload that finishes after another employee was opened must not land on that employee's draft.
-  const selectedIdRef = useRef("");
-  // The latest draft, read right after a save answer to see whether anything was typed meanwhile (D-04).
-  const draftRef = useRef(draft);
-  const detailsRef = useRef(details);
-  useEffect(() => { selectedIdRef.current = selected?.id ?? ""; draftRef.current = draft; detailsRef.current = details; });
-  const detailsChanged = Boolean(selected?.source === "manual" && (details.title !== selected.title || details.rank !== selected.rank || details.callsign !== selected.callsign));
-  const dirty = Boolean(selected && draft && (profileChanged(profileOf(selected), draft) || detailsChanged));
-  // Read after an awaited save: a cancelled question must not continue into the switch (D-02).
-  const asking = pendingEmployeeId !== null || leaving;
-  const askingRef = useRef(asking);
-  useEffect(() => { askingRef.current = asking; });
-  // The «СОХРАНЕНО» timer lives in a ref so a later save and an unmount can cancel it (D-06).
-  const savedTimer = useRef<number | null>(null);
-  useEffect(() => () => { if (savedTimer.current !== null) window.clearTimeout(savedTimer.current); }, []);
-  // An employee clicked during a save, acted on once the answer is in (D-05).
-  const queuedEmployeeIdRef = useRef<string | null>(null);
-  // WR-05: the running save and add requests; a second Ctrl+S or form submit during one joins it instead of sending again.
-  const saveInflight = useRef<Promise<boolean> | null>(null);
-  const addInflight = useRef(false);
-
-  useEffect(() => { onDirtyChange(dirty); }, [dirty, onDirtyChange]);
-  // Unmounting (tab left after the answer) must not leave the editor believing a draft is still dirty.
-  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
-
-  // Reload with an unsaved employee draft: the browser's own warning, as for the content (D-12).
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = "";
-    };
-    window.addEventListener("beforeunload", warn);
-    return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
-
-  useEffect(() => {
-    let active = true;
-    const fail = (text: string) => {
-      if (!active) return;
-      setLoadError(text);
-      setLoadState("error");
-    };
-    void (async () => {
-      try {
-        // The editor-only path is never CDN-cached; the public one can serve an old copy even to a no-store request (D-10).
-        let response: Response;
-        try {
-          response = await fetch("/api/employees/editor", { credentials: "same-origin", cache: "no-store" });
-        } catch {
-          fail(employeeRequestFailure({ transport: true, action: "load" }));
-          return;
-        }
-        const payload = await response.json().catch(() => ({})) as { employees?: PortiaEmployee[]; profilesRead?: boolean; error?: string };
-        if (!response.ok) {
-          fail(employeeRequestFailure({ transport: false, status: response.status, payloadError: payload.error, action: "load" }));
-          return;
-        }
-        if (!active) return;
-        // Blank profiles must not become drafts: saving one would erase the stored biography and photo (D-09).
-        if (!acceptsEditorList(payload)) {
-          fail("Профили сотрудников не загрузились, сохранять сейчас нельзя. Повторите через минуту.");
-          return;
-        }
-        const next = payload.employees;
-        const first = next[0];
-        setEmployees(next);
-        setSelectedId(first?.id ?? "");
-        setDraft(first ? profileOf(first) : null);
-        setDetails(first ? detailsOf(first) : { title: "", rank: "", callsign: "" });
-        setLoadState("ready");
-      } catch {
-        fail("Не удалось загрузить сотрудников.");
-      }
-    })();
-    return () => { active = false; };
-  }, [loadAttempt]);
-  // In place, without a page reload: other tabs' unsaved edits live in the parent and stay.
-  const retryLoad = () => { setLoadState("loading"); setLoadAttempt((attempt) => attempt + 1); };
-
-  // Synchronous, no await: the dialog's save().then reads askingRef right after the answer (A4). An open dialog decides itself.
-  const resolveQueued = (clean: boolean) => {
-    const queued = queuedEmployeeIdRef.current;
-    queuedEmployeeIdRef.current = null;
-    if (queued === null || askingRef.current) return;
-    const next = employees.find((employee) => employee.id === queued);
-    if (!next) return;
-    if (clean) openEmployee(next);
-    else setPendingEmployeeId(queued);
-  };
-
-  // A second Ctrl+S or click while the PATCH runs gets the same answer and sends nothing (WR-05).
-  const save = (): Promise<boolean> => {
-    if (saveInflight.current) return saveInflight.current;
-    const run = (async () => {
-      try {
-        return await sendSave();
-      } finally {
-        saveInflight.current = null;
-      }
-    })();
-    saveInflight.current = run;
-    return run;
-  };
-
-  // Resolves true only when the profile is saved; a failure leaves the error text on the current employee.
-  const sendSave = async (): Promise<boolean> => {
-    if (!selected || !draft) return false;
-    // Only what the editor changed goes out; an empty body would still create a bare row for a never-saved sheet employee (D-11).
-    const changes = changedFields(profileOf(selected), draft);
-    const detailChanges = selected.source === "manual" ? changedDetails(detailsOf(selected), details) : {};
-    if (!Object.keys(changes).length && !Object.keys(detailChanges).length) return true;
-    const sentId = selected.id;
-    const sentProfile = draft;
-    const sentDetails = details;
-    // An earlier «СОХРАНЕНО» timer must not flip this save back to idle (03.1-WR-06).
-    if (savedTimer.current !== null) window.clearTimeout(savedTimer.current);
-    savedTimer.current = null;
-    setState("saving");
-    setRatingsPending(false);
-    setDetailsPending(false);
-    setErrorMessage("");
-    const failed = (text: string) => {
-      setErrorMessage(text);
-      setState("error");
-      resolveQueued(false);
-      return false;
-    };
-    let response: Response;
-    try {
-      response = await fetch("/api/employees", {
-        method: "PATCH",
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: selected.id, nickname: selected.nickname, changes, ...(Object.keys(detailChanges).length ? { details: detailChanges } : {}) }),
-      });
-    } catch {
-      return failed(employeeRequestFailure({ transport: true, action: "save" }));
-    }
-    const payload = await response.json().catch(() => ({})) as { employee?: Partial<PortiaEmployee> & { id: string }; ratingsPending?: boolean; detailsPending?: boolean; error?: string };
-    if (!response.ok || !payload.employee) {
-      return failed(employeeRequestFailure({ transport: false, status: response.status, payloadError: payload.error, action: "save" }));
-    }
-    try {
-      // The answer is the stored profile only; the card keeps its avatar, nickname, source and sheet title (D-07).
-      const merged: PortiaEmployee = { ...selected, ...payload.employee };
-      setEmployees((current) => current.map((employee) => employee.id === merged.id ? merged : employee));
-      onSaved(merged);
-      // The answer settles only the fields not typed since sending, and only on the employee it was sent for (D-04, D-05).
-      const stillOpen = selectedIdRef.current === sentId;
-      if (stillOpen) {
-        setDraft((draftNow) => draftNow && settleDraft(sentProfile, draftNow, profileOf(merged)));
-        // When the database refused the details, the typed values stay as an unsaved edit.
-        if (!payload.detailsPending) setDetails((detailsNow) => settleDraft(sentDetails, detailsNow, detailsOf(merged)));
-        setRatingsPending(Boolean(payload.ratingsPending));
-        setDetailsPending(Boolean(payload.detailsPending));
-      }
-      setState("saved");
-      savedTimer.current = window.setTimeout(() => setState("idle"), 4000);
-      // A draft typed during the save stays dirty and unsaved; no automatic second save (D-04). No await from here to the return (A4).
-      const typedMeanwhile = stillOpen && (Object.keys(changedFields(sentProfile, draftRef.current ?? sentProfile)).length > 0 || Object.keys(changedDetails(sentDetails, detailsRef.current)).length > 0);
-      resolveQueued(!typedMeanwhile);
-      return !typedMeanwhile;
-    } catch {
-      return failed("Не удалось сохранить профиль.");
-    }
-  };
-
-  // A person outside the sheet, by Roblox nickname; an open selection and its draft stay as they are.
-  const addEmployee = async () => {
-    // A second submit during the POST sends nothing (WR-05).
-    if (addInflight.current) return;
-    addInflight.current = true;
-    setAddState("adding");
-    setAddError("");
-    try {
-      let response: Response;
-      try {
-        response = await fetch("/api/employees", {
-          method: "POST",
-          credentials: "same-origin",
-          cache: "no-store",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(addDraft),
-        });
-      } catch {
-        setAddError(employeeRequestFailure({ transport: true, action: "add" }));
-        return;
-      }
-      const payload = await response.json().catch(() => ({})) as { employee?: PortiaEmployee; error?: string };
-      if (!response.ok || !payload.employee) {
-        setAddError(employeeRequestFailure({ transport: false, status: response.status, payloadError: payload.error, action: "add" }));
-        return;
-      }
-      setEmployees((current) => [...current, payload.employee!]);
-      onSaved(payload.employee);
-      setAddDraft({ nickname: "", title: "", rank: "", callsign: "" });
-      setAddOpen(false);
-      // The list was empty (or the last person was removed): nothing is open yet, so open the new person.
-      if (!draft) openEmployee(payload.employee);
-    } catch {
-      setAddError("Не удалось добавить сотрудника.");
-    } finally {
-      addInflight.current = false;
-      setAddState("idle");
-    }
-  };
-
-  if (loadState === "loading") return <div className="editor-empty">Загрузка сотрудников…</div>;
-  if (loadState === "error") return <div className="editor-empty" role="alert"><p>{loadError}</p>{loadError.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button type="button" className="secondary-control" onClick={retryLoad}>ПОВТОРИТЬ</button></div>;
-
-  const openEmployee = (employee: PortiaEmployee) => {
-    setSelectedId(employee.id);
-    setDraft(profileOf(employee));
-    setDetails(detailsOf(employee));
-    setRatingsPending(false);
-    setDetailsPending(false);
-    setState("idle");
-    setRecordOpen(true);
-    revealOnPhone(layoutRef);
-  };
-  // Unsaved edits are asked about before another employee replaces the draft (D-02).
-  const chooseEmployee = (employee: PortiaEmployee) => {
-    // A sent PATCH cannot be cancelled: remember the click and act after the answer, which is matched by id (D-05). Clicking the open employee forgets it.
-    if (state === "saving" && selected) {
-      if (employee.id === selected.id) { queuedEmployeeIdRef.current = null; setRecordOpen(true); revealOnPhone(layoutRef); }
-      else queuedEmployeeIdRef.current = employee.id;
-      return;
-    }
-    if (!dirty) return openEmployee(employee);
-    // The same employee: only show the record, the edits stay.
-    if (employee.id === selected?.id) { setRecordOpen(true); revealOnPhone(layoutRef); return; }
-    setPendingEmployeeId(employee.id);
-  };
-  // After the answer: to the pending employee, or out of the tab / the window (the draft is dropped when not saved).
-  const continueLeave = (saved = false) => {
-    const next = employees.find((employee) => employee.id === pendingEmployeeId);
-    setPendingEmployeeId(null);
-    if (next) openEmployee(next);
-    else {
-      // After a save the draft already holds the saved profile; `selected` is the pre-save copy.
-      if (!saved && selected) { setDraft(profileOf(selected)); setDetails(detailsOf(selected)); }
-      onLeave(true);
-    }
-  };
-  const cancelLeave = () => {
-    setPendingEmployeeId(null);
-    if (leaving) onLeave(false);
-  };
-
-  // Only reached for a manual employee (the button renders for no one else); the server refuses a sheet employee too.
-  const removeSelected = async () => {
-    if (!selected) return;
-    setDeleting(true);
-    setErrorMessage("");
-    const failed = (text: string) => {
-      setErrorMessage(text);
-      setState("error");
-      setDeleteAsked(false);
-      setDeleting(false);
-    };
-    let response: Response;
-    try {
-      response = await fetch("/api/employees", {
-        method: "DELETE",
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: selected.id }),
-      });
-    } catch {
-      failed(employeeRequestFailure({ transport: true, action: "remove" }));
-      return;
-    }
-    const payload = await response.json().catch(() => ({})) as { id?: string; error?: string; code?: string };
-    if (!response.ok) {
-      // A sheet employee is refused with 403 and its own text; that is not an expired session.
-      const sheetRefusal = response.status === 403 && payload.code === "sheet-employee";
-      failed(employeeRequestFailure({ transport: false, status: sheetRefusal ? undefined : response.status, payloadError: payload.error, action: "remove" }));
-      return;
-    }
-    try {
-      const index = employees.findIndex((employee) => employee.id === selected.id);
-      const next = employees[index + 1] ?? employees[index - 1];
-      setEmployees(employees.filter((employee) => employee.id !== selected.id));
-      onRemoved(selected.id);
-      setDeleteAsked(false);
-      if (next) openEmployee(next);
-      else { setDraft(null); setRecordOpen(false); }
-    } catch {
-      failed("Не удалось удалить сотрудника.");
-      return;
-    }
-    setDeleting(false);
-  };
-
-  // «СОХРАНЕНО» never shows over a draft that is dirty again.
-  const saveStatus = state === "saved" && dirty ? "idle" : state;
-  const preview = selected && draft ? draft.photoUrl || selected.robloxAvatarUrl : "";
-  return <>
-    <EditorActionBar
-      label={tabRegistry.find((entry) => entry.id === "employees")?.label ?? ""}
-      statusText={selected && draft ? (saveStatus === "saving" ? saveStatusText("saving") : saveStatus === "saved" ? saveStatusText("saved") : state === "error" ? errorMessage : "ТОЛЬКО ДЛЯ РЕДАКТОРОВ") : ""}
-      tone={saveStatus}
-      actions={selected && draft ? <>{state === "error" && errorMessage.includes("Войдите") && <a className="secondary-control" href="/owner-login">ВОЙТИ СНОВА</a>}<button className="primary-control" type="button" disabled={state === "saving"} onClick={() => void save()}>СОХРАНИТЬ ПРОФИЛЬ</button></> : undefined}
-    />
-    <div className="virus-editor-layout employee-editor-layout etab-body" ref={layoutRef} data-mobile-view={recordOpen ? "record" : "list"}>
-    <button type="button" className="secondary-control editor-back-to-list" onClick={() => { setRecordOpen(false); revealOnPhone(layoutRef); }}>← К списку</button>
-    <aside className="editor-record-list etab-list">
-      {employees.map((employee) => <button key={employee.id} type="button" className={employee.id === selected?.id ? "active" : ""} aria-current={employee.id === selected?.id ? "true" : undefined} onClick={() => chooseEmployee(employee)}><strong>{employee.nickname}</strong>{employee.source === "manual" && <small className="manual-mark">ВНЕ ТАБЛИЦЫ</small>}<small>{[employee.callsign, employee.title, employee.rank].filter(Boolean).join(" · ")}</small></button>)}
-      <button className="add-record" type="button" aria-expanded={addOpen} onClick={() => setAddOpen((open) => !open)}>+ ВНЕ ТАБЛИЦЫ</button>
-      {addOpen && <form className="employee-add-form" onSubmit={(event) => { event.preventDefault(); void addEmployee(); }}>
-        <Field label="Ник Roblox"><input value={addDraft.nickname} required maxLength={20} autoCapitalize="none" spellCheck={false} onChange={(event) => setAddDraft((current) => ({ ...current, nickname: event.target.value }))} /></Field>
-        <Field label="Звание"><input value={addDraft.title} maxLength={64} onChange={(event) => setAddDraft((current) => ({ ...current, title: event.target.value }))} /></Field>
-        <Field label="Ранг"><input value={addDraft.rank} maxLength={64} onChange={(event) => setAddDraft((current) => ({ ...current, rank: event.target.value }))} /></Field>
-        <Field label="Позывной"><input value={addDraft.callsign} maxLength={64} onChange={(event) => setAddDraft((current) => ({ ...current, callsign: event.target.value }))} /></Field>
-        {addError && <p className="employee-add-error" role="alert">{addError}</p>}
-        <button className="primary-control" type="submit" disabled={addState === "adding" || !addDraft.nickname.trim()}>{addState === "adding" ? "ДОБАВЛЕНИЕ…" : "ДОБАВИТЬ"}</button>
-      </form>}
-    </aside>
-    <div className="editor-form employee-profile-editor etab-detail">
-      {selected && draft ? <>
-      <p className="editor-guidance">Поля из Google Таблицы обновляются автоматически. Здесь редакторы могут менять фотографию, оценки и биографию. Людей вне таблицы добавляют по нику Roblox; их звание, ранг и позывной можно менять здесь.</p>
-      <div className="employee-editor-summary">
-        <figure>{preview ? <img src={preview} alt={`Аватар ${selected.nickname}`} referrerPolicy="no-referrer" /> : <img src="/assets/portia-logo.png" alt="" />}</figure>
-        <div><span className="eyebrow">{selected.title || "БЕЗ ЗВАНИЯ"}</span><h2>{selected.nickname}</h2><p>{[selected.callsign || "без позывного", selected.rank || "ранг не указан"].join(" · ")}</p></div>
-      </div>
-      <EditorGroup title="Профиль сотрудника">
-        {selected.source === "manual" && <>
-          <Field label="Звание"><input value={details.title} maxLength={64} onChange={(event) => setDetails((current) => ({ ...current, title: event.target.value }))} /></Field>
-          <Field label="Ранг"><input value={details.rank} maxLength={64} onChange={(event) => setDetails((current) => ({ ...current, rank: event.target.value }))} /></Field>
-          <Field label="Позывной"><input value={details.callsign} maxLength={64} onChange={(event) => setDetails((current) => ({ ...current, callsign: event.target.value }))} /></Field>
-        </>}
-        {employeeRatings.map(({ key, label }) => <Field key={key} label={`${label} — от 1 до 10`}><select value={draft[key] ?? ""} onChange={(event) => setDraft((current) => current && ({ ...current, [key]: event.target.value === "" ? null : Number(event.target.value) }))}><option value="">—</option>{Array.from({ length: 10 }, (_, index) => index + 1).map((value) => <option key={value} value={value}>{value}</option>)}</select></Field>)}
-        <ImageEditorField label="Фото сотрудника" value={draft.photoUrl} placement="employee" maxHint="Пусто — используется аватар Roblox" uploadState={uploadState} uploadMessage={uploadMessage} onChange={(value) => setDraft((current) => current && ({ ...current, photoUrl: value }))} onUpload={(file) => { const startedFor = selected.id; onUpload(file, (url) => { if (selectedIdRef.current === startedFor) setDraft((current) => current && ({ ...current, photoUrl: url })); }); }} />
-        <Field label="Биография" wide><textarea className="tall-textarea" value={draft.biography} onChange={(event) => setDraft((current) => current && ({ ...current, biography: event.target.value }))} /></Field>
-      </EditorGroup>
-      {ratingsPending && <p className="editor-guidance" role="status">Сохранено без новых оценок ({employeeRatings.map((rating) => rating.label).join(", ")}): база данных ещё не обновлена.</p>}
-      {detailsPending && <p className="editor-guidance" role="status">Профиль сохранён, но звание, ранг и позывной — нет: база данных ещё не обновлена.</p>}
-      {selected.source === "manual" && <button type="button" className="danger-control employee-remove" disabled={state === "saving" || deleting} onClick={() => setDeleteAsked(true)}>УДАЛИТЬ СОТРУДНИКА</button>}
-      </> : <div className="editor-empty">Сотрудников пока нет. Добавьте человека вне таблицы кнопкой «+ ВНЕ ТАБЛИЦЫ».</div>}
-    </div>
-    {deleteAsked && selected?.source === "manual" && (
-      <ConfirmDialog
-        title="Удалить сотрудника?"
-        text={`${selected.nickname} будет убран из списка. Фото, оценки и биография останутся в базе и вернутся, если добавить этот ник снова.`}
-        actions={[
-          { label: "УДАЛИТЬ", tone: "danger", disabled: deleting, onClick: () => void removeSelected() },
-          { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: () => setDeleteAsked(false) },
-        ]}
-        onCancel={() => setDeleteAsked(false)}
-      />
-    )}
-    {asking && selected && (
-      <ConfirmDialog
-        title="Несохранённые правки сотрудника"
-        text={`${selected.nickname}: изменения не сохранены.`}
-        actions={[
-          {
-            label: "СОХРАНИТЬ",
-            tone: "primary",
-            disabled: state === "saving",
-            onClick: () => {
-              void save().then((saved) => {
-                if (!askingRef.current) return;
-                if (saved) continueLeave(true);
-                else cancelLeave();
-              });
-            },
-          },
-          { label: "НЕ СОХРАНЯТЬ", tone: "danger", disabled: state === "saving", onClick: () => continueLeave() },
-          { label: "ОТМЕНА", tone: "secondary", autoFocus: true, onClick: cancelLeave },
-        ]}
-        onCancel={cancelLeave}
-      />
-    )}
-  </div>
-  </>;
 }
 
 type TabLists = { closedTabs: string[]; grantedTabs: string[] };

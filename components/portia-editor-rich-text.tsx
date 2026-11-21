@@ -8,8 +8,8 @@ import { TYPING_PAUSE_MS } from "@/lib/editor-history";
 import { makeId } from "@/lib/editor-items";
 import { formatLaunchLabels } from "@/lib/format-launch";
 import type { RichTextDocument, RichTextStyle } from "@/lib/portia-content";
-import { applyRichTextStyle, compactRuns, expandStyles, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset, type FieldSelectionEvent, type FieldSelectionState } from "@/lib/rich-text-style";
-import { clampPanelOffset, initialPanelOffset, parsePanelOffset, type PanelOffset } from "@/lib/panel-position";
+import { applyRichTextStyle, fieldSelectionStep, rangeHasStyle, rangeIsPlain, removeRichTextStyleKeys, replaceRichTextRuns, resetRichTextStyle, resolveRange, richTextStyleAt, stylePresets, togglePreset, type FieldSelectionEvent, type FieldSelectionState } from "@/lib/rich-text-style";
+import { clampPanelOffset, clampPanelSize, initialPanelOffset, parsePanelPlacement, type PanelOffset, type PanelPlacement } from "@/lib/panel-position";
 
 export type FormatTarget = {
   key: string;
@@ -61,25 +61,9 @@ const backgroundColorPalette = [
   { value: "#26312f", label: "Тёмный" },
 ];
 
+// OWN-05: the typing rule lives in lib/rich-text-style.ts; the export stays because portia-editor.tsx imports it.
 export function replaceRichText(document: RichTextDocument, nextText: string) {
-  const previousText = document.runs.map((run) => run.text).join("");
-  const previousStyles = expandStyles(document);
-  let prefix = 0;
-  while (prefix < previousText.length && prefix < nextText.length && previousText[prefix] === nextText[prefix]) prefix += 1;
-  let suffix = 0;
-  while (
-    suffix < previousText.length - prefix &&
-    suffix < nextText.length - prefix &&
-    previousText[previousText.length - 1 - suffix] === nextText[nextText.length - 1 - suffix]
-  ) suffix += 1;
-  const insertedLength = nextText.length - prefix - suffix;
-  const inheritedStyle = previousStyles[Math.max(0, prefix - 1)] ?? previousStyles[prefix] ?? {};
-  const styles = [
-    ...previousStyles.slice(0, prefix),
-    ...Array.from({ length: Math.max(0, insertedLength) }, () => ({ ...inheritedStyle })),
-    ...previousStyles.slice(previousText.length - suffix),
-  ];
-  return compactRuns(nextText, styles);
+  return replaceRichTextRuns(document, nextText);
 }
 
 function rgba(hex: string | undefined, opacity: number | undefined) {
@@ -402,6 +386,11 @@ export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurfa
   const documentRef = useRef(target.document);
   const panelRef = useRef<HTMLElement>(null);
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; right: number; bottom: number; last: PanelOffset | null } | null>(null);
+  // OWN-05: the size the panel got from storage or from the user's own corner drag (inline width/height); an inline size that differs from it is a user resize.
+  const appliedSizeRef = useRef({ width: "", height: "" });
+  const resizingRef = useRef(false);
+  const selectionRef = useRef(target.selection);
+  useEffect(() => { selectionRef.current = target.selection; });
   // Every control acts on one range: the selection, else the word under the caret, else nothing (D-04).
   const text = target.document.runs.map((run) => run.text).join("");
   const range = resolveRange(text, target.selection);
@@ -556,9 +545,21 @@ export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurfa
       if (window.matchMedia("(max-width: 900px)").matches) {
         panel.style.right = "";
         panel.style.bottom = "";
+        panel.style.width = "";
+        panel.style.height = "";
+        delete panel.dataset.sized;
+        appliedSizeRef.current = { width: "", height: "" };
         return;
       }
       const saved = readPanelOffset(storageKey);
+      // OWN-05: a remembered size is applied first (never beyond the screen), then the place is clamped for that size.
+      if (saved?.width !== undefined && saved.height !== undefined) {
+        const size = clampPanelSize({ width: saved.width, height: saved.height }, { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight });
+        panel.style.width = `${size.width}px`;
+        panel.style.height = `${size.height}px`;
+        panel.dataset.sized = "";
+        appliedSizeRef.current = { width: panel.style.width, height: panel.style.height };
+      }
       // Nothing remembered (or storage unreadable): beside the editor window when it fits, else the default corner (D-07).
       const editor = document.querySelector(".editor-window")?.getBoundingClientRect() ?? null;
       paintPanelOffset(panel, saved ?? initialPanelOffset(editor, { width: panel.offsetWidth, height: panel.offsetHeight }, { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight }));
@@ -567,6 +568,80 @@ export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurfa
     window.addEventListener("resize", place);
     return () => window.removeEventListener("resize", place);
   }, [storageKey]);
+
+  // OWN-05: the panel is anchored by right/bottom, so a native corner drag (CSS resize: both) would grow it away from the pointer.
+  // While the corner is held the panel is anchored by left/top instead; when the drag ends it goes back and the size is remembered.
+  const commitSize = () => {
+    const panel = panelRef.current;
+    if (!panel) return;
+    const rect = panel.getBoundingClientRect();
+    const viewport = { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight };
+    const size = clampPanelSize({ width: panel.offsetWidth, height: panel.offsetHeight }, viewport);
+    panel.style.width = `${size.width}px`;
+    panel.style.height = `${size.height}px`;
+    panel.dataset.sized = "";
+    appliedSizeRef.current = { width: panel.style.width, height: panel.style.height };
+    panel.style.left = "";
+    panel.style.top = "";
+    const offset = paintPanelOffset(panel, { right: viewport.width - rect.left - size.width, bottom: viewport.height - rect.top - size.height });
+    writePanelOffset(storageKey, { ...offset, ...size });
+  };
+
+  useEffect(() => {
+    const panel = panelRef.current;
+    if (!panel || typeof ResizeObserver === "undefined") return;
+    let timer: number | undefined;
+    const observer = new ResizeObserver(() => {
+      if (window.matchMedia("(max-width: 900px)").matches) return;
+      const applied = appliedSizeRef.current;
+      // Only the browser's own corner drag writes an inline size we did not apply: layout changes and the first placement stay unsaved.
+      if (panel.style.width === applied.width && panel.style.height === applied.height) return;
+      window.clearTimeout(timer);
+      // A held corner finishes on pointer up; the longer wait only covers a missed release.
+      timer = window.setTimeout(() => { resizingRef.current = false; commitSize(); }, resizingRef.current ? 1200 : 300);
+    });
+    observer.observe(panel);
+    return () => { observer.disconnect(); window.clearTimeout(timer); };
+    // commitSize reads only refs and the storage key.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
+
+  const inResizeCorner = (event: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>) => {
+    const panel = panelRef.current;
+    if (!panel || event.target !== panel || window.matchMedia("(max-width: 900px)").matches) return false;
+    const rect = panel.getBoundingClientRect();
+    return event.clientX >= rect.right - 18 && event.clientY >= rect.bottom - 18;
+  };
+
+  const beginResize = (event: React.PointerEvent<HTMLElement>) => {
+    const panel = panelRef.current;
+    if (!panel || !inResizeCorner(event)) return;
+    const rect = panel.getBoundingClientRect();
+    resizingRef.current = true;
+    panel.dataset.sized = "";
+    panel.style.left = `${rect.left}px`;
+    panel.style.top = `${rect.top}px`;
+    panel.style.right = "auto";
+    panel.style.bottom = "auto";
+    const finish = () => {
+      window.removeEventListener("pointerup", finish);
+      window.removeEventListener("pointercancel", finish);
+      window.removeEventListener("mouseup", finish);
+      if (!resizingRef.current) return;
+      resizingRef.current = false;
+      commitSize();
+      // The corner is not an input, so the field lost focus; give it back with its selection so the controls keep acting on it.
+      const field = findFormatField(formatKey);
+      const selection = selectionRef.current;
+      if (field && selection) {
+        field.focus({ preventScroll: true });
+        restoreSelection(field, selection);
+      }
+    };
+    window.addEventListener("pointerup", finish);
+    window.addEventListener("pointercancel", finish);
+    window.addEventListener("mouseup", finish);
+  };
 
   // PC: the panel is a layer of the desktop and moves by its header anywhere on the screen (D-06, EDIT-04). The phone panel is docked.
   const beginDrag = (event: React.PointerEvent<HTMLElement>) => {
@@ -622,8 +697,9 @@ export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurfa
   };
 
   // mousedown is the event whose default moves focus and clears the field's selection; pointerdown alone does not stop it in Chromium or WebKit (WR-04); inputs keep focus.
-  const keepFieldFocus = (event: React.SyntheticEvent) => { if (!(event.target as HTMLElement).closest("input")) event.preventDefault(); };
-  return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`} onPointerDown={keepFieldFocus} onMouseDown={keepFieldFocus} onKeyDown={leavePanel} data-collapsed={collapsed || undefined}>
+  // The resize corner is left alone: preventing its mousedown could stop the browser's own corner drag (OWN-05).
+  const keepFieldFocus = (event: React.PointerEvent<HTMLElement> | React.MouseEvent<HTMLElement>) => { if (!(event.target as HTMLElement).closest("input") && !inResizeCorner(event)) event.preventDefault(); };
+  return <section ref={panelRef} className="floating-text-format" role="region" aria-label={`Форматирование: ${target.title}`} onPointerDownCapture={beginResize} onPointerDown={keepFieldFocus} onMouseDown={keepFieldFocus} onKeyDown={leavePanel} data-collapsed={collapsed || undefined}>
     <header tabIndex={0} role="group" aria-label="Перемещение панели: стрелки, с Shift шагом 32 px" onPointerDown={beginDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag} onKeyDown={keyMove} onClick={(event) => { if (window.matchMedia("(max-width: 900px)").matches && !(event.target as HTMLElement).closest("button")) setCollapsed((value) => !value); }}>
       <div><span>РЕДАКТОР ОФОРМЛЕНИЯ</span><strong>{target.title}</strong></div>
       <small>
@@ -674,15 +750,22 @@ export function FloatingTextFormatPanel({ target, previewSurface, onPreviewSurfa
 const formatPanelStorageKey = "portia-format-panel-v1";
 
 // The only two places that touch browser storage. A null key means the caller wants nothing remembered (the template builder), so both return first.
-function readPanelOffset(storageKey: string | null): PanelOffset | null {
+function readPanelOffset(storageKey: string | null): PanelPlacement | null {
   if (storageKey === null) return null;
-  try { return parsePanelOffset(localStorage.getItem(storageKey)); } catch { return null; }
+  try { return parsePanelPlacement(localStorage.getItem(storageKey)); } catch { return null; }
 }
 
-function writePanelOffset(storageKey: string | null, offset: PanelOffset) {
+// The size the user already gave the panel, kept when only the place changes (OWN-05).
+function savedSize(storageKey: string | null) {
+  const saved = readPanelOffset(storageKey);
+  return saved?.width === undefined || saved.height === undefined ? null : { width: saved.width, height: saved.height };
+}
+
+function writePanelOffset(storageKey: string | null, offset: PanelPlacement) {
   if (storageKey === null) return;
-  // A blocked storage only means the place is not remembered.
-  try { localStorage.setItem(storageKey, JSON.stringify(offset)); } catch { /* ignore */ }
+  // A blocked storage only means the place is not remembered. A move (no size given) keeps the saved size.
+  const kept = offset.width === undefined ? savedSize(storageKey) : null;
+  try { localStorage.setItem(storageKey, JSON.stringify({ ...offset, ...kept })); } catch { /* ignore */ }
 }
 
 // Writes the clamped right/bottom straight on the panel (no React render per move) and returns what was painted.

@@ -93,6 +93,42 @@ test("D-57 (20-37): the template builder uses the shared launch button", () => {
 //  16. PORTIA-26-G10 (26-18; UI-04, D-21) — вкладка вирусов: кнопка «ПЕРЕМЕСТИТЬ В КОРЗИНУ» переехала из низа формы в верхнюю строку записи div.virus-editor-head
 //      рядом с вкладками досье (applyRecycleButtonHunk); разметка кнопки и обработчик те же, русская надпись переносится, а не добавляется (набор строк D-58 тот же).
 //      Источник одобрения: 26-UAT gap 10 (2026-11-16, владелец: кнопка «в странном месте») и план 26-18.
+//  17. PORTIA-26.1-EMP (26.1-02; OWN-07, D-21) — «Сотрудники»: функция EmployeeProfilesEditor с detailsOf переехала в шов components/portia-editor-employees.tsx
+//      (черновики по id, один вопрос только при закрытии окна); в редакторе остались импорт шва, хранилище useEmployeeDraftStore() рядом с employeeDirty,
+//      проп drafts у вызова вкладки и сброс хранилища, когда владелец закрыл раздел (applyEmployeesSeamHunk); русских строк не добавлено, строки функции переехали вместе с ней
+//      (D-58 берёт ожидаемый набор из образца после этой правки). Источник одобрения: 26.1-OWNER-REQUEST OWN-07 (2026-11-20, «правка нескольких биографий подряд без обязательного сохранения») и план 26.1-02.
+//  18. PORTIA-26.1-EMP2 (26.1-02 Task 2; OWN-07, D-21) — вопрос о несохранённых сотрудниках задаётся только при закрытии окна: уход с вкладки «Сотрудники» ничего не спрашивает,
+//      состояние ожидающей вкладки leaveTo и её ветка убраны; при закрытии с несохранёнными черновиками с другой вкладки редактор сам переходит на «Сотрудники», где шов задаёт вопрос
+//      (applyEmployeesCloseHunk); русских строк не добавлено (вопрос и его кнопки лежат в шве). Источник одобрения: 26.1-OWNER-REQUEST OWN-07 («Сохранить?» только при закрытии) и план 26.1-02.
+//  19. PORTIA-26.1-HOLD (26.1-08; OWN-09, D-21) — столбцы таблицы переставляются удержанием заголовка, ручки ≡ нет: функция ColumnSwapHandle (с комментарием над ней) переехала в шов
+//      components/portia-editor-dossier.tsx, редактор только импортирует её оттуда (applyColumnSwapSeamHunk); вызовы в TableBlockEditor не менялись, русская подпись «Переставить столбец…»
+//      переехала вместе с функцией (D-58 берёт ожидаемый набор из образца после этой правки). Источник одобрения: 26.1-OWNER-REQUEST OWN-09 (2026-11-20, «убрать ручки везде») и план 26.1-08.
+//  20. PORTIA-26.1-TABS (26.1-09 Task 1; OWN-10, D-21) — карточки раздела «Справочника» — вкладки-полоски слева направо, как разделы; под ними только выбранная карточка, новая карточка
+//      выбирается сразу, переход из оглавления выбирает вкладку (applyGuideCardTabsHunk): импорт шва components/portia-editor-card-tabs.tsx, хук useCardTabSelection, строка CardTabs
+//      перед списком карточек и фильтр map по выбранной карточке; русских строк не добавлено (подписи вкладок лежат в шве, cardTabsCopy). Источник одобрения: 26.1-OWNER-REQUEST OWN-10
+//      (2026-11-20, «карточки внутри раздела — вкладками, слева направо, как разделы») и план 26.1-09.
+//  21. PORTIA-26.1-TABS2 (26.1-09 Task 2; OWN-10, D-21) — то же для подразделов раздела «Информации»: вкладки-полоски, под ними только выбранный подраздел, «+ ПОДРАЗДЕЛ» выбирает новый,
+//      переход из оглавления выбирает вкладку (applyInfoSubsectionTabsHunk): строка CardTabs, фильтр map и выбор в jumpInfo; русских строк не добавлено (подпись «Подразделы» в шве).
+//      Источник одобрения: 26.1-OWNER-REQUEST OWN-10 (2026-11-20, «то же в других приложениях с похожей системой») и план 26.1-09.
+//  22. PORTIA-26.1-TABS3 (26.1-09 Task 3; OWN-10, D-21) — вкладка «База вирусов»: мутации и записи учёных вкладками-полосками, под ними только выбранная; у мутаций вкладки только переключают
+//      (тексты привязаны к номеру, порядка нет), у записей — по id (applyVirusItemTabsHunk): строки CardTabs и фильтры map; русских строк не добавлено (подписи в шве).
+//      Источник одобрения: 26.1-OWNER-REQUEST OWN-10 (2026-11-20, «то же в других приложениях с похожей системой») и план 26.1-09.
+//  23. PORTIA-26.1-LIVE (26.1-10; LIVE-01..05, D-21) — живой режим: кнопка «ЖИВОЙ РЕЖИМ» в панели действий вкладки, при включённом режиме тела вкладок заменяет LiveSurface
+//      (applyLiveModeHunk): импорт шва, хук useLiveMode, кнопка live.toggle перед действиями, обёртка тел вкладок и мост редактора одной строкой пропа bridge (черновик, правки,
+//      форматирование, загрузка, выбор в вкладках), чтобы планы 26.1-11…13 не трогали редактор. Русских строк не добавлено (все тексты в шве, liveCopy).
+//      Источник одобрения: ROADMAP 26.1 LIVE-01..04, решение владельца 3 (26.1-OWNER-REQUEST, 2026-11-20) и план 26.1-10.
+//  24. PORTIA-26.1-LIVE-ACCESS (26.1-19; LIVE-01, LIVE-02, LIVE-04, D-21) — живой «Доступ» от лица проверяемого посетителя: строка вкладки «Доступ» — <AccessLiveTab manager={<EditorAccessManager />} />
+//      (applyLiveAccessHunk): менеджер аккаунтов редакторов остаётся содержимым вкладки, кнопка «ЖИВОЙ РЕЖИМ» и просмотр экранов ворот посетителя лежат в шве; плюс имя AccessLiveTab
+//      в строке импорта шва. Русских строк не добавлено (все тексты в шве, liveCopy.access). Источник одобрения: 26.1-OWNER-REQUEST, пункт 13 («Доступ» в живом режиме от лица того,
+//      кого проверяют) и пункт 25 (решение владельца 2026-11-21: вариант A, просмотр без правки текстов), план 26.1-19.
+//  25. PORTIA-26.1-ADDCARD (26.1-20; OWN-10, D-21) — «+ ДОБАВИТЬ КАРТОЧКУ» в конце полосы вкладок карточек раздела «Справочника» (applyGuideAddCardHunk): проп add у CardTabs
+//      (то же действие добавления, предел и заметка о нём) и удаление прежнего блока кнопки под списком. Подпись кнопки лежит в шве (cardTabsCopy.addCard), других русских строк не
+//      добавлено. Источник одобрения: 26.1-OWNER-REQUEST, пункт 17 (2026-11-21), план 26.1-20.
+//  26. PORTIA-26.1-ADDTABS (26.1-26; OWN-10, D-21) — «+ Добавить…» в конце каждой полосы вкладок (applyAddTabsHunk): проп add у полос записей учёных, мутаций вкладки вирусов
+//      и подразделов «Информации» (те же действия добавления, пределы и заметки), удаление прежних кнопок под списками. Подписи кнопок лежат в шве (cardTabsCopy.addLog,
+//      addMutation, addSubsection), других русских строк не добавлено. Источник одобрения: 26.1-OWNER-REQUEST, пункт 34 (2026-11-21), план 26.1-26.
+//  27. PORTIA-26.1-ADDTABS2 (26.1-26 Task 2; OWN-10, D-21) — то же для полос мутаций вкладки вирусов и подразделов «Информации» (applyAddTabs2Hunk): проп add у CardTabs и удаление
+//      кнопок «+ ДОБАВИТЬ МУТАЦИЮ» и «+ ПОДРАЗДЕЛ» под списками; подписи в шве, других русских строк не добавлено. Источник одобрения: 26.1-OWNER-REQUEST, пункт 34, план 26.1-26.
 // D-58 запрещает в этом файле правки подсказок и текстов: набор русских строк файла равен набору образца после одобренных правок.
 // Любая будущая одобренная правка файла обязана расширить реестр: новый коммит-образец или новая разрешённая замена здесь, иначе тест упадёт.
 const SAMPLE_COMMIT = "449c756200b3db32f9cfaf4b3ca36b47822b395b";
@@ -1040,6 +1076,379 @@ function applyUploadCompressHunk(text: string): string {
   );
 }
 
+// Владелец 2026-11-18: фото-блок «Справочника» кадрируется тем же окном «Видимая часть», что обложки и полосы (свободная рамка с ручками),
+// вместо ползунков «Высота» и «Кадр по горизонтали / вертикали»; положение по умолчанию — слева. Блок «Карточки» (карточки внутри карточки). Замены байт в байт.
+function applyGuidePhotoFramingHunk(text: string): string {
+  let next = text;
+  next = replaceOnce(next, "\nimport { useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode } from \"react\";\n", "\nimport { ImageFramingEditor } from \"@/components/portia-image-framing\";\nimport { useEffect, useId, useMemo, useReducer, useRef, useState, type ReactNode } from \"react\";\n", "guide photo framing and cards block 1");
+  next = replaceOnce(next, "  callout: { label: \"\u0432\u0440\u0435\u0437\u043a\u0430\", title: \"\u0412\u0420\u0415\u0417\u041a\u0410\" },\n} as const;\n", "  callout: { label: \"\u0432\u0440\u0435\u0437\u043a\u0430\", title: \"\u0412\u0420\u0415\u0417\u041a\u0410\" },\n  cards: { label: \"\u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0438\", title: \"\u041a\u0410\u0420\u0422\u041e\u0427\u041a\u0418\" },\n} as const;\n", "guide photo framing and cards block 2");
+  next = replaceOnce(next, "const firstLine = (value: string) => value.split(\"\\n\").map((line) => line.trim()).find(Boolean);\nconst guideBlockTitle = (block: GuideBlock) => (block.type === \"heading\" || block.type === \"text\" ? firstLine(block.text) : block.type === \"callout\" ? firstLine(block.label) ?? firstLine(block.text) : undefined);\n\n", "const firstLine = (value: string) => value.split(\"\\n\").map((line) => line.trim()).find(Boolean);\nconst guideBlockTitle = (block: GuideBlock) => (block.type === \"heading\" || block.type === \"text\" ? firstLine(block.text) : block.type === \"callout\" ? firstLine(block.label) ?? firstLine(block.text) : block.type === \"cards\" && block.cardIds.length ? `${block.cardIds.length} \u0448\u0442.` : undefined);\n\n", "guide photo framing and cards block 3");
+  next = replaceOnce(next, "\nfunction GuidePhotoLayoutEditor({ block, onChange }: {\n", "\n// Owner 2026-11-18: one standard for every picture \u2014 the photo block of a card is framed in the same window \u00ab\u0412\u0438\u0434\u0438\u043c\u0430\u044f \u0447\u0430\u0441\u0442\u044c\u00bb as covers and bands\n// (a free frame: its proportions are dragged by the handles), not by the old sliders \u00ab\u041a\u0430\u0434\u0440 \u043f\u043e \u0433\u043e\u0440\u0438\u0437\u043e\u043d\u0442\u0430\u043b\u0438 / \u0432\u0435\u0440\u0442\u0438\u043a\u0430\u043b\u0438\u00bb. Applying a frame drops the\n// old height and focus numbers of the block, so the site shows exactly what the window showed.\nfunction GuidePhotoLayoutEditor({ block, onChange }: {\n", "guide photo framing and cards block 4");
+  next = replaceOnce(next, "  const width = block.width ?? 100;\n  const height = block.height ?? 0;\n  const align = block.align ?? \"center\";\n  const focusX = block.focusX ?? 50;\n  const focusY = block.focusY ?? 50;\n  return <div className=\"guide-photo-layout\">\n", "  const width = block.width ?? 100;\n  const align = block.align ?? \"left\";\n  return <div className=\"guide-photo-layout\">\n", "guide photo framing and cards block 5");
+  next = replaceOnce(next, "  return <div className=\"guide-photo-layout\">\n    <strong>\u0420\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435 \u0438 \u0432\u0438\u0434\u0438\u043c\u0430\u044f \u0447\u0430\u0441\u0442\u044c \u0444\u043e\u0442\u043e</strong>\n    <div className=\"guide-photo-layout-controls\">\n", "  return <div className=\"guide-photo-layout\">\n    <strong>\u0420\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435 \u0444\u043e\u0442\u043e</strong>\n    <div className=\"guide-photo-layout-controls\">\n", "guide photo framing and cards block 6");
+  next = replaceOnce(next, "      <label>\u0428\u0438\u0440\u0438\u043d\u0430: {width}%<input type=\"range\" min=\"40\" max=\"100\" step=\"5\" value={width} onChange={(event) => onChange((photo) => { photo.width = Number(event.target.value); })} /></label>\n      <label>\u0412\u044b\u0441\u043e\u0442\u0430: {height ? `${height} px` : \"\u043f\u043e \u0438\u0437\u043e\u0431\u0440\u0430\u0436\u0435\u043d\u0438\u044e\"}<input type=\"range\" min=\"0\" max=\"600\" step=\"20\" value={height} onChange={(event) => onChange((photo) => { photo.height = Number(event.target.value); })} /></label>\n      <label>\u041f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435<select value={align} onChange={(event) => onChange((photo) => { photo.align = event.target.value as \"left\" | \"center\" | \"right\"; })}><option value=\"left\">\u0421\u043b\u0435\u0432\u0430</option><option value=\"center\">\u041f\u043e \u0446\u0435\u043d\u0442\u0440\u0443</option><option value=\"right\">\u0421\u043f\u0440\u0430\u0432\u0430</option></select></label>\n", "      <label>\u0428\u0438\u0440\u0438\u043d\u0430: {width}%<input type=\"range\" min=\"40\" max=\"100\" step=\"5\" value={width} onChange={(event) => onChange((photo) => { photo.width = Number(event.target.value); })} /></label>\n      <label>\u041f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435<select value={align} onChange={(event) => onChange((photo) => { photo.align = event.target.value as \"left\" | \"center\" | \"right\"; })}><option value=\"left\">\u0421\u043b\u0435\u0432\u0430</option><option value=\"center\">\u041f\u043e \u0446\u0435\u043d\u0442\u0440\u0443</option><option value=\"right\">\u0421\u043f\u0440\u0430\u0432\u0430</option></select></label>\n", "guide photo framing and cards block 7");
+  next = replaceOnce(next, "      <label>\u041f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435<select value={align} onChange={(event) => onChange((photo) => { photo.align = event.target.value as \"left\" | \"center\" | \"right\"; })}><option value=\"left\">\u0421\u043b\u0435\u0432\u0430</option><option value=\"center\">\u041f\u043e \u0446\u0435\u043d\u0442\u0440\u0443</option><option value=\"right\">\u0421\u043f\u0440\u0430\u0432\u0430</option></select></label>\n      <label>\u041a\u0430\u0434\u0440 \u043f\u043e \u0433\u043e\u0440\u0438\u0437\u043e\u043d\u0442\u0430\u043b\u0438: {focusX}%<input type=\"range\" min=\"0\" max=\"100\" step=\"5\" value={focusX} onChange={(event) => onChange((photo) => { photo.focusX = Number(event.target.value); })} /></label>\n      <label>\u041a\u0430\u0434\u0440 \u043f\u043e \u0432\u0435\u0440\u0442\u0438\u043a\u0430\u043b\u0438: {focusY}%<input type=\"range\" min=\"0\" max=\"100\" step=\"5\" value={focusY} onChange={(event) => onChange((photo) => { photo.focusY = Number(event.target.value); })} /></label>\n    </div>\n", "      <label>\u041f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u0435<select value={align} onChange={(event) => onChange((photo) => { photo.align = event.target.value as \"left\" | \"center\" | \"right\"; })}><option value=\"left\">\u0421\u043b\u0435\u0432\u0430</option><option value=\"center\">\u041f\u043e \u0446\u0435\u043d\u0442\u0440\u0443</option><option value=\"right\">\u0421\u043f\u0440\u0430\u0432\u0430</option></select></label>\n    </div>\n", "guide photo framing and cards block 8");
+  next = replaceOnce(next, "    </div>\n    <div className={`guide-photo-layout-preview guide-photo-${align}`} style={{ width: `${width}%` }}>\n      {block.url ? <img src={block.url} alt=\"\u041f\u0440\u0435\u0434\u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440 \u0440\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u0438\u044f \u0444\u043e\u0442\u043e\" loading=\"lazy\" style={{ width: \"100%\", height: height ? `${height}px` : \"auto\", objectPosition: `${focusX}% ${focusY}%` }} /> : <span>\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u0444\u043e\u0442\u043e, \u0447\u0442\u043e\u0431\u044b \u0443\u0432\u0438\u0434\u0435\u0442\u044c \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442.</span>}\n    </div>\n  </div>;\n", "    </div>\n    {block.url && <ImageFramingEditor src={block.url} framing={block.framing} box=\"free\" label=\"\u0424\u043e\u0442\u043e\" onChange={(framing) => onChange((photo) => {\n      if (framing) photo.framing = framing; else delete photo.framing;\n      delete photo.height; delete photo.focusX; delete photo.focusY;\n    })} />}\n  </div>;\n}\n\n// Owner 2026-11-18: the block \u00ab\u041a\u0430\u0440\u0442\u043e\u0447\u043a\u0438\u00bb \u2014 other cards of \u00ab\u0421\u043f\u0440\u0430\u0432\u043e\u0447\u043d\u0438\u043a\u00bb shown inside this card. Picked from one list grouped by section, kept in the chosen order.\nfunction GuideCardsBlockEditor({ block, cardId, sections, onChange }: {\n  block: Extract<GuideBlock, { type: \"cards\" }>;\n  cardId: string;\n  sections: PortiaContent[\"guideSections\"];\n  onChange: (cardIds: string[]) => void;\n}) {\n  const titleOf = (id: string) => {\n    const found = findGuide(sections, id);\n    return found?.card ? `${found.card.title || \"\u0411\u0435\u0437 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044f\"} \u00b7 ${found.section.title || \"\u0411\u0435\u0437 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044f\"}` : \"\u041a\u0430\u0440\u0442\u043e\u0447\u043a\u0430 \u0443\u0434\u0430\u043b\u0435\u043d\u0430\";\n  };\n  return <div className=\"guide-cards-editor\">\n    {block.cardIds.length ? <ol className=\"guide-cards-editor-list\">\n      {block.cardIds.map((id, index) => <li key={id}>\n        <span>{titleOf(id)}</span>\n        <button type=\"button\" className=\"secondary-control\" aria-label={`\u0412\u044b\u0448\u0435: ${titleOf(id)}`} disabled={index === 0} onClick={() => { const next = [...block.cardIds]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; onChange(next); }}>\u2191</button>\n        <button type=\"button\" className=\"secondary-control\" aria-label={`\u0423\u0431\u0440\u0430\u0442\u044c: ${titleOf(id)}`} onClick={() => onChange(block.cardIds.filter((item) => item !== id))}>\u00d7</button>\n      </li>)}\n    </ol> : <p className=\"guide-section-empty\">\u041a\u0430\u0440\u0442\u043e\u0447\u043a\u0438 \u0435\u0449\u0451 \u043d\u0435 \u0432\u044b\u0431\u0440\u0430\u043d\u044b</p>}\n    <label className=\"editor-field\">\n      <span>\u0414\u043e\u0431\u0430\u0432\u0438\u0442\u044c \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0443</span>\n      <select value=\"\" disabled={block.cardIds.length >= 24} onChange={(event) => { if (event.target.value) onChange([...block.cardIds, event.target.value]); }}>\n        <option value=\"\">\u0412\u044b\u0431\u0435\u0440\u0438\u0442\u0435 \u043a\u0430\u0440\u0442\u043e\u0447\u043a\u0443\u2026</option>\n        {sections.map((section) => <optgroup key={section.id} label={section.title || \"\u0411\u0435\u0437 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044f\"}>\n          {section.cards.filter((item) => item.id !== cardId && !block.cardIds.includes(item.id)).map((item) => <option key={item.id} value={item.id}>{item.title || \"\u0411\u0435\u0437 \u043d\u0430\u0437\u0432\u0430\u043d\u0438\u044f\"}</option>)}\n        </optgroup>)}\n      </select>\n    </label>\n  </div>;\n", "guide photo framing and cards block 9");
+  next = replaceOnce(next, "                            <>\n                              <ImageEditorField label=\"\u0424\u043e\u0442\u043e\" value={block.url} placement=\"guide\" maxHint=\"\u0420\u0430\u0437\u043c\u0435\u0440 \u0438 \u043a\u0430\u0434\u0440 \u043d\u0430\u0441\u0442\u0440\u0430\u0438\u0432\u0430\u044e\u0442\u0441\u044f \u043d\u0438\u0436\u0435\" showPreview={false} uploadState={uploadState} uploadMessage={uploadMessage}\n                                onChange={(value) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === \"photo\") item.url = value; })}\n", "                            <>\n                              <ImageEditorField label=\"\u0424\u043e\u0442\u043e\" value={block.url} placement=\"guide\" maxHint=\"\u0420\u0430\u0437\u043c\u0435\u0440 \u0438 \u0432\u0438\u0434\u0438\u043c\u0430\u044f \u0447\u0430\u0441\u0442\u044c \u043d\u0430\u0441\u0442\u0440\u0430\u0438\u0432\u0430\u044e\u0442\u0441\u044f \u043d\u0438\u0436\u0435\" showPreview={false} uploadState={uploadState} uploadMessage={uploadMessage}\n                                onChange={(value) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === \"photo\") item.url = value; })}\n", "guide photo framing and cards block 10");
+  next = replaceOnce(next, "                          {block.type === \"video\" && <YoutubeField videoId={block.videoId} onChange={(videoId) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === \"video\") item.videoId = videoId; })} />}\n                          {block.type === \"callout\" && (\n", "                          {block.type === \"video\" && <YoutubeField videoId={block.videoId} onChange={(videoId) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === \"video\") item.videoId = videoId; })} />}\n                          {block.type === \"cards\" && <GuideCardsBlockEditor block={block} cardId={card.id} sections={draft.guideSections} onChange={(cardIds) => writeGuideBlock(card.id, block.id, (item) => { if (item.type === \"cards\") item.cardIds = cardIds; })} />}\n                          {block.type === \"callout\" && (\n", "guide photo framing and cards block 11");
+  next = replaceOnce(next, "                        <button className=\"secondary-control limit-add\" type=\"button\" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: \"callout\", label: \"\", text: \"\" }))}>+ \u0412\u0420\u0415\u0417\u041a\u0410</button>\n                      </div>\n", "                        <button className=\"secondary-control limit-add\" type=\"button\" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: \"callout\", label: \"\", text: \"\" }))}>+ \u0412\u0420\u0415\u0417\u041a\u0410</button>\n                        <button className=\"secondary-control limit-add\" type=\"button\" disabled={card.blocks.length >= MAX_BLOCKS} aria-describedby={`limit-blocks-${card.id}`} onClick={() => addGuideBlock(card.id, (id) => ({ id, type: \"cards\", cardIds: [] }))}>+ \u041a\u0410\u0420\u0422\u041e\u0427\u041a\u0418</button>\n                      </div>\n", "guide photo framing and cards block 12");
+  return next;
+}
+
+/**
+ * PORTIA-26.1-EMP (26.1-02 Task 1; OWN-07, D-21): «Сотрудники» живут в шве components/portia-editor-employees.tsx.
+ * Функция и её detailsOf вырезаются целиком по двум якорям — строке начала (const detailsOf) и строке `type TabLists =` (каждая ровно одна),
+ * поэтому правка не зависит от содержимого функции и от соседних правок. Остальное — шесть замен байт в байт. Русских строк не добавлено.
+ */
+function applyEmployeesSeamHunk(text: string): string {
+  const lines = text.split("\n");
+  const starts = lines.flatMap((line, index) => (line.startsWith("const detailsOf = (employee: PortiaEmployee)") ? [index] : []));
+  assert.equal(starts.length, 1, "employees seam: exactly one approved anchor for the start of the moved code");
+  const ends = lines.flatMap((line, index) => (line.startsWith("type TabLists =") ? [index] : []));
+  assert.equal(ends.length, 1, "employees seam: exactly one approved anchor for the end of the moved code");
+  assert.ok(starts[0] < ends[0], "the moved code stands above type TabLists");
+  lines.splice(starts[0], ends[0] - starts[0]);
+  let next = lines.join("\n");
+  next = replaceOnce(
+    next,
+    "import { draftEdits, employeeRequestFailure, partialSave,",
+    "import { draftEdits, partialSave,",
+    "employees seam: the failure text moved with the function",
+  );
+  next = replaceOnce(
+    next,
+    'import { acceptsEditorList, changedDetails, changedFields, employeeRatings, profileChanged, profileOf, settleDraft, type EmployeeProfile, type PortiaEmployee } from "@/lib/portia-employees";\n',
+    'import { type PortiaEmployee } from "@/lib/portia-employees";\nimport { EmployeeProfilesEditor, useEmployeeDraftStore } from "@/components/portia-editor-employees";\n',
+    "employees seam: imports",
+  );
+  next = replaceOnce(
+    next,
+    "  const [employeeDirty, setEmployeeDirty] = useState(false);\n",
+    "  const [employeeDirty, setEmployeeDirty] = useState(false);\n  const employeeDrafts = useEmployeeDraftStore();\n",
+    "employees seam: the draft store",
+  );
+  next = replaceOnce(
+    next,
+    "onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} />}",
+    "onDirtyChange={setEmployeeDirty} leaving={leaving} onLeave={onEmployeeLeave} drafts={employeeDrafts} />}",
+    "employees seam: the drafts prop",
+  );
+  next = replaceOnce(
+    next,
+    '      if (wasEmployeeDirty && added.includes("employees")) lost.push("employees");\n',
+    '      if (wasEmployeeDirty && added.includes("employees")) lost.push("employees");\n      if (added.includes("employees")) { employeeDrafts.reset(); setEmployeeDirty(false); }\n',
+    "employees seam: a closed section drops its drafts",
+  );
+  return replaceOnce(next, "  }, [closedKey, employeesClosed]);\n", "  }, [closedKey, employeesClosed, employeeDrafts]);\n", "employees seam: the effect depends on the store");
+}
+
+/**
+ * PORTIA-26.1-EMP2 (26.1-02 Task 2; OWN-07, D-21): the employee question is asked only when the window closes. Leaving «Сотрудники» for another tab asks nothing
+ * (the drafts live in the store), so the pending-tab state leaveTo and its branch go; a close with unsaved employee drafts from another tab switches to «Сотрудники»,
+ * where the seam shows the question. Five replacements, byte for byte; no Russian text is added (the question is in components/portia-editor-employees.tsx).
+ */
+function applyEmployeesCloseHunk(text: string): string {
+  let next = replaceOnce(text, "  const [leaveTo, setLeaveTo] = useState<EditorTab | null>(null);\n", "", "employees close: no pending tab");
+  next = replaceOnce(next, "  const leaving = employeeDirty && (leaveTo !== null || closeAsked);\n", "  const leaving = employeeDirty && closeAsked;\n", "employees close: the question is for the close only");
+  next = replaceOnce(next, "      setPreviewSurface(null);\n      setLeaveTo(null);\n", "      setPreviewSurface(null);\n", "employees close: a closed section has no pending tab");
+  next = replaceOnce(
+    next,
+    [
+      "  // An unsaved employee draft is asked about before leaving the tab (D-02).",
+      "  const switchTab = (id: EditorTab) => {",
+      '    if (tab === "employees" && id !== "employees" && employeeDirty) setLeaveTo(id);',
+      "    else showTab(id);",
+      "  };",
+      "  // The answer of the employee question: continue the pending tab switch or window close, or drop it.",
+      "  const onEmployeeLeave = (ok: boolean) => {",
+      "    if (ok) setEmployeeDirty(false);",
+      "    if (leaveTo !== null) {",
+      "      setLeaveTo(null);",
+      "      if (ok) showTab(leaveTo);",
+      "    } else if (closeAsked) {",
+      "",
+    ].join("\n"),
+    [
+      "  // Employee drafts live in the store and survive leaving the tab: no question here (owner 2026-11-20, OWN-07).",
+      "  const switchTab = (id: EditorTab) => showTab(id);",
+      "  // The answer of the employee question, asked once when the window closes.",
+      "  const onEmployeeLeave = (ok: boolean) => {",
+      "    if (ok) setEmployeeDirty(false);",
+      "    if (closeAsked) {",
+      "",
+    ].join("\n"),
+    "employees close: switchTab and the answer",
+  );
+  return replaceOnce(
+    next,
+    "      if (ok && !dirty) onCloseApproved();\n    }\n  };\n",
+    [
+      "      if (ok && !dirty) onCloseApproved();",
+      "    }",
+      "  };",
+      "  // A close with unsaved employee drafts asks its question on the tab of the employees; from another tab the editor goes there first.",
+      "  useEffect(() => {",
+      '    if (closeAsked && employeeDirty && tab !== "employees" && stripTabs.some(([id]) => id === "employees")) showTab("employees");',
+      "  });",
+      "",
+    ].join("\n"),
+    "employees close: go to the tab that asks",
+  );
+}
+
+/**
+ * PORTIA-26.1-HOLD (26.1-08; OWN-09, D-21): ColumnSwapHandle живёт в шве components/portia-editor-dossier.tsx (удержание заголовка столбца вместо ручки ≡).
+ * Блок вырезается целиком по двум якорям — строке-комментарию «// Two table columns swap…» и строке `function normalizePhraseLines(` (каждая ровно одна);
+ * имя добавляется в импорт из шва. Русских строк не добавлено, строки функции переехали вместе с ней.
+ */
+function applyColumnSwapSeamHunk(text: string): string {
+  const lines = text.split("\n");
+  const starts = lines.flatMap((line, index) => (line.startsWith("// Two table columns swap, so a header") ? [index] : []));
+  assert.equal(starts.length, 1, "column swap seam: exactly one approved anchor for the start of the moved code");
+  const ends = lines.flatMap((line, index) => (line.startsWith("function normalizePhraseLines(") ? [index] : []));
+  assert.equal(ends.length, 1, "column swap seam: exactly one approved anchor for the end of the moved code");
+  assert.ok(starts[0] < ends[0], "the moved code stands above normalizePhraseLines");
+  lines.splice(starts[0], ends[0] - starts[0]);
+  return replaceOnce(lines.join("\n"), "ClassificationField, ConfirmDialog, DossierTabs", "ClassificationField, ColumnSwapHandle, ConfirmDialog, DossierTabs", "column swap seam: import");
+}
+
+/**
+ * PORTIA-26.1-TABS (26.1-09 Task 1; OWN-10, D-21): карточки раздела «Справочника» — вкладки-полоски (components/portia-editor-card-tabs.tsx), под ними только выбранная карточка.
+ * Вставки: импорт шва, хук выбора рядом с флагом employeeDirty, выбор вкладки в jumpGuide, строка CardTabs перед списком карточек и фильтр map по выбранной карточке.
+ * Русских строк не добавлено: подпись «Карточки раздела» и «Без названия» лежат в шве (cardTabsCopy).
+ */
+function applyGuideCardTabsHunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    'import { ImageFramingEditor } from "@/components/portia-image-framing";\n',
+    'import { ImageFramingEditor } from "@/components/portia-image-framing";\nimport { CardTabs, cardTabsCopy, useCardTabSelection } from "@/components/portia-editor-card-tabs";\n',
+    "guide card tabs: import",
+  );
+  next = replaceOnce(next, "  const [employeeDirty, setEmployeeDirty] = useState(false);\n", "  const [employeeDirty, setEmployeeDirty] = useState(false);\n  const cardTabs = useCardTabSelection();\n", "guide card tabs: the selection hook");
+  next = replaceOnce(
+    next,
+    "  const jumpGuide = (id: string) => {\n    const found = findGuide(draft.guideSections, id);\n",
+    "  const jumpGuide = (id: string) => {\n    const found = findGuide(draft.guideSections, id);\n    if (found?.card) cardTabs.select(found.section.id, id);\n",
+    "guide card tabs: a jump to a card selects its tab",
+  );
+  return replaceOnce(
+    next,
+    [
+      '              <div className="info-subsection-list" data-sort-group="guide-cards" data-group-id={section.id}>',
+      '                {section.cards.length === 0 && <div className="editor-empty compact-empty">В разделе нет карточек. Добавьте первую кнопкой «+ ДОБАВИТЬ КАРТОЧКУ».</div>}',
+      "                {section.cards.map((card, cardIndex) => (",
+      "",
+    ].join("\n"),
+    [
+      "              <CardTabs label={cardTabsCopy.cards} items={section.cards.map((card) => ({ id: card.id, title: card.title }))} activeId={cardTabs.active(section.id, section.cards.map((card) => card.id))}",
+      "                onSelect={(id) => { closeFormatterFor(...section.cards.flatMap((card) => card.blocks.map((block) => portiaTextKey.guideBlock(block.id)))); cardTabs.select(section.id, id); setOpen([id], true); }}",
+      "                onMove={(from, to) => changeDraft((next) => { const target = findGuide(next.guideSections, section.id)?.section; if (target) moveArrayItem(target.cards, from, to); })} />",
+      '              <div className="info-subsection-list" data-sort-group="guide-cards" data-group-id={section.id}>',
+      '                {section.cards.length === 0 && <div className="editor-empty compact-empty">В разделе нет карточек. Добавьте первую кнопкой «+ ДОБАВИТЬ КАРТОЧКУ».</div>}',
+      "                {section.cards.map((card, cardIndex) => card.id === cardTabs.active(section.id, section.cards.map((item) => item.id)) && (",
+      "",
+    ].join("\n"),
+    "guide card tabs: the strip and the selected card",
+  );
+}
+
+/**
+ * PORTIA-26.1-TABS2 (26.1-09 Task 2; OWN-10, D-21): подразделы раздела «Информации» — вкладки-полоски (CardTabs из components/portia-editor-card-tabs.tsx), под ними только выбранный подраздел.
+ * Вставки: выбор вкладки в jumpInfo, строка CardTabs перед списком подразделов и фильтр map по выбранному подразделу. Русских строк не добавлено (подпись «Подразделы» лежит в шве).
+ */
+function applyInfoSubsectionTabsHunk(text: string): string {
+  const next = replaceOnce(
+    text,
+    "  const jumpInfo = (id: string) => {\n    const found = findInfo(draft.infoSections, id);\n",
+    "  const jumpInfo = (id: string) => {\n    const found = findInfo(draft.infoSections, id);\n    if (found?.subsection) cardTabs.select(found.section.id, id);\n",
+    "info subsection tabs: a jump to a subsection selects its tab",
+  );
+  return replaceOnce(
+    next,
+    [
+      "              <div className=\"info-subsection-list\">",
+      "                {section.subsections.map((subsection, subIndex) => (",
+      "",
+    ].join("\n"),
+    [
+      "              <CardTabs label={cardTabsCopy.subsections} items={section.subsections.map((subsection) => ({ id: subsection.id, title: subsection.title }))} activeId={cardTabs.active(section.id, section.subsections.map((subsection) => subsection.id))}",
+      "                onSelect={(id) => { closeFormatterFor(...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id)))); cardTabs.select(section.id, id); setOpen([id], true); }}",
+      "                onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, section.id)?.section; if (target) moveArrayItem(target.subsections, from, to); })} />",
+      "              <div className=\"info-subsection-list\">",
+      "                {section.subsections.map((subsection, subIndex) => subsection.id === cardTabs.active(section.id, section.subsections.map((item) => item.id)) && (",
+      "",
+    ].join("\n"),
+    "info subsection tabs: the strip and the selected subsection",
+  );
+}
+
+/**
+ * PORTIA-26.1-TABS3 (26.1-09 Task 3; OWN-10, D-21): вкладка «База вирусов» — мутации и записи учёных вкладками-полосками (CardTabs), под ними только выбранная.
+ * Вставки: строка CardTabs перед списком и фильтр map по выбранной вкладке у мутаций (id вкладки — номер мутации, порядка нет) и у записей (id записи). Русских строк не добавлено
+ * (подписи «Мутации» и «Записи учёных» лежат в шве); открытая панель оформления закрывается при смене вкладки, как при удалении мутации.
+ */
+function applyVirusItemTabsHunk(text: string): string {
+  const next = replaceOnce(
+    text,
+    [
+      "                {selectedVirus.mutations.map((mutation, index) => (",
+      "                  <div className=\"nested-editor-card\" key={index}>",
+      "",
+    ].join("\n"),
+    [
+      "                <CardTabs label={cardTabsCopy.mutations} items={selectedVirus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))} activeId={cardTabs.active(`${selectedVirus.id}:mutations`, Object.keys(selectedVirus.mutations))}",
+      "                  onSelect={(id) => { setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:mutations`, id); }} />",
+      "                {selectedVirus.mutations.map((mutation, index) => String(index) === cardTabs.active(`${selectedVirus.id}:mutations`, Object.keys(selectedVirus.mutations)) && (",
+      "                  <div className=\"nested-editor-card\" key={index}>",
+      "",
+    ].join("\n"),
+    "virus item tabs: the strip and the selected mutation",
+  );
+  return replaceOnce(
+    next,
+    [
+      "                {selectedVirus.scientistLogs.map((log, index) => (",
+      "                  <div className=\"nested-editor-card\" key={log.id}>",
+      "",
+    ].join("\n"),
+    [
+      "                <CardTabs label={cardTabsCopy.logs} items={selectedVirus.scientistLogs.map((log) => ({ id: log.id, title: log.title }))} activeId={cardTabs.active(`${selectedVirus.id}:logs`, selectedVirus.scientistLogs.map((log) => log.id))}",
+      "                  onSelect={(id) => { setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:logs`, id); }} />",
+      "                {selectedVirus.scientistLogs.map((log, index) => log.id === cardTabs.active(`${selectedVirus.id}:logs`, selectedVirus.scientistLogs.map((item) => item.id)) && (",
+      "                  <div className=\"nested-editor-card\" key={log.id}>",
+      "",
+    ].join("\n"),
+    "virus item tabs: the strip and the selected scientist record",
+  );
+}
+
+/**
+ * PORTIA-26.1-LIVE (26.1-10; LIVE-01..05, D-21): живой режим вкладок черновика. Вставки: импорт шва components/portia-editor-live.tsx, хук useLiveMode рядом с closeFormatterFor
+ * (при переключении режима панель оформления закрывается), кнопка live.toggle перед действиями панели вкладки, обёртка тел вкладок (при live.on рисуется LiveSurface с мостом редактора,
+ * иначе прежние тела без изменений). Русских строк не добавлено: подписи и тексты режима лежат в шве (liveCopy).
+ */
+function applyLiveModeHunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    'import { createPortal } from "react-dom";\n',
+    'import { createPortal } from "react-dom";\nimport { LiveSurface, useLiveMode } from "@/components/portia-editor-live";\n',
+    "live mode: import",
+  );
+  next = replaceOnce(
+    next,
+    "  const closeFormatterFor = (...keys: string[]) => dropFormatFields((key) => keys.includes(key));\n",
+    "  const closeFormatterFor = (...keys: string[]) => dropFormatFields((key) => keys.includes(key));\n  const live = useLiveMode(tab, () => { setFormatTarget(null); setFormatterOpen(false); });\n",
+    "live mode: the hook",
+  );
+  next = replaceOnce(
+    next,
+    "  const draftActions = <>\n",
+    "  const draftActions = <>\n    {live.toggle}\n",
+    "live mode: the toggle in the action buttons",
+  );
+  next = replaceOnce(
+    next,
+    '      {tab === "viruses" && (\n',
+    [
+      "      {live.on ? <LiveSurface tab={tab} bridge={{ draft, changeDraft, changeFormattedText, activateFormatter, closeFormatterFor, uploadImage, uploadState, uploadMessage, guideSection: activeGuideSection, setGuideSection: setSelectedGuideSection, infoSection: activeInfoSection, setInfoSection: setSelectedInfoSection, virusId: selectedVirusId, setVirusId: setSelectedVirusId, recycledVirusId: selectedRecycledVirusId, setRecycledVirusId: setSelectedRecycledVirusId, recycleFileId: selectedRecycleFileId, setRecycleFileId: setSelectedRecycleFileId, broadcastTab: broadcastEditorTab, setBroadcastTab: selectBroadcastTab }} /> : <>",
+      '      {tab === "viruses" && (',
+      "",
+    ].join("\n"),
+    "live mode: the surface instead of the tab bodies",
+  );
+  return replaceOnce(next, "      )}\n\n      <EditorDraftBarContext.Provider value={draftBar}>\n", "      )}\n      </>}\n\n      <EditorDraftBarContext.Provider value={draftBar}>\n", "live mode: the end of the tab bodies");
+}
+
+/**
+ * PORTIA-26.1-LIVE-ACCESS (26.1-19; LIVE-01, LIVE-02, LIVE-04, D-21): живой «Доступ». Две замены: имя AccessLiveTab в импорте шва живого режима и строка вкладки «Доступ»
+ * (одна на файл): менеджер аккаунтов редакторов становится свойством manager обёртки. Русских строк не добавлено.
+ */
+function applyLiveAccessHunk(text: string): string {
+  const next = replaceOnce(
+    text,
+    'import { LiveSurface, useLiveMode } from "@/components/portia-editor-live";\n',
+    'import { AccessLiveTab, LiveSurface, useLiveMode } from "@/components/portia-editor-live";\n',
+    "live access: the import",
+  );
+  return replaceOnce(
+    next,
+    '      {tab === "access" && canManageEditors && <EditorAccessManager />}\n',
+    '      {tab === "access" && canManageEditors && <AccessLiveTab manager={<EditorAccessManager />} />}\n',
+    "live access: the tab row",
+  );
+}
+
+/**
+ * PORTIA-26.1-ADDCARD (26.1-20; OWN-10, D-21): «+ ДОБАВИТЬ КАРТОЧКУ» стоит в конце полосы вкладок карточек раздела «Справочника». Две замены: проп add у CardTabs (то же действие добавления,
+ * предел и заметка о нём) и удаление прежнего блока кнопки под списком карточек. Подпись кнопки переехала в шов (cardTabsCopy.addCard), других русских строк не добавлено.
+ */
+const GUIDE_ADD_CARD_ACTION = 'onClick={() => { const id = makeId("card"); changeDraft((next) => { updateById(next.guideSections, section.id, (item) => { item.cards.push({ id, title: "НОВАЯ КАРТОЧКА", cover: "", blocks: [] }); }); }); setOpen([id], true); }}';
+const GUIDE_ADD_CARD_UNDER_LIST = [
+  '              <div className="scientist-log-actions">',
+  '                <button className="secondary-control limit-add" type="button" disabled={section.cards.length >= MAX_SUBSECTIONS} aria-describedby={`limit-cards-${section.id}`} ' + GUIDE_ADD_CARD_ACTION + ">+ ДОБАВИТЬ КАРТОЧКУ</button>",
+  "                <LimitNote id={`limit-cards-${section.id}`} count={section.cards.length} max={MAX_SUBSECTIONS} />",
+  "              </div>",
+  "",
+].join("\n");
+function applyGuideAddCardHunk(text: string): string {
+  const next = replaceOnce(
+    text,
+    'if (target) moveArrayItem(target.cards, from, to); })} />\n              <div className="info-subsection-list" data-sort-group="guide-cards"',
+    'if (target) moveArrayItem(target.cards, from, to); })}\n                add={{ onAdd: () => { const id = makeId("card"); changeDraft((next) => { updateById(next.guideSections, section.id, (item) => { item.cards.push({ id, title: "НОВАЯ КАРТОЧКА", cover: "", blocks: [] }); }); }); setOpen([id], true); }, disabled: section.cards.length >= MAX_SUBSECTIONS, note: <LimitNote id={`limit-cards-${section.id}`} count={section.cards.length} max={MAX_SUBSECTIONS} /> }} />\n              <div className="info-subsection-list" data-sort-group="guide-cards"',
+    "guide add card: the add action of the strip",
+  );
+  return replaceOnce(next, GUIDE_ADD_CARD_UNDER_LIST, "", "guide add card: the button under the list is gone");
+}
+
+/**
+ * PORTIA-26.1-ADDTABS (26.1-26; OWN-10, D-21): «+ Добавить…» стоит в конце каждой полосы вкладок, как у карточек «Справочника». По полосе: проп add у CardTabs (то же действие
+ * добавления, тот же предел и заметка; при добавлении панель оформления закрывается, как при переключении вкладки) и удаление прежней кнопки под списком. Подписи лежат в шве
+ * (cardTabsCopy), других русских строк не добавлено.
+ */
+const VIRUS_LOGS_SELECT_END = "                  onSelect={(id) => { setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:logs`, id); }}";
+const VIRUS_LOG_PUSH = 'updateVirus((virus) => virus.scientistLogs.push({ id: makeId("log"), title: `ЗАПИСЬ ${String(virus.scientistLogs.length + 1).padStart(2, "0")}`, scientist: "ИМЯ УЧЁНОГО", lockedLevel: 1, content: [""], richContent: { runs: [{ text: "" }] } }))';
+const VIRUS_LOG_ADD_UNDER_LIST = '                <div className="scientist-log-actions"><button className="secondary-control" type="button" disabled={selectedVirus.scientistLogs.length >= MAX_SCIENTIST_LOGS} onClick={() => ' + VIRUS_LOG_PUSH + "}>+ ДОБАВИТЬ ЗАПИСЬ</button><span>{selectedVirus.scientistLogs.length} / {MAX_SCIENTIST_LOGS}</span></div>\n";
+function applyAddTabsHunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    `${VIRUS_LOGS_SELECT_END} />\n`,
+    `${VIRUS_LOGS_SELECT_END}\n                  add={{ onAdd: () => { setFormatTarget(null); setFormatterOpen(false); ${VIRUS_LOG_PUSH}; }, disabled: selectedVirus.scientistLogs.length >= MAX_SCIENTIST_LOGS, label: cardTabsCopy.addLog, note: \`\${selectedVirus.scientistLogs.length} / \${MAX_SCIENTIST_LOGS}\` }} />\n`,
+    "add tabs: the add action of the scientist records strip",
+  );
+  next = replaceOnce(next, VIRUS_LOG_ADD_UNDER_LIST, "", "add tabs: the record button under the list is gone");
+  return next;
+}
+
+/** PORTIA-26.1-ADDTABS2 (26.1-26 Task 2): мутации вкладки вирусов и подразделы «Информации» — то же, что PORTIA-26.1-ADDTABS для записей. */
+const VIRUS_MUTATIONS_SELECT_END = "                  onSelect={(id) => { setFormatTarget(null); setFormatterOpen(false); cardTabs.select(`${selectedVirus.id}:mutations`, id); }}";
+const VIRUS_MUTATION_PUSH = 'updateVirus((virus) => virus.mutations.push({ name: "НОВАЯ МУТАЦИЯ", description: "", image: "" }))';
+const INFO_SUBSECTIONS_MOVE_END = "                onMove={(from, to) => changeDraft((next) => { const target = findInfo(next.infoSections, section.id)?.section; if (target) moveArrayItem(target.subsections, from, to); })}";
+const INFO_SUBSECTION_ACTION = 'const id = makeId("info"); changeDraft((next) => { updateById(next.infoSections, section.id, (item) => { item.subsections.push({ id, title: "НОВЫЙ ПОДРАЗДЕЛ", blocks: [] }); }); }); setOpen([id], true);';
+const INFO_SUBSECTION_NOTE = "<LimitNote id={`limit-subsections-${section.id}`} count={section.subsections.length} max={MAX_SUBSECTIONS} />";
+const INFO_SUBSECTION_ADD_UNDER_LIST = [
+  '              <div className="scientist-log-actions">',
+  '                <button className="secondary-control limit-add" type="button" disabled={section.subsections.length >= MAX_SUBSECTIONS} aria-describedby={`limit-subsections-${section.id}`} onClick={() => { ' + INFO_SUBSECTION_ACTION + " }}>+ ПОДРАЗДЕЛ</button>",
+  `                ${INFO_SUBSECTION_NOTE}`,
+  "              </div>",
+  "",
+].join("\n");
+function applyAddTabs2Hunk(text: string): string {
+  let next = replaceOnce(
+    text,
+    `${VIRUS_MUTATIONS_SELECT_END} />\n`,
+    `${VIRUS_MUTATIONS_SELECT_END}\n                  add={{ onAdd: () => { setFormatTarget(null); setFormatterOpen(false); ${VIRUS_MUTATION_PUSH}; }, disabled: false, label: cardTabsCopy.addMutation }} />\n`,
+    "add tabs 2: the add action of the mutations strip",
+  );
+  next = replaceOnce(next, `                <button className="secondary-control" type="button" onClick={() => ${VIRUS_MUTATION_PUSH}}>+ ДОБАВИТЬ МУТАЦИЮ</button>\n`, "", "add tabs 2: the mutation button under the list is gone");
+  next = replaceOnce(
+    next,
+    `${INFO_SUBSECTIONS_MOVE_END} />\n`,
+    `${INFO_SUBSECTIONS_MOVE_END}\n                add={{ onAdd: () => { closeFormatterFor(...section.subsections.flatMap((sub) => sub.blocks.map((block) => portiaTextKey.infoBlock(block.id)))); ${INFO_SUBSECTION_ACTION} }, disabled: section.subsections.length >= MAX_SUBSECTIONS, label: cardTabsCopy.addSubsection, note: ${INFO_SUBSECTION_NOTE} }} />\n`,
+    "add tabs 2: the add action of the subsections strip",
+  );
+  return replaceOnce(next, INFO_SUBSECTION_ADD_UNDER_LIST, "", "add tabs 2: the subsection button under the list is gone");
+}
+
 /** Реестр одобренных правок (D-64): `apply` — порядок применения к образцу; `normalizeActual` — что вырезается из текущего файла перед сравнением. */
 const approvedEditorEdits: readonly { id: string; apply: (text: string) => string; normalizeActual?: (text: string) => string }[] = [
   { id: "D-57", apply: applyLaunchButtonHunk },
@@ -1061,6 +1470,18 @@ const approvedEditorEdits: readonly { id: string; apply: (text: string) => strin
   { id: "PORTIA-26-G04", apply: applySectionWidthHunk },
   { id: "PORTIA-26-G10", apply: applyRecycleButtonHunk },
   { id: "UPLOAD-COMPRESS", apply: applyUploadCompressHunk },
+  { id: "GUIDE-PHOTO-FRAMING", apply: applyGuidePhotoFramingHunk },
+  { id: "PORTIA-26.1-EMP", apply: applyEmployeesSeamHunk },
+  { id: "PORTIA-26.1-EMP2", apply: applyEmployeesCloseHunk },
+  { id: "PORTIA-26.1-HOLD", apply: applyColumnSwapSeamHunk },
+  { id: "PORTIA-26.1-TABS", apply: applyGuideCardTabsHunk },
+  { id: "PORTIA-26.1-TABS2", apply: applyInfoSubsectionTabsHunk },
+  { id: "PORTIA-26.1-TABS3", apply: applyVirusItemTabsHunk },
+  { id: "PORTIA-26.1-LIVE", apply: applyLiveModeHunk },
+  { id: "PORTIA-26.1-LIVE-ACCESS", apply: applyLiveAccessHunk },
+  { id: "PORTIA-26.1-ADDCARD", apply: applyGuideAddCardHunk },
+  { id: "PORTIA-26.1-ADDTABS", apply: applyAddTabsHunk },
+  { id: "PORTIA-26.1-ADDTABS2", apply: applyAddTabs2Hunk },
 ];
 
 function expectedEditor(sample: string): string {
@@ -1134,7 +1555,8 @@ test("D-62: the «Информация» tab starts with the add-section bar and
   const info = code.slice(start, end);
   assert.ok(!info.includes("<SectionAddBar") && !info.includes(INFO_TABS_LINE_START), "the tab body holds neither the add bar nor the section tabs");
   assert.equal(info.split("+ ДОБАВИТЬ РАЗДЕЛ</button>").length - 1, 0, "no add-section button below the columns");
-  assert.ok(info.includes("+ ПОДРАЗДЕЛ</button>"), "the add-subsection button stays at the bottom of the section card");
+  // 26.1-26 (owner item 34): the add-subsection action ends the strip of the subsection tabs inside the section card, its label lives in the card tabs seam.
+  assert.ok(info.includes("label: cardTabsCopy.addSubsection") && !info.includes("+ ПОДРАЗДЕЛ</button>"), "the add-subsection action stays in the section card, at the end of its subsection strip");
 });
 
 test("D-64: portia-editor.tsx differs from 449c756 only by the approved edits (D-57 launch button, D-62 «Информация» add-section, D-63 frame attributes)", () => {
@@ -1163,7 +1585,7 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   assert.throws(() => applyInfoAddSectionHunk(expected), /exactly one bottom add-section button/, "a file without the bottom button cannot be turned into the expected one");
   // Без правки D-62 (только D-57) файл отличается от ожидаемого.
   assert.notEqual(firstDifference(expected, applyLaunchButtonHunk(sample)), null, "a file without the D-62 hunk is a difference");
-  const withoutUsers = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-22" && edit.id !== "PORTIA-26-R01").reduce((text, edit) => edit.apply(text), sample);
+  const withoutUsers = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-22" && edit.id !== "PORTIA-26-R01" && edit.id !== "PORTIA-26.1-LIVE" && edit.id !== "PORTIA-26.1-LIVE-ACCESS").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutUsers), null, "a file without the PORTIA-22 hunk is a difference");
   const withoutLevels = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-24") && edit.id !== "PORTIA-25" && !edit.id.startsWith("PORTIA-26")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutLevels), null, "a file without the PORTIA-24 hunk is a difference");
@@ -1174,22 +1596,24 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutTabShell = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutTabShell), null, "a file without the PORTIA-26-06 hunk is a difference");
   assert.throws(() => applyTabShellHunk(expected), /exactly one approved anchor/, "the tab shell hunk cannot be applied twice");
-  const withoutTabBodies = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-06b" && edit.id !== "PORTIA-26-R01" && !edit.id.startsWith("PORTIA-26-07") && !edit.id.startsWith("PORTIA-26-G")).reduce((text, edit) => edit.apply(text), sample);
+  const withoutTabBodies = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-06b" && edit.id !== "PORTIA-26-R01" && edit.id !== "PORTIA-26.1-LIVE" && edit.id !== "PORTIA-26.1-LIVE-ACCESS" && !edit.id.startsWith("PORTIA-26-07") && !edit.id.startsWith("PORTIA-26-G")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutTabBodies), null, "a file without the PORTIA-26-06b hunk is a difference");
   assert.throws(() => applyTabBodiesHunk(expected), /exactly one approved anchor/, "the tab bodies hunk cannot be applied twice");
-  const withoutSectionNav = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26-07") && edit.id !== "PORTIA-26-R01" && !edit.id.startsWith("PORTIA-26-G")).reduce((text, edit) => edit.apply(text), sample);
+  const withoutSectionNav = approvedEditorEdits.filter((edit) => !edit.id.startsWith("PORTIA-26-07") && edit.id !== "PORTIA-26-R01" && edit.id !== "PORTIA-26.1-LIVE" && edit.id !== "PORTIA-26.1-LIVE-ACCESS" && !edit.id.startsWith("PORTIA-26-G")).reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutSectionNav), null, "a file without the PORTIA-26-07 hunk is a difference");
   assert.throws(() => applySectionNavHunk(expected), /exactly one approved anchor/, "the section nav hunk cannot be applied twice");
   const withoutInfoBroadcastNav = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-07b" && edit.id !== "PORTIA-26-G04").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutInfoBroadcastNav), null, "a file without the PORTIA-26-07b hunk is a difference");
   assert.throws(() => applyInfoBroadcastNavHunk(expected), /exactly one approved anchor/, "the info and broadcast nav hunk cannot be applied twice");
-  const withoutEmployeesBar = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-07c").reduce((text, edit) => edit.apply(text), sample);
-  assert.notEqual(firstDifference(expected, withoutEmployeesBar), null, "a file without the PORTIA-26-07c hunk is a difference");
+  // 26.1-02: PORTIA-26.1-EMP cuts the whole function out, so the effect of the bar hunk shows only before that cut.
+  const beforeEmployeesSeam = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-EMP");
+  const withoutEmployeesBar = beforeEmployeesSeam.filter((edit) => edit.id !== "PORTIA-26-07c").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(beforeEmployeesSeam.reduce((text, edit) => edit.apply(text), sample), withoutEmployeesBar), null, "a file without the PORTIA-26-07c hunk is a difference");
   assert.throws(() => applyEmployeesBarHunk(expected), /exactly one approved anchor/, "the employees bar hunk cannot be applied twice");
   const withoutCardToggleName = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-13").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutCardToggleName), null, "a file without the PORTIA-26-13 hunk is a difference");
   assert.throws(() => applyCardToggleNameHunk(expected), /exactly one approved anchor/, "the card toggle name hunk cannot be applied twice");
-  const withoutReviewDraftBar = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-R01").reduce((text, edit) => edit.apply(text), sample);
+  const withoutReviewDraftBar = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-R01" && edit.id !== "PORTIA-26.1-LIVE" && edit.id !== "PORTIA-26.1-LIVE-ACCESS").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutReviewDraftBar), null, "a file without the PORTIA-26-R01 hunk is a difference");
   assert.throws(() => applyReviewDraftBarHunk(expected), /exactly one approved anchor/, "the review draft bar hunk cannot be applied twice");
   const withoutReviewLiveRegion = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-R05").reduce((text, edit) => edit.apply(text), sample);
@@ -1204,6 +1628,54 @@ test("D-64: the guard notices any other edit, a missing hunk, a changed text and
   const withoutRecycleButton = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26-G10").reduce((text, edit) => edit.apply(text), sample);
   assert.notEqual(firstDifference(expected, withoutRecycleButton), null, "a file without the PORTIA-26-G10 hunk is a difference");
   assert.throws(() => applyRecycleButtonHunk(expected), /exactly one approved anchor/, "the recycle button hunk cannot be applied twice");
+  const withoutEmployeesSeam = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-EMP").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutEmployeesSeam), null, "a file without the PORTIA-26.1-EMP hunk is a difference");
+  assert.throws(() => applyEmployeesSeamHunk(expected), /exactly one approved anchor/, "the employees seam hunk cannot be applied twice");
+  const withoutEmployeesClose = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-EMP2").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutEmployeesClose), null, "a file without the PORTIA-26.1-EMP2 hunk is a difference");
+  assert.throws(() => applyEmployeesCloseHunk(expected), /exactly one approved anchor/, "the employees close hunk cannot be applied twice");
+  const withoutColumnSwapSeam = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-HOLD").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutColumnSwapSeam), null, "a file without the PORTIA-26.1-HOLD hunk is a difference");
+  assert.throws(() => applyColumnSwapSeamHunk(expected), /exactly one approved anchor/, "the column swap seam hunk cannot be applied twice");
+  assert.ok(!expected.includes("function ColumnSwapHandle"), "the approved editor no longer holds ColumnSwapHandle");
+  // PORTIA-26.1-ADDCARD stands on the strip that PORTIA-26.1-TABS draws, so it leaves with it.
+  const withoutGuideCardTabs = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-TABS" && edit.id !== "PORTIA-26.1-ADDCARD").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutGuideCardTabs), null, "a file without the PORTIA-26.1-TABS hunk is a difference");
+  assert.throws(() => applyGuideCardTabsHunk(expected), /exactly one approved anchor/, "the guide card tabs hunk cannot be applied twice");
+  assert.ok(expected.includes("<CardTabs label={cardTabsCopy.cards}"), "the approved editor shows the card tabs of a «Справочник» section");
+  const withoutInfoSubsectionTabs = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-TABS2" && edit.id !== "PORTIA-26.1-ADDTABS2").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutInfoSubsectionTabs), null, "a file without the PORTIA-26.1-TABS2 hunk is a difference");
+  assert.throws(() => applyInfoSubsectionTabsHunk(expected), /exactly one approved anchor/, "the info subsection tabs hunk cannot be applied twice");
+  assert.ok(expected.includes("<CardTabs label={cardTabsCopy.subsections}"), "the approved editor shows the subsection tabs of an «Информация» section");
+  // PORTIA-26.1-ADDTABS stands on the strips that PORTIA-26.1-TABS2 and TABS3 draw, so it leaves with them.
+  const withoutVirusItemTabs = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-TABS3" && edit.id !== "PORTIA-26.1-ADDTABS" && edit.id !== "PORTIA-26.1-ADDTABS2").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutVirusItemTabs), null, "a file without the PORTIA-26.1-TABS3 hunk is a difference");
+  assert.throws(() => applyVirusItemTabsHunk(expected), /exactly one approved anchor/, "the virus item tabs hunk cannot be applied twice");
+  assert.ok(expected.includes("<CardTabs label={cardTabsCopy.mutations}") && expected.includes("<CardTabs label={cardTabsCopy.logs}"), "the approved editor shows the tabs of the mutations and the scientist records");
+  const withoutLiveMode = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-LIVE" && edit.id !== "PORTIA-26.1-LIVE-ACCESS").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutLiveMode), null, "a file without the PORTIA-26.1-LIVE hunk is a difference");
+  assert.throws(() => applyLiveModeHunk(expected), /exactly one approved anchor/, "the live mode hunk cannot be applied twice");
+  assert.ok(expected.includes("<LiveSurface tab={tab}") && expected.includes("live.toggle"), "the approved editor shows the live mode surface and its toggle");
+  const withoutLiveAccess = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-LIVE-ACCESS").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutLiveAccess), null, "a file without the PORTIA-26.1-LIVE-ACCESS hunk is a difference");
+  assert.throws(() => applyLiveAccessHunk(expected), /exactly one approved anchor/, "the live access hunk cannot be applied twice");
+  assert.ok(expected.includes("<AccessLiveTab manager={<EditorAccessManager />} />") && !withoutLiveAccess.includes("<AccessLiveTab"), "the approved editor wraps the accounts of the editors in the live access tab");
+  const withoutAddCard = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-ADDCARD").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutAddCard), null, "a file without the PORTIA-26.1-ADDCARD hunk is a difference");
+  assert.throws(() => applyGuideAddCardHunk(expected), /exactly one approved anchor/, "the add card hunk cannot be applied twice");
+  assert.ok(expected.includes("add={{ onAdd:") && !expected.includes('limit-add" type="button" disabled={section.cards.length'), "the approved editor puts the add card action into the strip and has no button under the list");
+  assert.ok(withoutAddCard.includes('limit-add" type="button" disabled={section.cards.length'), "without the hunk the button stands under the list");
+  const withoutAddTabs = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-ADDTABS").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutAddTabs), null, "a file without the PORTIA-26.1-ADDTABS hunk is a difference");
+  assert.throws(() => applyAddTabsHunk(expected), /exactly one approved anchor/, "the add tabs hunk cannot be applied twice");
+  assert.ok(expected.includes("label: cardTabsCopy.addLog") && !expected.includes(">+ ДОБАВИТЬ ЗАПИСЬ</button>"), "the approved editor puts the add record action into the strip and has no button under the list");
+  assert.ok(withoutAddTabs.includes(">+ ДОБАВИТЬ ЗАПИСЬ</button>"), "without the hunk the record button stands under the list");
+  const withoutAddTabs2 = approvedEditorEdits.filter((edit) => edit.id !== "PORTIA-26.1-ADDTABS2").reduce((text, edit) => edit.apply(text), sample);
+  assert.notEqual(firstDifference(expected, withoutAddTabs2), null, "a file without the PORTIA-26.1-ADDTABS2 hunk is a difference");
+  assert.throws(() => applyAddTabs2Hunk(expected), /exactly one approved anchor/, "the add tabs 2 hunk cannot be applied twice");
+  assert.ok(expected.includes("label: cardTabsCopy.addMutation") && expected.includes("label: cardTabsCopy.addSubsection"), "the approved editor puts the add mutation and add subsection actions into their strips");
+  assert.ok(!expected.includes(">+ ДОБАВИТЬ МУТАЦИЮ</button>") && !expected.includes(">+ ПОДРАЗДЕЛ</button>"), "… and has no button under those lists");
+  assert.ok(withoutAddTabs2.includes(">+ ДОБАВИТЬ МУТАЦИЮ</button>") && withoutAddTabs2.includes(">+ ПОДРАЗДЕЛ</button>"), "without the hunk the buttons stand under the lists");
   // Изменённая подсказка (D-58) ловится по набору русских строк.
   const hint = "Каждый блок становится отдельным разделом приложения «Информация».";
   assert.ok(expected.includes(hint), "the fixture hint is in the sample");

@@ -285,10 +285,14 @@ test("the shared components only gained optional properties and keep their defau
   expectMatch(rich, /<span id=\{labelId\}>\{label\}<\/span>/);
 });
 
-test("Promotion renders the builder with nothing but onClose", () => {
+// Owner 2026-11-18: the builder is the app «Шаблон»; «Повышение» no longer mounts it and only opens that window.
+test("the desktop renders the builder once, as the app «Шаблон», and «Повышение» only opens it", () => {
   const promotion = read("components/portia-promotion.tsx");
-  const uses = [...promotion.matchAll(/<PortiaTemplateBuilder\b([^>]*)\/>/g)].map((match) => match[1].trim());
-  assert.deepEqual(uses, ["onClose={closeTemplate}"]);
+  assert.deepEqual([...promotion.matchAll(/<PortiaTemplateBuilder\b/g)], []);
+  expectMatch(promotion, /onClick=\{\(\) => onOpenTemplate\?\.\(\)\}/);
+  const desktop = read("components/portia-desktop.tsx");
+  const uses = [...desktop.matchAll(/<PortiaTemplateBuilder\b(.*?) \/>/g)].map((match) => match[1].trim());
+  assert.deepEqual(uses, ['standalone onClose={() => closeApp("template")}']);
 });
 
 test("the builder keeps its draft in the 20-38 model and changes it only through the model's functions", () => {
@@ -326,9 +330,11 @@ test("D-55 (20-37): the builder has no markup of its own for the preview", () =>
   expectMatch(code, /label="Предпросмотр шаблона"/);
 });
 
-test("D-55 (20-37): the card module imports only react, the content types, the icons and the media splitter", () => {
+test("D-55 (20-37): the card module imports only react, the content types, the icons, the shared live context, the media splitter and the pure routes table (OWN-03)", () => {
   const code = stripComments(read(cardPath));
-  assert.deepEqual(importsOf(code).sort(), ["@/components/portia-icons", "@/lib/portia-content", "@/lib/rich-text-media", "react"]);
+  // OWN-03 (26.1-04): lib/transmission-routes.ts imports nothing, so the card still reaches no desktop, editor, network or storage.
+  // 26.1-12: the shared live context (a hook and types, nothing that edits) is the one more door; without a provider the card draws its old markup.
+  assert.deepEqual(importsOf(code).sort(), ["@/components/portia-icons", "@/components/portia-live-edit", "@/lib/portia-content", "@/lib/rich-text-media", "@/lib/transmission-routes", "react"]);
   assert.deepEqual(ioTokens(code), []);
 });
 

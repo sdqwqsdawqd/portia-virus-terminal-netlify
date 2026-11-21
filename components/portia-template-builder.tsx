@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { ClassificationField, DossierTabs, EditorGroup, Field } from "@/components/portia-editor-dossier";
+import { CardTabs, cardTabsCopy, useCardTabSelection } from "@/components/portia-editor-card-tabs";
 import {
   ActiveFormatContext,
   FloatingTextFormatPanel,
@@ -47,11 +48,10 @@ import {
   templateCardWidth,
   templateDefaultTitle,
   templateExportError,
+  templateDownloadName,
   templateExportViolations,
-  templateFileName,
   templateImageAccept,
   templateImageOpenError,
-  templatePngFileName,
   templatePngTooLargeError,
   type TemplateCssRule,
   type TemplateImage,
@@ -242,9 +242,10 @@ async function measureCardPage(page: string): Promise<number> {
  * TemplateDossier kept in React state; every edit goes through the model's functions, so nothing here can reach the site, the
  * archive, an upload or browser storage. The finished work leaves only as a downloaded HTML or PNG file.
  */
-export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
+export function PortiaTemplateBuilder({ onClose, standalone = false }: { onClose: () => void; standalone?: boolean }) {
   const [dossier, setDossier] = useState<TemplateDossier>(() => emptyTemplateDossier());
   const [dossierTab, setDossierTab] = useState<DossierTab>("main");
+  const cardTabs = useCardTabSelection();
   const [view, setView] = useState<BuilderView>("fields");
   const [formatTarget, setFormatTarget] = useState<FormatTarget | null>(null);
   const [formatterOpen, setFormatterOpen] = useState(false);
@@ -366,7 +367,7 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
       await minimumShown;
       // D-61: downloadTemplateBlob throws only before the browser has the file; once it returns the file is handed over, so "done" is
       // set whatever the cleanup after the click did, and the error below can only mean that no file was passed.
-      downloadTemplateBlob(content, format === "png" ? templatePngFileName : templateFileName);
+      downloadTemplateBlob(content, templateDownloadName(snapshot.virus.name, format));
       setExportedKey(snapshotKey);
       setPhase("done");
     } catch (error) {
@@ -381,7 +382,7 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
   // The confirmation is modal inside this view: Tab and Shift+Tab cycle over its two buttons and leaving it puts the focus back on the control that opened it.
   const dismissConfirm = () => {
     setConfirmClose(false);
-    requestAnimationFrame(() => backRef.current?.focus());
+    requestAnimationFrame(() => (backRef.current ?? headingRef.current)?.focus());
   };
   const trapConfirmTab = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Tab") return;
@@ -407,25 +408,26 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
     : phase === "done" ? "Файл скачан на устройство." : "";
 
   return <div
-    className="template-builder promotion-app"
+    className={`template-builder promotion-app${standalone ? " is-standalone" : ""}`}
     onKeyDown={(event) => { if (event.key === "Escape" && confirmClose) { event.stopPropagation(); dismissConfirm(); } }}
   >
     <div className="template-shell">
       <header className="template-header">
         <div>
-          <span className="promotion-eyebrow">{"ПОВЫШЕНИЕ // ЗАДАНИЕ"}</span>
+          <span className="promotion-eyebrow">{standalone ? "ШАБЛОН // ДОСЬЕ" : "ПОВЫШЕНИЕ // ЗАДАНИЕ"}</span>
           <h1 ref={headingRef} tabIndex={-1}>Шаблон досье</h1>
         </div>
-        <button ref={backRef} type="button" className="promotion-action template-back" onClick={requestClose} disabled={busy}>Вернуться к повышению</button>
+        {/* Owner 2026-11-18: the standalone app has no «Закрыть шаблон» button; its window closes with the cross. */}
+        {!standalone && <button ref={backRef} type="button" className="promotion-action template-back" onClick={requestClose} disabled={busy}>Вернуться к повышению</button>}
       </header>
       <p className="template-note">Скачайте файл и отправьте проверяющему вне сайта.</p>
 
       {confirmClose && <section ref={confirmRef} onKeyDown={trapConfirmTab} className="template-confirm" role="alertdialog" aria-modal="true" aria-labelledby={`${idPrefix}-confirm-title`} aria-describedby={`${idPrefix}-confirm-text`}>
         <strong id={`${idPrefix}-confirm-title`}>Черновик ещё не скачан</strong>
-        <p id={`${idPrefix}-confirm-text`}>Если вернуться сейчас, набранное будет потеряно.</p>
+        <p id={`${idPrefix}-confirm-text`}>{standalone ? "Если закрыть сейчас, набранное будет потеряно." : "Если вернуться сейчас, набранное будет потеряно."}</p>
         <div className="template-confirm-actions">
           <button ref={stayRef} type="button" className="promotion-action" onClick={dismissConfirm}>Остаться и скачать</button>
-          <button type="button" className="promotion-action template-discard" onClick={onClose}>Вернуться без скачивания</button>
+          <button type="button" className="promotion-action template-discard" onClick={onClose}>{standalone ? "Закрыть без скачивания" : "Вернуться без скачивания"}</button>
         </div>
       </section>}
 
@@ -482,7 +484,9 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
             </EditorGroup>}
 
             {dossierTab === "mutations" && <EditorGroup title="Мутации" stack>
-              {virus.mutations.map((mutation, index) => (
+              <CardTabs label={cardTabsCopy.mutations} items={virus.mutations.map((mutation, index) => ({ id: String(index), title: mutation.name }))} activeId={cardTabs.active("template:mutations", Object.keys(virus.mutations))} onSelect={(id) => { closeFormatter(); cardTabs.select("template:mutations", id); }}
+                add={{ onAdd: () => { closeFormatter(); change(addTemplateMutation); }, disabled: false, label: cardTabsCopy.addMutation }} />
+              {virus.mutations.map((mutation, index) => String(index) === cardTabs.active("template:mutations", Object.keys(virus.mutations)) && (
                 <div className="nested-editor-card" key={index}>
                   <div className="nested-editor-head"><strong>МУТАЦИЯ {String(index + 1).padStart(2, "0")}</strong><button type="button" disabled={busy} onClick={() => removeMutation(index)}>Удалить</button></div>
                   <Field label="Название"><input value={mutation.name} maxLength={120} autoComplete="off" onChange={(event) => updateVirus((next) => { const item = next.mutations[index]; if (item) item.name = event.target.value; })} /></Field>
@@ -490,7 +494,6 @@ export function PortiaTemplateBuilder({ onClose }: { onClose: () => void }) {
                   <TemplateImageField label="Изображение мутации" placement="mutation" image={dossier.images.mutations[index] ?? null} error={imageErrors[slotKey(index)] === true} busy={busy} onFile={(file) => { void chooseImage(index, file); }} onRemove={() => removeImage(index)} onFrame={(framing) => change((current) => setTemplateImageFraming(current, index, framing))} />
                 </div>
               ))}
-              <button className="secondary-control" type="button" onClick={() => change(addTemplateMutation)}>+ ДОБАВИТЬ МУТАЦИЮ</button>
             </EditorGroup>}
           </div>
 

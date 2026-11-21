@@ -8,7 +8,12 @@ import {
   builderDraftPayload,
   draftFromItem,
   emptyBuilderDraft,
-  qualificationQuotaSummary,
+  QUALIFICATION_TEST_MAX,
+  pickAutoQualificationSet,
+  qualificationSetMessages,
+  qualificationSetProblem,
+  qualificationTestQuotas,
+  qualificationTestSummary,
   removeOptionRow,
   switchDraftType,
   toggleOptionCorrect,
@@ -90,32 +95,55 @@ test("a valid draft becomes the payload the server validator accepts", () => {
   assert.equal(builderDraftPayload(draft({ text: "" })), null);
 });
 
-test("the quota line says in one sentence whether the bank is enough", () => {
-  assert.deepEqual(
-    qualificationQuotaSummary({ single: 3, multiple: 1, freeText: 1 }, { single: 5, multiple: 2, freeText: 1 }, true),
-    { ok: true, text: "В тесте: 3 с одним ответом · 1 с несколькими · 1 свободный — в банке хватает ✓" },
-  );
-  assert.deepEqual(
-    qualificationQuotaSummary({ single: 5, multiple: 0, freeText: 0 }, { single: 5, multiple: 0, freeText: 0 }, true),
-    { ok: true, text: "В тесте: 5 с одним ответом — в банке хватает ✓" },
-  );
-  assert.deepEqual(
-    qualificationQuotaSummary({ single: 3, multiple: 1, freeText: 1 }, { single: 1, multiple: 1, freeText: 0 }, true),
-    { ok: false, text: "В тесте: 3 с одним ответом · 1 с несколькими · 1 свободный — не хватает активных: 2 с одним ответом, 1 свободный" },
-  );
-  assert.deepEqual(
-    qualificationQuotaSummary({ single: 0, multiple: 0, freeText: 0 }, { single: 4, multiple: 0, freeText: 0 }, true),
-    { ok: false, text: "В тесте нет вопросов — задайте хотя бы один." },
-  );
-  const missing = qualificationQuotaSummary({ single: 2, multiple: 0, freeText: 0 }, { single: 0, multiple: 0, freeText: 0 }, false);
-  assert.equal(missing.ok, true);
-  assert.ok(missing.text.endsWith("— банк ещё не создан: сохраните квоты, затем добавьте вопросы."));
+// owner 2026-11-20, OWN-08: quotas removed. The test is built from the active questions; the quota line became a composition line.
+test("OWN-08: the test pools count the active questions by type, or only the marked active ones", () => {
+  const items = [
+    { id: "a", type: "single" as const, active: true },
+    { id: "b", type: "single" as const, active: false },
+    { id: "c", type: "free-text" as const, active: true },
+  ];
+  assert.deepEqual(qualificationTestQuotas(items), { single: 1, multiple: 0, freeText: 1 });
+  assert.deepEqual(qualificationTestQuotas(items, ["a", "b"]), { single: 1, multiple: 0, freeText: 0 });
+  assert.deepEqual(qualificationTestQuotas([{ id: "x", active: true }]), { single: 0, multiple: 0, freeText: 1 }, "a question without a type is free text, like in the editor");
+  assert.deepEqual(qualificationTestQuotas(items, []), { single: 0, multiple: 0, freeText: 0 });
 });
 
-test("свободный agrees with the number", () => {
-  const text = (freeText: number, available: number) => qualificationQuotaSummary({ single: 0, multiple: 0, freeText }, { single: 0, multiple: 0, freeText: available }, true).text;
-  assert.ok(text(1, 9).startsWith("В тесте: 1 свободный"));
-  assert.ok(text(21, 30).startsWith("В тесте: 21 свободный"));
-  for (const count of [2, 5, 11, 12, 25]) assert.ok(text(count, 100).startsWith(`В тесте: ${count} свободных`), String(count));
-  assert.ok(text(5, 0).endsWith("не хватает активных: 5 свободных"));
+test("OWN-08: the composition line names the total and the types, or asks for a question", () => {
+  const line = qualificationTestSummary({ single: 2, multiple: 1, freeText: 0 });
+  assert.ok(line.includes("3"), line);
+  assert.ok(line.includes("2 с одним ответом") && line.includes("1 с несколькими") && !line.includes("свободн"), line);
+  assert.equal(qualificationTestSummary({ single: 0, multiple: 0, freeText: 0 }), "Добавьте хотя бы один активный вопрос.");
+  assert.ok(qualificationTestSummary({ single: 1, multiple: 0, freeText: 0 }).startsWith("В тесте: 1 вопрос "));
+  assert.ok(qualificationTestSummary({ single: 4, multiple: 0, freeText: 0 }).startsWith("В тесте: 4 вопроса "));
+  assert.ok(qualificationTestSummary({ single: 5, multiple: 0, freeText: 0 }).startsWith("В тесте: 5 вопросов "));
+  assert.ok(qualificationTestSummary({ single: 0, multiple: 0, freeText: 21 }).includes("21 свободный"));
+  assert.ok(qualificationTestSummary({ single: 0, multiple: 0, freeText: 25 }).includes("25 свободных"));
+});
+
+test("OWN-08: the automatic set is every active question, never more than 100", () => {
+  assert.equal(QUALIFICATION_TEST_MAX, 100);
+  const five = ["a", "b", "c", "d", "e"].map((id, index) => ({ id, active: index % 2 === 0, sortOrder: index }));
+  assert.deepEqual([...pickAutoQualificationSet(five, () => 0.5)].sort(), ["a", "c", "e"]);
+  assert.deepEqual(pickAutoQualificationSet([{ id: "x", active: false }], Math.random), []);
+  const many = Array.from({ length: 150 }, (_, index) => ({ id: `q${index}`, active: index < 140 || index % 2 === 0, sortOrder: index }));
+  const activeIds = new Set(many.filter((item) => item.active).map((item) => item.id));
+  const seeded = () => { let seed = 7; return () => { seed = (seed * 48271) % 2147483647; return seed / 2147483647; }; };
+  const picked = pickAutoQualificationSet(many, seeded());
+  assert.equal(picked.length, 100);
+  assert.equal(new Set(picked).size, 100);
+  assert.ok(picked.every((id) => activeIds.has(id)));
+  assert.deepEqual(pickAutoQualificationSet(many, seeded()), picked, "the same random gives the same set");
+});
+
+test("OWN-08: a set outside 1..100 is an honest problem, never a bank version conflict", () => {
+  assert.equal(qualificationSetProblem(0), "empty");
+  assert.equal(qualificationSetProblem(1), null);
+  assert.equal(qualificationSetProblem(100), null);
+  assert.equal(qualificationSetProblem(101), "too-large");
+  assert.deepEqual(qualificationSetMessages.empty, { code: "empty-set", text: "В наборе нет активных вопросов. Включите или добавьте вопрос." });
+  assert.deepEqual(qualificationSetMessages.tooLarge, { code: "set-too-large", text: "В наборе больше 100 вопросов. Уберите лишние." });
+  assert.equal(qualificationSetMessages.capped(130), "В тесте 100 из 130 активных вопросов (предел 100)");
+  for (const text of [qualificationSetMessages.empty.text, qualificationSetMessages.tooLarge.text, qualificationSetMessages.capped(130)]) {
+    assert.ok(!text.includes("Банк изменился"), text);
+  }
 });

@@ -2,20 +2,22 @@
 gsd_state_version: "1.0"
 milestone: v1.4
 milestone_name: Доступ и единый стиль
-current_phase: 26
-current_phase_name: Единый стиль сайта
-status: executing
-stopped_at: Completed PORTIA-26-20-PLAN.md
-last_updated: "2026-11-17T14:21:12.048Z"
-last_activity: 2026-11-17
-last_activity_desc: Phase PORTIA-26 execution resumed (wave continue)
-state_head: 729e27d37f311663eaab363ba1782acd1646dcad
+current_phase: "26.1"
+current_phase_name: Правки владельца
+status: verifying
+stopped_at: Completed 26.1-19-PLAN.md
+last_updated: "2026-11-21T09:31:59.523Z"
+last_activity: 2026-11-20
+last_activity_desc: Phase 26.1 execution started
+state_head: ab5e57eef0c0f82cdedee3788ae17459198ea63c
 progress:
-  total_phases: 7
+  total_phases: 8
   completed_phases: 3
-  total_plans: 70
-  completed_plans: 70
+  total_plans: 92
+  completed_plans: 89
 ---
+
+Total Phases: 6
 
 # Project State
 
@@ -24,14 +26,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-11-09)
 
 **Core value:** Участник открывает сайт и сразу находит нужную запись; редактор правит её без потерь и без путаницы — и всё это выглядит как цельная «PORTIA OS».
-**Current focus:** Phase PORTIA-26 — Единый стиль сайта
+**Current focus:** Phase 26.1 — Правки владельца
 
 ## Current Position
 
-Phase: PORTIA-26 (Единый стиль сайта) — READY TO EXECUTE
+Phase: 26.1 (Правки владельца) — EXECUTING
 Plan: 14 of 14
-Status: Executing Phase PORTIA-26
-Last activity: 2026-11-17 - Completed quick task 261117-px5: кандидат сам начинает квалификацию после экрана правил, компактный конструктор вопросов
+Status: Phase complete — ready for verification
+Last activity: 2026-11-20 — Phase 26.1 execution started
 
 Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 — принятый риск; Phase 22 не закрыта)
 
@@ -109,6 +111,25 @@ Progress: [████░░░░░░] 43% (3/7 phases closed: 21, 23 и 24 
 | Phase PORTIA-26 P18 | 35 min | 3 tasks | 4 files |
 | Phase PORTIA-26 P19 | 25 min | 2 tasks | 6 files |
 | Phase PORTIA-26 P20 | 25 min | 2 tasks | 3 files |
+| Phase 26.1 P01 | 25min | 3 tasks | 8 files |
+| Phase 26.1 P02 | 90min | 2 tasks | 12 files |
+| Phase 26.1 P03 | 40min | 2 tasks | 7 files |
+| Phase 26.1 P04 | n/a | 3 tasks | 8 files |
+| Phase 26.1 P05 | n/a | 2 tasks | 7 files |
+| Phase 26.1 P06 | n/a | 3 tasks | 7 files |
+| Phase 26.1 P07 | n/a | 3 tasks | 9 files |
+| Phase 26.1 P08 | n/a | 3 tasks | 8 files |
+| Phase 26.1 P09 | n/a | 3 tasks | 11 files |
+| Phase 26.1 P15 | 1h | 3 tasks | 9 files |
+| Phase 26.1 P10 | 2h | 3 tasks | 12 files |
+| Phase 26.1 P11 | 2h | 3 tasks | 8 files |
+| Phase 26.1 P12 | 2h | 3 tasks | 15 files |
+| Phase 26.1 P13 | 80min | 2 tasks | 5 files |
+| Phase 26.1 P14 | 40min | 2 tasks | 4 files |
+| Phase 26.1 P16 | 1h30m | 2 tasks | 9 files |
+| Phase 26.1 P17 | 20m | 2 tasks | 4 files |
+| Phase 26.1 P18 | 15min | 2 tasks | 5 files |
+| Phase 26.1 P26.1-19 | 2h | 3 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -358,6 +379,25 @@ Full decision history: `.planning/PROJECT.md`.
 - [Phase PORTIA-26]: 26-18: кнопка корзины вируса — в div.virus-editor-head рядом с вкладками досье (margin-left: auto); вставка D-21 PORTIA-26-G10; e2e-селекторы .editor-section-column у Информации/Справочника устарели — отложено до линии Playwright (Phase 27)
 - [Phase PORTIA-26]: 26-19: выбор допуска — кнопка-сводка с раскрываемыми пластинами 32px (44px на телефоне); панель .etab-bar не сжимается (flex-shrink: 0) в колоночном flex «Повышения»
 - [Phase PORTIA-26]: [26-20] Названия классов в карточке вируса — целые слова: clamp шрифта 12-15px по ширине ячейки, слово под знак, сетка 3/2/1 колонка по ширине панели (380px/254px); правило шаблона D-65 не менялось
+- [Phase 26.1]: 26.1-01: Справочник — плитки до 5 в ряд (min 132px), кегль названия по длине через guideTileTitleFit, обложка 16:10, карточка и вложенные карточки на всю ширину; видео в карточке оставлено 820px (вопрос владельцу)
+- [Phase 26.1]: 26.1-02: employee drafts live per id in a store made by PortiaEditor; the question 'Save changes?' is asked once at window close, save-all runs one PATCH after another
+- [Phase 26.1]: 26.1-03 option-b: пути передачи — шесть путей владельца плюс «Неизвестно» седьмым исключающим выбором; список в прежней строке через «, »; старые значения переводятся при чтении и записи
+- [Phase 26.1]: 26.1-04: route list on the card is strong.route-list with buttons (keeps the transmission colour rule of the accent guard); classification field min 340px by sum in classification-fit test
+- [Phase 26.1]: 26.1-05: квот в редакторе квалификации нет; confirm приводит счётчики банка к составу набора (1..100) без SQL-миграции; набор вне предела — 422, не конфликт версии
+- [Phase 26.1]: 26.1-06: typed text inherits a style only when the characters on both sides share it; panel size is stored with its place under portia-format-panel-v1; the 44px header row stays (UI-05)
+- [Phase 26.1]: 26.1-07: окно доступно при >=48px заголовка по горизонтали и не ниже нижнего края; refit уменьшает только окно больше области, унесённое остаётся
+- [Phase 26.1]: 26.1-07: РАЗВЕРНУТЬ из превью возвращает недоступное окно внутрь экрана перед разворачиванием
+- [Phase 26.1]: 26.1-08: ручки порядка скрыты (position absolute, clip-path), перенос удержанием 400 мс/6px на зоне строки; ColumnSwapHandle перенесён в шов вставкой PORTIA-26.1-HOLD
+- [Phase 26.1]: 26.1-09: card tabs choose by the pure rule resolveCardTab (new id selected at once, deleted selected -> neighbour); mutation tabs are numbers and have no order; non-selected cards are not rendered, the format panel closes on a tab switch
+- [Phase 26.1]: 26.1-15: pointerType absent counts as mouse; mouse/pen lift on a drift past 6px, touch holds 400ms; a row alone in its list neither shows the grab cursor nor starts a hold (hasPlaceToGo)
+- [Phase 26.1]: 26.1-10: live mode = one LiveEditContext (shared module) provided only by the editor seam; editor change is one D-21 hunk PORTIA-26.1-LIVE with the whole bridge, so 26.1-11..13 add apps without touching the editor
+- [Phase 26.1]: 26.1-11: живая «Сводка» - лента участника по датам с неопубликованными записями (пометка «Черновик»), порядок не меняется; даты квеста проверяются до записи в черновик
+- [Phase 26.1]: 26.1-11: вид «Информации» и карточки «Сводки» живут в шве portia-desktop-info.tsx; защищённый редактор не менялся
+- [Phase 26.1]: 26.1-12: the live card of a virus is one component for the archive, the recycle bin and the template; a virus of the bin asks the tools of both apps (useLiveVirus), the template has no provider
+- [Phase 26.1]: 26.1-13: live mode is exactly six apps (guide, info, broadcasts, viruses, recycle, assistant); LIVE_EXCLUDED names the reason of the other five; last phrase of obida/idle/activity cannot be removed
+- [Phase 26.1]: 26.1-14: only quota classes are dead CSS of the phase; order-drag-handle/column-swap-handle stay (hidden keyboard button); 26.1-04 e2e updated but BLOCKED, not run
+- [Phase 26.1]: 26.1-16: живое «Повышение» пишет банки сервера теми же командами по уходу фокуса, кнопка в панели вкладки (LIVE_SEAM_TABS), модель lib/live-edit.ts получает проверку вопроса аргументом
+- [Phase 26.1]: 26.1-19: живой «Доступ» - вариант A (владелец 2026-11-21, пункт 25): просмотр экранов ворот во всех состояниях, тексты не правятся, без сети; граница режима - без живого режима только Поиск, Сотрудники, Пользователи
 
 ### Pending Todos
 
@@ -392,11 +432,15 @@ Full decision history: `.planning/PROJECT.md`.
 | 261109-brj | Папки фаз v1.3 перенесены в milestones/v1.3-phases, тесты и гейты релиза читают архив v1.3 | 2026-11-09 | 3bfa520, 9b3230e | [261109-brj-repoint-tests-and-scripts-to-the-v1-3-ar](./quick/261109-brj-repoint-tests-and-scripts-to-the-v1-3-ar/) |
 | 261117-bi1 | Крестик развёрнутого окна в углу, отзыв привязки ника в строке вкладок, список редактора до низа, анимации помощницы | 2026-11-17 | f8222d3 | [261117-bi1-krestik-v-ugol-otzyv-privyazki-nika-v-od](./quick/261117-bi1-krestik-v-ugol-otzyv-privyazki-nika-v-od/) |
 | 261117-px5 | Повышение: кандидат сам начинает квалификацию после экрана правил (правила по переходу, миграция 20261117 — ОЖИДАЕТ ВЛАДЕЛЬЦА), компактный конструктор вопросов в окне, строка квот | 2026-11-17 | 729e27d | [261117-px5-promotion-candidate-starts-qualification](./quick/261117-px5-promotion-candidate-starts-qualification/) |
+| 261118-2ha | Calm helices, item mini-editor, accent keeps saturation, compact guide like Информация, search 10/25 | 2026-11-18 | 25a3dc4 | [261118-2ha-dna-helices-items-editor-guide-cards-col](./quick/261118-2ha-dna-helices-items-editor-guide-cards-col/) |
+| 261122-sg1 | «Справочник» не сжимается при появлении полосы прокрутки (scrollbar-gutter: stable) | 2026-11-22 | cd73a3a2 | [261122-sg1-guide-scrollbar-gutter](./quick/261122-sg1-guide-scrollbar-gutter/) |
 
 ### Roadmap Evolution
 
 - Phase 19 edited: merged former phases 19+20 into 19 and 21+22 into 20 (owner decision 2026-11-02); requirements traceability remapped
 - v1.4 roadmap created 2026-11-09: Phases 21–27 added (7 phases, 52 requirements ACC/USR/LVL/PROM/SEC/UI/UAT); Phase 21 is the first phase of the milestone
+- Phase 26.1 inserted after Phase 26: Правки владельца 2026-11-20: справочник, пути передачи, редактор текста, окна, сотрудники, квалификация, перетаскивание, вкладки карточек (URGENT)
+- Phase 26.2 (живое редактирование) removed 2026-11-20 and merged into 26.1 by owner decision («всё в одной фазе»)
 
 ## Deferred Items
 
@@ -413,8 +457,8 @@ Full decision history: `.planning/PROJECT.md`.
 
 ## Session Continuity
 
-Last session: 2026-11-17T02:52:12.645Z
-Stopped at: Completed PORTIA-26-20-PLAN.md
+Last session: 2026-11-21T09:31:51.384Z
+Stopped at: Completed 26.1-19-PLAN.md
 Resume file: None
 
 ## Operator Next Steps

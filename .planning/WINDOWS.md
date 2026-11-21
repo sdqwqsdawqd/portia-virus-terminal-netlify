@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 16
+open_count: 17
 waived_count: 0
 fixed_count: 2
-total_count: 18
-last_updated: 2026-11-16T17:11:41.533Z
+total_count: 19
+last_updated: 2026-11-20T22:14:13.494Z
 ---
 
 # Broken Windows Ledger
@@ -33,6 +33,7 @@ last_updated: 2026-11-16T17:11:41.533Z
 | 16 | 26 | unrun-verify | lib/card-toggle-name.ts |  | 26-13: A11Y-SR-01 — имя кнопки раскрытия карточки скринридером не проверено — BLOCKED (DEVICE), не PASS | open |  | 2026-11-16T17:00:21.660Z |  |
 | 17 | 26 | unrun-verify | lib/window-geometry.ts |  | 26-14: п. 9 (клэмп окна слева/справа) на физическом ПК и DPR 1.25 не проверен — BLOCKED (DEVICE), Phase 27; исходный тест NOT REPRODUCED не заменяет устройство | open |  | 2026-11-16T17:11:41.019Z |  |
 | 18 | 26 | unrun-verify | app/portia.css |  | 26-14: п. 10 (резкость/масштаб ярлыка в конце анимации) на DPR 1.25 и телефоне не проверен — BLOCKED (DEVICE), Phase 27; исходный тест NOT REPRODUCED не заменяет устройство | open |  | 2026-11-16T17:11:41.533Z |  |
+| 19 | 26.1 | unrun-verify | tests/e2e/specs/template-builder.spec.ts |  | 26.1-14: template-builder e2e (D-55, D-60) updated for the route drop-down, not run: no preflight/data source (BLOCKED) | open |  | 2026-11-20T22:14:13.494Z |  |
 
 ````json
 [
@@ -267,6 +268,19 @@ last_updated: 2026-11-16T17:11:41.533Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-16T17:11:41.533Z",
+    "resolved_at": null,
+    "milestone": "v1.4"
+  },
+  {
+    "id": 19,
+    "kind": "unrun-verify",
+    "phase": "26.1",
+    "file": "tests/e2e/specs/template-builder.spec.ts",
+    "line": null,
+    "description": "26.1-14: template-builder e2e (D-55, D-60) updated for the route drop-down, not run: no preflight/data source (BLOCKED)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-20T22:14:13.494Z",
     "resolved_at": null,
     "milestone": "v1.4"
   }

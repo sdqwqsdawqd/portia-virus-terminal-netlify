@@ -358,6 +358,8 @@ test("visitor behaviour is unchanged (Phase 22 editor allow-list)", () => {
     "app/api/content/route.ts",
     "app/api/access/editor-request/route.ts",
     "components/portia-access-gate.tsx",
+    // 26.1-19 (owner 2026-11-21, item 13): the visitor's gate card, drawn by the gate and by the live «Доступ» of the editor; it names AccessOrigin and makes no request.
+    "components/portia-access-gate-screen.tsx",
     "app/api/promotion/status/route.ts",
     "app/api/promotion/requests/route.ts",
     "app/api/promotion/test/route.ts",

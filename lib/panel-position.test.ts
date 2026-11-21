@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { clampPanelOffset, initialPanelOffset, parsePanelOffset } from "./panel-position.ts";
+import { clampPanelOffset, clampPanelSize, initialPanelOffset, parsePanelOffset, parsePanelPlacement } from "./panel-position.ts";
 
 const panel = { width: 680, height: 300 };
 const bounds = { width: 1920, height: 1080 };
@@ -88,4 +88,40 @@ test("a panel wider than the screen still keeps 64px of its header reachable (ST
   const placed = clampPanelOffset({ right: -9999, bottom: 120 }, panel, phone);
   assert.equal(placed.right, 64 - panel.width);
   assert.ok(phone.width - (placed.right + panel.width) >= 0);
+});
+
+// OWN-05: the panel remembers its size next to its place.
+test("a saved place without a size reads as before", () => {
+  assert.deepEqual(parsePanelPlacement('{"right":10,"bottom":20}'), { right: 10, bottom: 20 });
+});
+
+test("a saved size is read back with the place", () => {
+  assert.deepEqual(parsePanelPlacement('{"right":10,"bottom":20,"width":360,"height":300}'), { right: 10, bottom: 20, width: 360, height: 300 });
+});
+
+test("a junk size is dropped and the place stays", () => {
+  for (const raw of ['{"right":10,"bottom":20,"width":"360","height":300}', '{"right":10,"bottom":20,"width":-5,"height":300}', '{"right":10,"bottom":20,"width":0,"height":300}', '{"right":10,"bottom":20,"width":1e999,"height":300}', '{"right":10,"bottom":20,"width":360}', '{"right":10,"bottom":20,"width":null,"height":null}']) {
+    assert.deepEqual(parsePanelPlacement(raw), { right: 10, bottom: 20 }, raw);
+  }
+});
+
+test("junk in storage gives no placement", () => {
+  for (const raw of [null, "", "{bad", "null", "[]", '{"right":"5","bottom":1,"width":300,"height":300}']) assert.equal(parsePanelPlacement(raw), null, String(raw));
+});
+
+test("a size never exceeds the screen minus 16px", () => {
+  assert.deepEqual(clampPanelSize({ width: 2000, height: 2000 }, bounds), { width: 1904, height: 1064 });
+  assert.deepEqual(clampPanelSize({ width: 2000, height: 2000 }, { width: 1280, height: 720 }), { width: 1264, height: 704 });
+});
+
+test("a size never goes under 320x220", () => {
+  assert.deepEqual(clampPanelSize({ width: 100, height: 50 }, bounds), { width: 320, height: 220 });
+});
+
+test("a size inside the limits is kept, fractions come back whole", () => {
+  assert.deepEqual(clampPanelSize({ width: 440.4, height: 300.6 }, bounds), { width: 440, height: 301 });
+});
+
+test("on a screen smaller than the minimum the minimum wins", () => {
+  assert.deepEqual(clampPanelSize({ width: 500, height: 500 }, { width: 300, height: 200 }), { width: 320, height: 220 });
 });

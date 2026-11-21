@@ -5,6 +5,7 @@ import { classificationOptions, createVirusRecycleFiles, findInfo, type InfoSect
 import { portiaContentFixture } from "./testing/portia-content-fixture.ts";
 import { contentRefusal } from "./editor-tabs.ts";
 import { buildSearchIndex, matchSearch } from "./search-index.ts";
+import { canonicalTransmission } from "./transmission-routes.ts";
 import { normalizeBroadcasts, normalizeGuideSections, normalizeInfoSections, normalizePortiaContent, parseYoutubeId } from "./portia-content-normalize.ts";
 
 test("a save from before Phase 13 reads as an empty guide (D-00f)", () => {
@@ -423,8 +424,38 @@ test("D-36 old class names read as the new ones in viruses and recycledViruses",
   // Other axes and fields stay untouched.
   const source = content.viruses[0];
   assert.equal(result.viruses[0].classification.danger, source.classification.danger);
-  assert.equal(result.viruses[0].classification.transmission, source.classification.transmission);
+  // The route of transmission is translated by OWN-03 (tested below); the fixture keeps an old name on purpose.
+  assert.equal(result.viruses[0].classification.transmission, canonicalTransmission(source.classification.transmission));
   assert.equal(result.viruses[0].name, source.name);
+});
+
+// OWN-03 (26.1-03, option-b): old routes of transmission read as the new ones, in viruses and recycledViruses, on every pass.
+function routeVirus(index: number, transmission: string) {
+  const virus = structuredClone(portiaContentFixture.viruses[0]);
+  virus.id = `route-${index}`;
+  virus.classification = { ...virus.classification, transmission };
+  return virus;
+}
+
+test("OWN-03 old routes of transmission read as the new ones in viruses and recycledViruses", () => {
+  const content = structuredClone(portiaContentFixture);
+  content.viruses = [
+    routeVirus(0, "Воздушно-капельный"), routeVirus(1, "Воздушно-пылевой"), routeVirus(2, "Половой"),
+    routeVirus(3, "Неизвестно"), routeVirus(4, "Гемоконтактный, Аэрозольный, Аэрозольный"), routeVirus(5, "Неизвестно, Половой"),
+    routeVirus(6, "Чужое значение, Воздушно-капельный"), routeVirus(7, ""),
+  ];
+  content.recycledViruses = [routeVirus(8, "Воздушно-капельный"), routeVirus(9, "Контактно-бытовой, Половой")];
+  const result = normalizePortiaContent(content);
+  assert.ok(result);
+  assert.deepEqual(result.viruses.map((virus) => virus.classification.transmission), [
+    "Аэрозольный", "Аэрозольный", "Половой путь", "Неизвестно", "Аэрозольный, Гемоконтактный", "Половой путь", "Аэрозольный, Чужое значение", "",
+  ]);
+  assert.deepEqual(result.recycledViruses.map((virus) => virus.classification.transmission), ["Аэрозольный", "Контактно-бытовой, Половой путь"]);
+  // Other axes are still read as before (D-36).
+  assert.equal(result.viruses[0].classification.danger, content.viruses[0].classification.danger);
+  assert.equal(result.viruses[0].classification.mind, content.viruses[0].classification.mind);
+  // A save is a read again: nothing changes the second time.
+  assert.deepEqual(normalizePortiaContent(structuredClone(result)), result);
 });
 
 test("D-36 an accented value reads as the plain name and an accented old name as the new name", () => {

@@ -34,7 +34,6 @@ export function deriveAccentTokens(picked: unknown): Record<string, string> | nu
     return rgb.map((v) => Math.round(clamp(v, 0, 255)));
   };
   const hex = (rgb: number[]) => "#" + rgb.map((v) => (v < 16 ? "0" : "") + v.toString(16)).join("");
-  const hueDistance = (a: number, b: number) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
 
   // CSS Filter Effects Level 1 matrices on gamma sRGB, with the per-channel clamp.
   const applyMatrix = (m: number[][], rgb: number[]) => m.map((row) => clamp((row[0] * rgb[0] + row[1] * rgb[1] + row[2] * rgb[2]) / 255, 0, 1) * 255);
@@ -71,33 +70,52 @@ export function deriveAccentTokens(picked: unknown): Record<string, string> | nu
   const base = fit(0.14, 0.02 * k, H, 0);
   const deep = fit(0.18, 0.03 * k, H, 0);
 
-  // A search, not a rotation: CSS hue-rotate is not an OKLCH rotation (amber preset is -131 deg for an OKLCH change of -117 deg).
-  // Fixed iteration counts, independent of the input (T-10-02). A tiny pull towards saturate(1) breaks near-ties.
+  // Owner 2026-11-18 (round 3): Vivian and the logo follow every pick, the black and white ones too. Two smooth ramps, no zones with an edge:
+  // - colour: the pick's chroma decides how much of the tint stays (0 below 0.02 = grey artwork, full from 0.06), so a grey pick greys her;
+  // - lightness: a dark pick darkens her (down to brightness .35 at L .1), a light pick lightens her (up to 1.9 at L .97), 1 in between.
+  // A tinted pick is solved from a fixed table, not by a search (T-10-02: the cost does not depend on the input). CSS hue-rotate is not an OKLCH
+  // rotation, so for 72 rotations (every 5 deg) the table holds the saturate() that restores each reference's own chroma (never below 1, at most 2)
+  // and the hue the references reach (their circular midpoint). The hue is unwrapped along the rotation into one running sequence that closes
+  // after a full turn, so neighbouring picks land between neighbouring samples; the target hue is interpolated linearly between its bracketing samples.
+  const smooth = (v: number, lo: number, hi: number) => { const t = clamp((v - lo) / (hi - lo), 0, 1); return t * t * (3 - 2 * t); };
+  const keep = smooth(lch[1], 0.02, 0.06);
+  const light = lch[0] < 0.55 ? 0.35 + 0.65 * smooth(lch[0], 0.1, 0.55) : 1 + 0.9 * smooth(lch[0], 0.75, 0.97);
   const filterFor = (refs: string[]) => {
-    if (k === 0) return "hue-rotate(0deg) saturate(0)";
     const rgbs = refs.map((r) => [1, 3, 5].map((i) => parseInt(r.slice(i, i + 2), 16)));
-    const score = (d: number, s: number) => {
-      let worst = 0;
-      for (let i = 0; i < rgbs.length; i++) worst = Math.max(worst, hueDistance(oklch(saturate(hueRotate(rgbs[i], d), s * k))[2], accentHue));
-      return worst + 0.02 * Math.abs(s - 1);
-    };
-    let bestD = 0, bestS = 1, best = Infinity;
-    for (let d = -180; d < 180; d += 4) {
-      for (let k = 3; k <= 25; k++) {
-        const sc = score(d, k / 10);
-        if (sc < best) { best = sc; bestD = d; bestS = k / 10; }
+    const own = rgbs.map((rgb) => oklch(rgb)[1]);
+    const signed = (from: number, to: number) => ((to - from + 540) % 360) - 180;
+    const STEP = 5, COUNT = 72;
+    const ds: number[] = [], ss: number[] = [], hs: number[] = [];
+    for (let i = 0; i <= COUNT; i++) {
+      const d = -180 + i * STEP;
+      let need = 0;
+      for (let j = 0; j < rgbs.length; j++) need += clamp(own[j] / Math.max(oklch(hueRotate(rgbs[j], d))[1], 1e-4), 1, 2);
+      const s = need / rgbs.length;
+      let sx = 0, sy = 0;
+      for (let j = 0; j < rgbs.length; j++) {
+        const h = (oklch(saturate(hueRotate(rgbs[j], d), s))[2] * Math.PI) / 180;
+        sx += Math.cos(h); sy += Math.sin(h);
+      }
+      let hue = (Math.atan2(sy, sx) * 180) / Math.PI;
+      if (hue < 0) hue += 360;
+      ds.push(d); ss.push(s);
+      hs.push(i === 0 ? hue : hs[i - 1] + signed(hs[i - 1], hue));
+    }
+    // The last sample repeats the first one a full turn later, so the unwrapped hues cover the whole circle.
+    const target = hs[0] + (((accentHue - hs[0]) % 360) + 360) % 360;
+    let d = 0, s = 1;
+    for (let i = 0; i < COUNT; i++) {
+      const lo = Math.min(hs[i], hs[i + 1]), hi = Math.max(hs[i], hs[i + 1]);
+      if (target >= lo && target <= hi) {
+        const w = hi > lo ? (target - hs[i]) / (hs[i + 1] - hs[i]) : 0;
+        d = ds[i] + w * (ds[i + 1] - ds[i]);
+        s = ss[i] + w * (ss[i + 1] - ss[i]);
+        break;
       }
     }
-    const d0 = bestD, s0 = bestS;
-    for (let dd = -4; dd <= 4; dd++) {
-      for (let ks = -2; ks <= 2; ks++) {
-        const s = s0 + ks * 0.05;
-        if (s <= 0) continue;
-        const sc = score(d0 + dd, s);
-        if (sc < best) { best = sc; bestD = d0 + dd; bestS = s; }
-      }
-    }
-    return "hue-rotate(" + (bestD || 0) + "deg) saturate(" + Number((bestS * k).toFixed(2)) + ")";
+    const turn = keep > 0 ? ((Math.round(d) + 180) % 360 + 360) % 360 - 180 : 0;
+    const b = Number(light.toFixed(2));
+    return "hue-rotate(" + (turn || 0) + "deg) saturate(" + Number((clamp(s, 1, 2) * keep).toFixed(2)) + ")" + (b !== 1 ? " brightness(" + b + ")" : "");
   };
 
   return {

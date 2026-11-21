@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getEditorAccess } from "@/lib/editor-access";
+import { ownerLoginErrorText } from "@/lib/owner-login-errors";
 import { editorSignUp, ownerLogin, ownerLogout } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -52,7 +53,7 @@ export default async function OwnerLoginPage({
             {error === "not-approved" && <div className="owner-login-alert">Владелец ещё не добавил этот email в список редакторов.</div>}
             {error === "unconfirmed" && <div className="owner-login-alert">Почта не подтверждена. Откройте письмо от Supabase и войдите снова.</div>}
             {error === "setup" && <div className="owner-login-alert">Управление аккаунтами ещё не настроено в Supabase.</div>}
-            {error && !["denied", "not-approved", "setup", "unconfirmed"].includes(error) && <div className="owner-login-alert">Не удалось выполнить действие. Проверьте email, пароль и подтверждение почты.</div>}
+            {error && !["denied", "not-approved", "setup", "unconfirmed"].includes(error) && <div className="owner-login-alert">{ownerLoginErrorText(error) ?? "Не удалось выполнить действие. Проверьте email, пароль и подтверждение почты."}</div>}
             <div className="owner-login-actions">
               <button type="submit">ВОЙТИ</button>
               <button type="submit" formAction={editorSignUp}>СОЗДАТЬ АККАУНТ</button>

@@ -4,14 +4,16 @@
 // those numbers alone, so no text of a user ever reaches a style. No dependencies on purpose: the server (normalizePortiaContent),
 // the site (PortiaImage) and the editor preview use this one module.
 
-export type ImageFraming = { x: number; y: number; zoom: number };
+// Owner 2026-11-18: a frame of free proportions (a «Справочник» photo block) also carries `ratio`, the width / height of the frame in thousandths;
+// a place with its own proportions (a band, a cover, a dossier picture) never stores it.
+export type ImageFraming = { x: number; y: number; zoom: number; ratio?: number };
 
 export const defaultImageFraming: Readonly<ImageFraming> = Object.freeze({ x: 50, y: 50, zoom: 100 });
 
 /** The editor moves a frame in steps of this many percent. */
 export const imageFramingStep = 5;
 
-export const imageFramingLimits = Object.freeze({ position: Object.freeze({ min: 0, max: 100 }), zoom: Object.freeze({ min: 100, max: 300 }) });
+export const imageFramingLimits = Object.freeze({ position: Object.freeze({ min: 0, max: 100 }), zoom: Object.freeze({ min: 100, max: 300 }), ratio: Object.freeze({ min: 200, max: 5000 }) });
 
 const own = (record: object, key: string) => Object.prototype.hasOwnProperty.call(record, key);
 
@@ -30,6 +32,8 @@ export function normalizeImageFraming(value: unknown): ImageFraming | undefined 
   const y = readNumber(value, "y", imageFramingLimits.position.min, imageFramingLimits.position.max);
   const zoom = readNumber(value, "zoom", imageFramingLimits.zoom.min, imageFramingLimits.zoom.max);
   if (x === undefined || y === undefined || zoom === undefined) return undefined;
+  const ratio = readNumber(value, "ratio", imageFramingLimits.ratio.min, imageFramingLimits.ratio.max);
+  if (ratio !== undefined) return { x, y, zoom, ratio };
   if (x === defaultImageFraming.x && y === defaultImageFraming.y && zoom === defaultImageFraming.zoom) return undefined;
   return { x, y, zoom };
 }
@@ -39,8 +43,11 @@ export function imageFramingStyles(framing: ImageFraming | undefined): { frame?:
   const safe = normalizeImageFraming(framing);
   if (!safe) return {};
   const origin = `${safe.x}% ${safe.y}%`;
-  return {
-    frame: { overflow: "hidden" },
-    image: { objectPosition: origin, transform: `scale(${safe.zoom / 100})`, transformOrigin: origin },
+  const placed = { objectPosition: origin, transform: `scale(${safe.zoom / 100})`, transformOrigin: origin };
+  // A free frame owns its proportions: the box keeps them before and after loading, and the picture covers it.
+  if (safe.ratio !== undefined) return {
+    frame: { overflow: "hidden", aspectRatio: String(safe.ratio / 1000) },
+    image: { ...placed, width: "100%", height: "100%", objectFit: "cover" },
   };
+  return { frame: { overflow: "hidden" }, image: placed };
 }

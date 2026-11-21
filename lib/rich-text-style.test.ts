@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { RichTextDocument } from "./portia-content.ts";
 import { mergeFragments } from "./format-fragments.ts";
 import type { FieldSelectionEvent, FieldSelectionState } from "./rich-text-style.ts";
@@ -11,6 +12,7 @@ import {
   rangeHasStyle,
   removeRichTextStyleKeys,
   rangeIsPlain,
+  replaceRichTextRuns,
   resetRichTextStyle,
   resolveRange,
   stylePresets,
@@ -272,4 +274,69 @@ test("multi-selection fragments: touching ones of one field fold, different fiel
   assert.deepEqual(mergeFragments([fragment("a", 5, 9), fragment("a", 0, 5)]), [fragment("a", 0, 9)]);
   assert.deepEqual(mergeFragments([fragment("a", 0, 3), fragment("b", 3, 6)]), [fragment("a", 0, 3), fragment("b", 3, 6)]);
   assert.deepEqual(mergeFragments([fragment("a", 8, 9), fragment("a", 1, 2), fragment("a", 4, 4)]), [fragment("a", 1, 2), fragment("a", 8, 9)]);
+});
+
+// OWN-05: a style belongs to the selected fragment only; typed text is plain unless it lands inside one.
+test("text typed after a styled word stays plain, including the space and the next phrase", () => {
+  const doc = applyRichTextStyle(plain("слово"), 0, 5, { fontSize: 22 });
+  assert.deepEqual(replaceRichTextRuns(doc, "слово ещё"), { runs: [{ text: "слово", style: { fontSize: 22 } }, { text: " ещё" }] });
+});
+
+test("text typed between a styled and a plain character stays plain", () => {
+  const doc = applyRichTextStyle(plain("ABC"), 1, 2, { fontWeight: 600 });
+  assert.deepEqual(replaceRichTextRuns(doc, "ABxC"), { runs: [{ text: "A" }, { text: "B", style: { fontWeight: 600 } }, { text: "xC" }] });
+});
+
+test("text typed inside a styled fragment keeps its style", () => {
+  const doc = applyRichTextStyle(plain("Bold"), 0, 4, { fontWeight: 600 });
+  assert.deepEqual(replaceRichTextRuns(doc, "Boxld"), { runs: [{ text: "Boxld", style: { fontWeight: 600 } }] });
+});
+
+test("replacing a selection inside a styled fragment keeps the style, replacing the whole styled word does not", () => {
+  const doc = applyRichTextStyle(plain("Bold"), 0, 4, { color: "#b43632" });
+  assert.deepEqual(replaceRichTextRuns(doc, "BXd"), { runs: [{ text: "BXd", style: { color: "#b43632" } }] });
+  assert.deepEqual(replaceRichTextRuns(doc, "new"), { runs: [{ text: "new" }] });
+});
+
+test("text typed in an empty document or before a styled fragment is plain", () => {
+  assert.deepEqual(replaceRichTextRuns(plain(""), "ab"), plain("ab"));
+  const doc = applyRichTextStyle(plain("слово"), 0, 5, { fontSize: 22 });
+  assert.deepEqual(replaceRichTextRuns(doc, "аслово"), { runs: [{ text: "а" }, { text: "слово", style: { fontSize: 22 } }] });
+});
+
+// 26.1 WR-03: a kept edge must not cut an emoji (surrogate pair) between two runs of different styles.
+const loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+test("replacing a styled emoji by one with the same high surrogate keeps both halves in one run", () => {
+  const next = replaceRichTextRuns({ runs: [{ text: "😀", style: { fontWeight: 800 } }, { text: "y" }] }, "😃y");
+  assert.deepEqual(next, { runs: [{ text: "😃y" }] });
+  assert.ok(next.runs.every((run) => !loneSurrogate.test(run.text)));
+});
+
+test("replacing a styled emoji by one with the same low surrogate keeps both halves in one run", () => {
+  const next = replaceRichTextRuns({ runs: [{ text: "a" }, { text: "😀", style: { fontWeight: 800 } }] }, "a\u{1E600}");
+  assert.deepEqual(next, { runs: [{ text: "a\u{1E600}" }] });
+  assert.ok(next.runs.every((run) => !loneSurrogate.test(run.text)));
+});
+
+test("typing next to an emoji and deleting one keep every run well formed and the styles of the rest", () => {
+  const doc: RichTextDocument = { runs: [{ text: "😀", style: { fontWeight: 800 } }, { text: "y😀z" }] };
+  for (const text of ["😀y", "😀y😀zz", "y😀z", "😀😀z", "😀yz"]) {
+    const next = replaceRichTextRuns(doc, text);
+    assert.equal(next.runs.map((run) => run.text).join(""), text);
+    assert.ok(next.runs.every((run) => !loneSurrogate.test(run.text)), text);
+  }
+  assert.deepEqual(replaceRichTextRuns(doc, "😀y😀zz"), { runs: [{ text: "😀", style: { fontWeight: 800 } }, { text: "y😀zz" }] });
+});
+
+test("deleting characters keeps the styles of the rest", () => {
+  const doc = applyRichTextStyle(plain("abcd"), 2, 4, { fontWeight: 800 });
+  assert.deepEqual(replaceRichTextRuns(doc, "abd"), { runs: [{ text: "ab" }, { text: "d", style: { fontWeight: 800 } }] });
+  assert.deepEqual(replaceRichTextRuns(doc, "abcd"), doc);
+});
+
+test("the component and the lib share one typing rule", () => {
+  const source = readFileSync(new URL("../components/portia-editor-rich-text.tsx", import.meta.url), "utf8");
+  assert.match(source, /replaceRichTextRuns\(/);
+  assert.doesNotMatch(source, /inheritedStyle/);
 });

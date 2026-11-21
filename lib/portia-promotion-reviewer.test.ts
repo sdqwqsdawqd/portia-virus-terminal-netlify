@@ -180,7 +180,7 @@ test("promotion reviewer routes use server access and RPCs, never browser openTa
 test("bank route settles commands only with an authoritative state and returns preview version", () => {
   const route = readFileSync(new URL("../app/api/promotion/banks/route.ts", import.meta.url), "utf8");
   assert.ok(route.includes("authoritative-state-unavailable"));
-  assert.match(route, /Response\.json\(\{ preview, expiresAt: new Date\(expiresAt\)\.toISOString\(\), version: bank\.version, items \}/);
+  assert.match(route, /Response\.json\(\{ preview, expiresAt: new Date\(expiresAt\)\.toISOString\(\), version: bank\.version, items, activeCount: bank\.items\.filter\(\(item\) => item\.active\)\.length \}/);
   assert.ok(route.includes("selectTaskPreview"));
   assert.ok(route.includes("selectQualificationPreview"));
   assert.ok(!route.includes('code: "insufficient-pool"'), "bank settings must save before the pool is filled");
@@ -319,4 +319,119 @@ test("97d7abb: a preview built while the bank was sufficient stops verifying onc
   assert.equal(verifyPreviewToken(token, { kind: "ordinary", bankId: "bank", version: "version-with-count-3", now: 1 }, secret), null);
   assert.equal(verifyPreviewToken(token, { kind: "qualification", bankId: "bank", version: "version-with-count-2", now: 1 }, secret), null);
   assert.equal(verifyPreviewToken(token, { kind: "ordinary", bankId: "bank", version: "version-with-count-2", now: 10_001 }, secret), null);
+});
+
+test("owner 2026-11-20, OWN-08: the qualification preview is built from the active or marked questions, not from the bank quotas, and a set outside 1..100 is a 422", () => {
+  const route = bankRouteSource();
+  const preview = route.slice(route.indexOf('body.action === "preview"'), route.indexOf("const token = typeof body.preview"));
+  assert.ok(preview.includes("pickAutoQualificationSet(questions, Math.random)"));
+  assert.ok(preview.includes("qualificationTestQuotas(questions, picked)"));
+  assert.ok(!preview.includes("bank.quotas"), "the stored quotas are not used by the preview");
+  // The size is judged before the selection, and the answer is a 422 with its own code, not the version conflict.
+  assert.ok(preview.indexOf("qualificationSetProblem(picked.length)") !== -1 && preview.indexOf("qualificationSetProblem(picked.length)") < preview.indexOf("selectQualificationPreview(questions"));
+  const helper = route.slice(route.indexOf("const setProblemResponse"), route.indexOf("export async function GET"));
+  assert.ok(helper.includes("status: 422") && !helper.includes("Банк изменился") && !helper.includes("409"));
+  assert.ok(helper.includes("qualificationSetMessages.empty") && helper.includes("qualificationSetMessages.tooLarge"));
+  assert.ok(route.indexOf("requirePromotionReviewer(supabase)", route.indexOf("export async function POST")) < route.indexOf("const body = parseJsonObject", route.indexOf("export async function POST")));
+});
+
+test("owner 2026-11-20, OWN-08: confirm brings the stored counts to the confirmed set, in a fixed order, without touching the SQL", () => {
+  const route = bankRouteSource();
+  const confirm = route.slice(route.indexOf("const token = typeof body.preview"));
+  const order = ["verifyPreviewToken(token", "new Set(ids).size !== ids.length", "item.id === id && item.active", "qualificationSetProblem(ids.length)", "syncQualificationCounts(supabase, bank, ids)", "portia_promo_confirm_test"].map((part) => confirm.indexOf(part));
+  assert.ok(order.every((at) => at !== -1), String(order));
+  assert.deepEqual([...order].sort((a, b) => a - b), order, "token, duplicates, activity, size, sync, confirm");
+  assert.ok(route.includes("OWN-08 (owner 2026-11-20)"));
+  // The version of the reloaded bank is what the SQL checks.
+  assert.match(confirm, /p_bank_version: confirmBank\.version, p_questions/);
+  const sync = route.slice(route.indexOf("async function syncQualificationCounts"), route.indexOf("export async function GET"));
+  assert.ok(sync.includes("parsePromotionBankCommand({ action: \"save-qualification-bank\", transitionId: bank.transitionId, quotas: wanted })"));
+  assert.ok(sync.includes('"portia_promo_bank_command"') && sync.includes("bankState(supabase)"));
+  assert.ok(sync.includes("fresh.items.some((item) => item.id === id && item.active)"), "activity is checked again after the reload");
+  // An unparsable command is a program error (500), never the version conflict.
+  const branch = confirm.slice(confirm.indexOf('if (kind === "qualification")'), confirm.indexOf("const rpc = kind"));
+  assert.match(branch, /"program"\) return Response\.json\(\{ error: "Не удалось подтвердить набор\.", code: "confirm-failed" \}, \{ status: 500/);
+  // «Банк изменился» appears in the qualification branch only after the sync call; the empty/too-large answers come before it and are 422.
+  assert.ok(branch.indexOf("Банк изменился") > branch.indexOf("syncQualificationCounts("));
+  assert.ok(branch.indexOf("setProblemResponse(problem)") !== -1 && branch.indexOf("setProblemResponse(problem)") < branch.indexOf("syncQualificationCounts("));
+  const helper = route.slice(route.indexOf("const setProblemResponse"), route.indexOf("async function syncQualificationCounts"));
+  assert.ok(helper.includes("status: 422") && !helper.includes("Банк изменился"));
+  // Ordinary assignments keep their path; the route still starts with the reviewer check and the SQL is not part of this change.
+  assert.ok(confirm.includes('"portia_promo_confirm_assignment", { p_request_id: requestId, p_bank_id: bankId, p_bank_version: bank.version'));
+  assert.ok(route.slice(route.indexOf("export async function POST")).indexOf("requirePromotionReviewer(supabase)") < route.slice(route.indexOf("export async function POST")).indexOf("parseJsonObject"));
+});
+
+test("26.1 CR-01: a qualification confirm answers with the bank state, success or failure, and the client applies it so the next preview is shown", () => {
+  const route = bankRouteSource();
+  const main = readFileSync(new URL("../components/portia-promotion-editor-main.tsx", import.meta.url), "utf8");
+  const qualificationEditor = readFileSync(new URL("../components/portia-promotion-qualification-editor.tsx", import.meta.url), "utf8");
+  const confirm = route.slice(route.indexOf("const token = typeof body.preview"));
+  // Success and the failure of the confirm RPC after the sync both carry the authoritative state.
+  assert.match(confirm, /const afterConfirm = kind === "qualification" \? await stateField\(supabase\) : \{\};/);
+  assert.match(confirm, /code: error\?\.code === "42883" \? "pending-database" : "confirm-conflict", \.\.\.afterConfirm \}/);
+  assert.match(confirm, /\{ id: data, \.\.\.afterConfirm \}, \{ status: 201/);
+  // A failure of the sync itself (the counts may be written already) carries it too; only the program error, where nothing was written, does not.
+  const branch = confirm.slice(confirm.indexOf('if (kind === "qualification")'), confirm.indexOf("const rpc = kind"));
+  assert.ok(branch.includes("const fresh = await stateField(supabase)") && branch.match(/\.\.\.fresh \}/g)!.length === 3);
+  assert.ok(branch.indexOf('"program") return') < branch.indexOf("stateField(supabase)"));
+  // The client: postBank applies body.state before it judges the status, and a failed confirm says that the set changed.
+  const postBank = main.slice(main.indexOf("const postBank"), main.indexOf("const irreversible"));
+  assert.ok(postBank.indexOf("setBanks(body.state") !== -1 && postBank.indexOf("setBanks(body.state") < postBank.indexOf("if (!response.ok)"));
+  const confirmPreview = qualificationEditor.slice(qualificationEditor.indexOf("const confirmPreview"), qualificationEditor.indexOf("const previewPoolError"));
+  assert.ok(confirmPreview.includes("if (!result) { setPreviewStale(true); return; }"));
+  // The preview the server builds after the confirm is shown once the client holds the bank of the same version.
+  assert.ok(qualificationEditor.includes("preview?.version === bank?.version ? preview : null"));
+});
+
+test("26.1 WR-01: the request is verified as claimed by this reviewer for this transition before the counts are written, 42883 stays 503", () => {
+  const route = bankRouteSource();
+  const confirm = route.slice(route.indexOf("const token = typeof body.preview"));
+  assert.ok(confirm.indexOf("qualificationRequestOwnership(supabase, requestId, bank.transitionId)") !== -1);
+  assert.ok(confirm.indexOf("qualificationRequestOwnership(") < confirm.indexOf("syncQualificationCounts(supabase, bank, ids)"));
+  const ownership = route.slice(route.indexOf("async function qualificationRequestOwnership"), route.indexOf("type SyncFailure"));
+  assert.ok(ownership.includes('"portia_promo_reviewer_state"') && ownership.includes("row.assignedToMe === true") && ownership.includes('row.status === "claimed"') && ownership.includes("row.targetTitleId === transitionId"));
+  // An unreadable reviewer state is «not updated yet» (503), a request that is not mine is a 409 before any write.
+  assert.match(confirm, /ownership === "unavailable"\) return Response\.json\([^\n]*code: "pending-database" \}, \{ status: 503/);
+  assert.match(confirm, /ownership === "not-owned"\) return Response\.json\([^\n]*code: "confirm-conflict" \}, \{ status: 409/);
+  // A missing function in the sync is the 503 of the database that is not updated, not the «bank changed» conflict.
+  assert.ok(route.includes('failure: error.code === "42883" ? "pending-database" : "stale"'));
+  assert.match(confirm, /synced\.failure === "pending-database"\) return Response\.json\([^\n]*code: "pending-database"[^\n]*\{ status: 503/);
+});
+
+test("26.1 WR-02: the chosen questions are compared with what the preview showed after the reload, and a change is its own answer", () => {
+  const route = bankRouteSource();
+  const sync = route.slice(route.indexOf("async function syncQualificationCounts"), route.indexOf("export async function GET"));
+  assert.ok(sync.includes("isDeepStrictEqual(bank.items.find((item) => item.id === id), fresh.items.find((item) => item.id === id))"));
+  assert.ok(sync.includes('{ failure: "changed" }') && sync.indexOf("isDeepStrictEqual") > sync.indexOf("bankState(supabase)"));
+  const confirm = route.slice(route.indexOf("const token = typeof body.preview"));
+  assert.match(confirm, /synced\.failure === "changed"\s*\? Response\.json\(\{ error: "Вопросы набора изменились после предпросмотра\./);
+});
+
+test("26.1-17 L1: the body limit is checked on the raw text before the JSON is parsed, for every action, and the selection is bounded", () => {
+  const route = bankRouteSource();
+  const post = route.slice(route.indexOf("export async function POST"));
+  const authAt = post.indexOf("requirePromotionReviewer(");
+  const limitAt = post.indexOf("bankBodyTooLarge(");
+  const parseAt = post.indexOf("parseJsonObject(");
+  assert.ok(authAt !== -1 && limitAt > authAt && parseAt > limitAt, "permissions first, then the size, then the parse");
+  assert.match(post, /bankBodyTooLarge\(text\)\) return Response\.json\(\{ error: "Данные слишком велики\." \}, \{ status: 413/);
+  assert.ok(!route.includes("JSON.stringify(body).length"), "the late size check after the parse is replaced by the early one");
+  assert.match(post, /manualIds === "invalid" \|\| replaceId\.length > 64\) return Response\.json\([^\n]*code: "invalid-selection" \}, \{ status: 400/);
+  assert.match(post, /replaceId\.length > 64/);
+});
+
+test("26.1-17 L2/L3: a rights refusal of the sync is the 403 of the tab, a missing preview secret is a plain 503 after the rights and the bank lookup", () => {
+  const route = bankRouteSource();
+  const post = route.slice(route.indexOf("export async function POST"));
+  // L2: the sync reports `forbidden` and the confirm answers with the same denied("forbidden") as every other refused call.
+  assert.ok(route.includes("syncFailureStatus(error) === 403"));
+  assert.match(post, /synced\.failure === "forbidden"\) return denied\("forbidden"\)/);
+  // L3: the secret is read only after the rights (first step) and the bank lookup (404), and shared by preview and confirm.
+  const authAt = post.indexOf("requirePromotionReviewer(");
+  const notFoundAt = post.indexOf('"Банк не найден."');
+  const secretAt = post.indexOf("previewSecretOrNull(");
+  assert.ok(authAt !== -1 && notFoundAt > authAt && secretAt > notFoundAt, "rights, then the bank, then the secret");
+  assert.ok(!route.includes("promotionDeviceSecret()"), "the secret is never read unguarded");
+  assert.match(post, /secret === null\) return Response\.json\(\{ error: "Сборка набора временно недоступна\.", code: "pending-config" \}, \{ status: 503, headers: noStoreHeaders \}\)/);
+  assert.ok(post.indexOf("secret === null") < post.indexOf('body.action === "preview"', secretAt), "one check ahead of both preview and confirm");
 });

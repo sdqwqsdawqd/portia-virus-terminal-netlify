@@ -2577,7 +2577,7 @@
         "kind": "f",
         "returns": "jsonb",
         "secdef": true,
-        "src_sha256": "b8581a5a4daa96a09eab063e7e736ca8c6f0d1cf432f2f29006c57c49810aaa8",
+        "src_sha256": "da772d825b8e5c9cbc527f783f1fce33ea7654c5c6baa34ea20c75db36dc681e",
         "volatility": "s"
       },
       "public.portia_access_mask_email(p_email text)": {
@@ -2688,7 +2688,7 @@
         "kind": "f",
         "returns": "void",
         "secdef": false,
-        "src_sha256": "8ff3f11b9d8edbabdde37f367ade29624bd27b428d62efe2b0e85bfdcf4087e5",
+        "src_sha256": "45fc4dfb95a64839056d5dd62695f9c06995b2e5b80316f319eeb1ef7f3043ad",
         "volatility": "s"
       },
       "public.portia_can_edit()": {

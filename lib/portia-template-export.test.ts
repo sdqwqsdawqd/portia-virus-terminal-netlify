@@ -20,6 +20,7 @@ import {
   templateCardSvg,
   templateCardVariableNames,
   templateCardWidth,
+  templateDownloadName,
   templateExportViolations,
   templateImageMaxBytes,
   type LocalImageFile,
@@ -394,4 +395,52 @@ test("the card export and the image check never touch the network", async () => 
     globalThis.fetch = original;
   }
   assert.equal(requests, 0);
+});
+
+// OWN-12 (owner 2026-11-21, item 24): the downloaded file is named after the virus. The name is user input that lands in the `download` attribute.
+test("templateDownloadName names the file after the virus and keeps Cyrillic", () => {
+  assert.equal(templateDownloadName("Вирус Б-12", "html"), "Вирус Б-12.html");
+  assert.equal(templateDownloadName("Тест Ж-1", "png"), "Тест Ж-1.png");
+});
+
+// 26.1-REVIEW-2 CR-03: the e2e scenario of a too-long card has no virus name; the cut of a long name is checked here instead.
+test("templateDownloadName cuts a long name at 80 characters and names an empty one by default", () => {
+  assert.equal(templateDownloadName("Д".repeat(110), "html"), `${"Д".repeat(80)}.html`);
+  assert.equal(templateDownloadName("", "html"), "shablon-dosye.html");
+});
+
+test("templateDownloadName drops characters a file name cannot carry and trims edges", () => {
+  assert.equal(templateDownloadName("a/b:c*?", "png"), "abc.png");
+  assert.equal(templateDownloadName('<a>"b"|c\d', "html"), "abcd.html");
+  assert.equal(templateDownloadName("  Точка. ", "html"), "Точка.html");
+  assert.equal(templateDownloadName("Имя...", "html"), "Имя.html");
+  assert.equal(templateDownloadName("../../etc/passwd", "html"), "etcpasswd.html");
+  assert.equal(templateDownloadName("А\u0000Б\u001fВ\u007fГ\u0301Д", "html"), "АБВГД.html");
+  assert.equal(templateDownloadName("Ф\u202eБ", "html"), "ФБ.html");
+});
+
+test("templateDownloadName gives reserved Windows names an underscore", () => {
+  assert.equal(templateDownloadName("CON", "html"), "CON_.html");
+  assert.equal(templateDownloadName("nul", "png"), "nul_.png");
+  assert.equal(templateDownloadName("Com1", "html"), "Com1_.html");
+  assert.equal(templateDownloadName("LPT9", "html"), "LPT9_.html");
+  assert.equal(templateDownloadName("CON.log", "html"), "CON_.log.html");
+  assert.equal(templateDownloadName("CONSOLE", "html"), "CONSOLE.html");
+  assert.equal(templateDownloadName("COM10", "html"), "COM10.html");
+});
+
+test("templateDownloadName falls back to the old file name when nothing usable is left", () => {
+  assert.equal(templateDownloadName("", "png"), "shablon-dosye.png");
+  assert.equal(templateDownloadName("   ", "html"), "shablon-dosye.html");
+  assert.equal(templateDownloadName("?*:", "html"), "shablon-dosye.html");
+  assert.equal(templateDownloadName("...", "png"), "shablon-dosye.png");
+});
+
+test("templateDownloadName cuts a long name to 80 characters without splitting a surrogate pair", () => {
+  const long = templateDownloadName("Я".repeat(200), "html");
+  assert.equal(long, `${"Я".repeat(80)}.html`);
+  const emoji = templateDownloadName("\u{1F9A0}".repeat(100), "png");
+  assert.equal(emoji, `${"\u{1F9A0}".repeat(80)}.png`);
+  assert.doesNotMatch(emoji, /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/, "no lone surrogate");
+  assert.equal(templateDownloadName(`${"Я".repeat(79)}. хвост`, "html"), `${"Я".repeat(79)}.html`, "a dot or space left at the cut is trimmed");
 });

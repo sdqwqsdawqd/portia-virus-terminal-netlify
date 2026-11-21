@@ -1,18 +1,32 @@
 "use client";
 
 import { type ImageFraming } from "@/lib/image-framing";
-import { type PortiaContent, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
-import { PortiaIcon } from "@/components/portia-icons";
+import { scientistLogPlainText, type PortiaContent, type RichTextDocument, type ScientistLog, type Virus } from "@/lib/portia-content";
+import { classificationIconFor, PortiaIcon } from "@/components/portia-icons";
 import { PortiaImage } from "@/components/portia-desktop-media";
 import { levelCopy } from "@/lib/level-copy";
-import { DossierSection, FormattedText, VirusCardBody } from "@/components/portia-virus-card";
+import { DossierSection, FormattedText, VirusCardBody, useLiveVirus } from "@/components/portia-virus-card";
 
 // The card itself lives in portia-virus-card.tsx and is shared with the template builder (D-55); these two names stay importable from here.
 export { DossierSection, FormattedText };
 
+// In the archive list the badges stand alone, so each one names its term for screen readers and on hover (the live mode of the editor draws the same row).
+export function RowBadges({ virus }: { virus: Virus }) {
+  const terms = [virus.classification.danger, virus.classification.spread, virus.classification.escapeRisk];
+  const badges = terms.flatMap((term) => { const icon = classificationIconFor(term); return icon ? [{ term, icon }] : []; });
+  if (!badges.length) return null;
+  return <span className="row-badges">{badges.map(({ term, icon }) => <span className="row-badge" key={term} title={term}><PortiaIcon name={icon} role="img" aria-hidden={false} aria-label={term} /></span>)}</span>;
+}
+
 // viewerLevel is the level the visitor really has (shownViewerLevel: 5 for the editor). A record is closed only by the server mark `withheld`, never by comparing levels here (D-12).
 export function VirusRecord({ virus, formattedText, viewerLevel, onOpenLog }: { virus: Virus; formattedText: PortiaContent["formattedText"]; viewerLevel: number; onOpenLog: (id: string) => void }) {
-  const records = <DossierSection index="06" title="ЗАПИСИ УЧЁНЫХ"><div className="access-summary"><span>{levelCopy.currentLevelPlaque}</span><strong>{viewerLevel}</strong></div><div className="scientist-log-list">{virus.scientistLogs.map((log, index) => { const isOpen = !log.withheld; return <button className={`scientist-log-row ${isOpen ? "available" : "locked"}`} type="button" key={log.id} onClick={() => onOpenLog(log.id)}><span className="log-number">LOG-{String(index + 1).padStart(2, "0")}</span><span className="log-name"><strong>{log.title}</strong><small>{log.scientist}</small></span><span className="log-clearance"><PortiaIcon name={isOpen ? "lock-open" : "lock-closed"} className="log-lock" />{levelCopy.logLevel(log.lockedLevel)}</span><span className="log-action">{isOpen ? "ОТКРЫТЬ" : "ЗАБЛОКИРОВАНО"}</span></button>; })}</div></DossierSection>;
+  const live = useLiveVirus();
+  const records = <DossierSection index="06" title="ЗАПИСИ УЧЁНЫХ"><div className="access-summary"><span>{levelCopy.currentLevelPlaque}</span><strong>{viewerLevel}</strong></div><div className="scientist-log-list">{virus.scientistLogs.map((log, index) => {
+    const isOpen = !log.withheld;
+    const row = <button className={`scientist-log-row ${isOpen ? "available" : "locked"}`} type="button" key={log.id} onClick={() => onOpenLog(log.id)}><span className="log-number">LOG-{String(index + 1).padStart(2, "0")}</span><span className="log-name"><strong>{log.title}</strong><small>{log.scientist}</small></span><span className="log-clearance"><PortiaIcon name={isOpen ? "lock-open" : "lock-closed"} className="log-lock" />{levelCopy.logLevel(log.lockedLevel)}</span><span className="log-action">{isOpen ? "ОТКРЫТЬ" : "ЗАБЛОКИРОВАНО"}</span></button>;
+    // LIVE-02 (26.1-12): a record opens as the visitor's document, where its title, pseudonym, level and text are edited in place; the remove stands beside the row.
+    return live ? <div className="live-log-row" key={log.id}>{row}{live.remove({ kind: "log", virusId: virus.id, logId: log.id }, log.title)}</div> : row;
+  })}</div></DossierSection>;
   return <VirusCardBody
     key={virus.id}
     virus={virus}
@@ -24,11 +38,12 @@ export function VirusRecord({ virus, formattedText, viewerLevel, onOpenLog }: { 
 }
 
 export function ScientistDocument({ virus, logId, viewerLevel, onBack }: { virus: Virus; logId: string; viewerLevel: number; onBack: () => void }) {
+  const live = useLiveVirus();
   const log = virus.scientistLogs.find((item) => item.id === logId);
   if (!log) return null;
   const isOpen = !log.withheld;
   const level = log.lockedLevel;
-  return <article className="archive-document-view doc-open"><header className="archive-document-bar"><button type="button" onClick={onBack}>ВЕРНУТЬСЯ</button><span>{levelCopy.archivePath(level)}</span></header><div className="archive-document-paper doc-print"><div className="archive-document-stamp"><PortiaIcon name={isOpen ? "lock-open" : "lock-closed"} className="log-lock" />{isOpen ? "ДОПУСК РАЗРЕШЁН" : "ДОПУСК ОТКЛОНЁН"}</div><div className="archive-document-code">PORTIA://VIRUS_ARCHIVE/{virus.code}/LOGS/{log.id}</div><h1>{log.title}</h1><dl className="archive-document-meta"><div><dt>ОБЪЕКТ</dt><dd>{virus.name} / {virus.code}</dd></div><div><dt>УЧЁНЫЙ</dt><dd>{log.scientist}</dd></div><div><dt>УРОВЕНЬ</dt><dd>{level}</dd></div></dl>{isOpen ? <section className="archive-document-section"><h2>ТЕКСТ ЗАПИСИ</h2><ScientistRichText log={log} /></section> : <section className="archive-document-section restricted-document"><div className="restriction-mark">ДОСТУП ОГРАНИЧЕН</div><h2>НЕДОСТАТОЧНЫЙ УРОВЕНЬ ДОСТУПА</h2><p>{levelCopy.docDenied(viewerLevel, level)}</p><RedactedDocument id={log.id} /></section>}<footer><span>ВНУТРЕННИЙ АРХИВ PORTIA</span><span>ЗАПРЕЩЕНО РАСПРОСТРАНЯТЬ</span></footer></div></article>;
+  return <article className="archive-document-view doc-open"><header className="archive-document-bar"><button type="button" onClick={onBack}>ВЕРНУТЬСЯ</button><span>{levelCopy.archivePath(level)}</span></header><div className="archive-document-paper doc-print"><div className="archive-document-stamp"><PortiaIcon name={isOpen ? "lock-open" : "lock-closed"} className="log-lock" />{isOpen ? "ДОПУСК РАЗРЕШЁН" : "ДОПУСК ОТКЛОНЁН"}</div><div className="archive-document-code">PORTIA://VIRUS_ARCHIVE/{virus.code}/LOGS/{log.id}</div><h1>{live ? live.text({ kind: "log-title", virusId: virus.id, logId: log.id }, log.title) : log.title}</h1><dl className="archive-document-meta"><div><dt>ОБЪЕКТ</dt><dd>{virus.name} / {virus.code}</dd></div><div><dt>УЧЁНЫЙ</dt><dd>{live ? live.text({ kind: "log-scientist", virusId: virus.id, logId: log.id }, log.scientist) : log.scientist}</dd></div><div><dt>УРОВЕНЬ</dt>{live ? <dd>{live.choice({ kind: "log-level", virusId: virus.id, logId: log.id }, String(level), { label: levelCopy.pickerLegend })}</dd> : <dd>{level}</dd>}</div></dl>{isOpen ? <section className="archive-document-section"><h2>ТЕКСТ ЗАПИСИ</h2>{live ? live.rich({ kind: "log-text", virusId: virus.id, logId: log.id }, { text: scientistLogPlainText(log), document: scientistDocument(log), className: "scientist-rich-text" }) : <ScientistRichText log={log} />}</section> : <section className="archive-document-section restricted-document"><div className="restriction-mark">ДОСТУП ОГРАНИЧЕН</div><h2>НЕДОСТАТОЧНЫЙ УРОВЕНЬ ДОСТУПА</h2><p>{levelCopy.docDenied(viewerLevel, level)}</p><RedactedDocument id={log.id} /></section>}<footer><span>ВНУТРЕННИЙ АРХИВ PORTIA</span><span>ЗАПРЕЩЕНО РАСПРОСТРАНЯТЬ</span></footer></div></article>;
 }
 
 function scientistDocument(log: ScientistLog): RichTextDocument {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { componentFamily, lf } from "./component-source.ts";
 import { accessCheckFailedText } from "./app-state.ts";
 
@@ -114,13 +114,25 @@ test("component families import only their own seams and the known shared compon
   const allowed = {
     // portia-virus-card: the archive's virus card, shared with the template builder (D-55, 20-43).
     // portia-redacted: the static «ЗАСЕКРЕЧЕНО · нужен допуск N» placeholder (Phase 24, D-08/D-09).
-    "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion", "portia-virus-card", "portia-redacted"],
+    // portia-companion-items: the visitor's items of the assistant and the spider, kept on the device (2026-11-18).
+    // portia-companion-editor: the item editor dialog opened from the settings (owner 2026-11-18, round 2).
+    // portia-template-builder: the dossier template is its own app «Шаблон» since 2026-11-18 (it lived inside «Повышение»).
+    // portia-live-edit: LIVE-04, the shared context of the live editing mode; the desktop only reads it (useLiveEdit), the editor seam provides it.
+    "portia-desktop": ["portia-icons", "portia-wallpaper", "custom-color-picker", "portia-promotion", "portia-virus-card", "portia-redacted", "portia-template-builder", "portia-companion-items", "portia-companion-editor", "portia-live-edit"],
     // portia-desktop-states: the shared «Доступ закрыт» panel the editor shows when the rights check fails (STAB-APP-09).
     // portia-image-framing: the block «Видимая часть» under a picture field (D-63, 20-53), shared with the template builder through ImageEditorField.
     // portia-users-tab: the «Пользователи» tab body (USR-01, Phase 22).
     // portia-level-picker: the shared «Нужен допуск 1–5» control of the editor forms (Phase 24, D-16).
     // portia-image-rewrite: the «change the address of a picture» hook beside the level picker (Phase 25, D-13/D-14); it keeps the editor file's requests and texts out of it.
-    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states", "portia-image-framing", "portia-users-tab", "portia-level-picker", "portia-image-rewrite"],
+    // portia-icons: OWN-03, the route picker of the shared classification field draws the route icons (26.1-04).
+    // portia-live-edit: LIVE-04, the shared context the editor seam provides.
+    // portia-desktop-documents: LIVE-02, the editor draws the visitor's view of the app in live mode (the «Справочник» page on the draft).
+    // portia-virus-card: LIVE-05, the live text shows the visitor's FormattedText with its GIFs, and the strip of GIFs under the field being edited.
+    // portia-desktop-info: LIVE-02 (26.1-11), the live mode draws the visitor's article of «Информация» and card of «Сводки» on the draft.
+    // portia-desktop-dossier: LIVE-02 (26.1-12), the live mode draws the visitor's virus record and scientist document on the draft.
+    // portia-desktop-trash: LIVE-02 (26.1-12), the live mode draws the visitor's list rows and viewer of «Корзина» on the draft.
+    // portia-access-gate-screen: owner 2026-11-21 item 13: live «Доступ» shows the visitor's gate screens (AccessGateScreen, no requests). Its own file: the gate itself carries device caches and the session.
+    "portia-editor": ["custom-color-picker", "portia-promotion-editor", "portia-desktop-states", "portia-image-framing", "portia-users-tab", "portia-level-picker", "portia-image-rewrite", "portia-icons", "portia-live-edit", "portia-desktop-documents", "portia-desktop-info", "portia-desktop-dossier", "portia-desktop-trash", "portia-virus-card", "portia-access-gate-screen"],
   } as const;
   for (const [main, family] of [["portia-desktop", desktopFamily], ["portia-editor", editorFamily]] as const) {
     const members = family.map((part) => part.file.replace(/\.tsx$/, ""));
@@ -145,9 +157,9 @@ test("STAB-DESK-07: app ids, storage keys and API endpoints stay as pinned", () 
     for (const match of text.matchAll(/["`](\/api\/[a-z/-]+)/g)) found[match[1]] = (found[match[1]] ?? 0) + 1;
     return found;
   };
-  assert.equal(/type AppId = ([^;]+);/.exec(source)?.[1], '"archive" | "employees" | "search" | "info" | "guide" | "promotion" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor"');
+  assert.equal(/type AppId = ([^;]+);/.exec(source)?.[1], '"archive" | "employees" | "search" | "info" | "guide" | "promotion" | "settings" | "broadcasts" | "trash" | "sheet" | "charter" | "editor" | "template"');
   // IN-05 (Phase 25): the two device-cache keys live only in lib/device-cache.ts; the desktop imports them.
-  assert.deepEqual(keys(source), ["portia-broadcasts-read-signature-v1", "portia-desktop-shortcuts-v3", "portia-guide-collapsed-v2", "portia-quests-seen-v1", "portia-taskbar-order-v1"]);
+  assert.deepEqual(keys(source), ["portia-broadcasts-read-signature-v1", "portia-desktop-shortcuts-v3", "portia-guide-expanded-v3", "portia-quests-seen-v1", "portia-taskbar-order-v1"]);
   assert.match(source, /import \{[^}]*\bCONTENT_CACHE_KEY\b[^}]*\bEMPLOYEES_CACHE_KEY\b[^}]*\} from "@\/lib\/device-cache";/);
   assert.deepEqual(keys(editorSource), ["portia-format-panel-v1"]);
   assert.deepEqual(endpoints(source), { "/api/content": 2, "/api/access": 1, "/api/employees": 1 });
@@ -180,8 +192,11 @@ test("promotion is a standalone desktop application with its own window geometry
 test("global search is built by buildSearchIndex from every existing collection and opens the owner app (D-13, D-14)", () => {
   assert.ok(source.includes("globalSearchAppIds.map"));
   assert.ok(source.includes("buildSearchIndex({"));
-  assert.ok(source.includes("matchSearch(searchIndex, globalQuery, availableRecordsLimit(windows.search.maximized))"));
-  assert.ok(source.includes("[searchIndex, globalQuery, windows.search.maximized]"));
+  // Owner 2026-11-18 (round 2): the search lists every match and draws the first 10 (up to 25 after «Показать ещё»).
+  assert.ok(source.includes("matchSearch(searchIndex, globalQuery)"));
+  assert.ok(source.includes("searchShownCount("), "the rendered rows are a slice of searchShownCount");
+  assert.ok(source.includes('className="global-search-more"'));
+  assert.ok(source.includes("[searchIndex, globalQuery]"), "the maximized flag no longer widens the list");
   assert.ok(!source.includes("const escapeSearch"), "one normalisation: normalizeSearch from lib/search-index");
   assert.ok(source.includes('openApp("employees")'));
   for (const collection of ["content.viruses", "content.infoSections", "content.guideSections", "content.broadcasts", "content.recycleFiles", "recycledViruses", "employees"]) {
@@ -227,7 +242,7 @@ test("every result type opens its owner and marks its record; a vanished record 
   assert.ok(source.includes("Запись недоступна") && source.includes("aria-disabled={unavailable || undefined}"));
   assert.ok(!/toast|assistant|Vivian|Вивьян/i.test(open), "no assistant or toast message for a vanished record");
   // Every owner list carries the mark.
-  for (const mark of ['hitAttrs("employee", employee.id)', 'hitAttrs("info", section.id)', 'hitAttrs("info", sub.id)', 'hitAttrs("broadcast", item.id)', 'hitAttrs("file", file.id)', 'hitAttrs("file", `virus:${virus.id}`)', 'hitId={searchHit?.type === "guide"']) {
+  for (const mark of ['hitAttrs("employee", employee.id)', 'hitAttrs("info", section.id)', 'hitAttrs("info", sub.id)', 'hit={isSearchHit("broadcast", item.id)}' /* 26.1-11: the card is BroadcastCard, which draws the mark itself */, 'hitAttrs("file", file.id)', 'hitAttrs("file", `virus:${virus.id}`)', 'hitId={searchHit?.type === "guide"']) {
     assert.ok(source.includes(mark), mark);
   }
 });
@@ -325,22 +340,27 @@ test("editor scrolls as one page and its tabs use the whole window", () => {
   assert.doesNotMatch(styles, /\.flat-editor-form\s*\{[^}]*max-width/);
   for (const cap of [/\.compact-editor\s*\{/, /\.assistant-editor\s*\{/, /\.access-editor\s*\{/]) assert.doesNotMatch(styles, cap);
   assert.match(styles, /\.content-editor > \.promotion-editor\s*\{[^}]*flex:\s*1 1 0/);
-  assert.match(styles, /\.recommendation-order-list\s*\{[^}]*max-width:\s*720px/);
-  assert.match(styles, /\.access-editor-list\s*\{[^}]*max-width:\s*760px/);
+  // Owner 2026-11-20 (OWN-02) supersedes the 720px / 760px columns of these two editor lists: they fill the window.
+  assert.doesNotMatch(styles, /\.recommendation-order-list\s*\{[^}]*max-width/);
+  assert.doesNotMatch(styles, /\.access-editor-list\s*\{[^}]*max-width/);
 });
 
 test("window tiles keep their own size and the search shows the picked recommendations (D-43)", () => {
   assert.match(styles, /\.broadcast-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*340px\),\s*340px\)\)/);
   assert.match(styles, /\.broadcast-grid\s*\{[^}]*align-items:\s*start/);
   assert.match(styles, /\.broadcast-grid > \.broadcast-empty\s*\{[^}]*grid-column:\s*1 \/ -1/);
-  assert.match(styles, /\.guide-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*176px\),\s*176px\)\)/);
-  // Phase 26 (UI-06, D-01): a maximized window turns these tiles into a card grid, but only under the maximized hook; the
-  // normal window keeps the fixed 340px / 176px tiles above. No rule outside the hook gives them a stretched track.
+  // Owner 2026-11-20 (OWN-01) supersedes the 176px tiles of 2026-11-18 round 2: up to 5 a row over the whole width, 132px at least.
+  assert.match(styles, /\.guide-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(max\(132px,\s*calc\(\(100% - 4 \* 12px\) \/ 5\)\),\s*1fr\)\)/);
+  assert.match(styles, /\.guide-grid\s*\{[^}]*gap:\s*12px/);
+  // Phase 26 (UI-06, D-01): a maximized window turns the broadcast tiles into a card grid, but only under the maximized hook; the
+  // normal window keeps the fixed 340px tiles above. No rule outside the hook gives them a stretched track.
+  // Owner 2026-11-20 supersedes 2026-11-18 round 2: the guide tiles fill the row (up to 5) in any window; still no maximized rule touches their columns.
+  assert.ok(!/\.app-window\.is-maximized[^{}]*\.guide-grid[^{}]*\{/.test(styles), "guide-grid: no maximized rule changes the tiles");
   for (const tiles of ["broadcast-grid", "guide-grid"]) {
-    const rules = [...styles.matchAll(new RegExp(String.raw`([^{}]*\.${tiles}\s*)\{([^}]*)\}`, "g"))];
+    const rules = [...styles.replace(/\/\*[\s\S]*?\*\//g, "").matchAll(new RegExp(String.raw`([^{}]*\.${tiles}\s*)\{([^}]*)\}`, "g"))];
     const stretched = rules.filter(([, selector, body]) => /grid-template-columns:[^;]*1fr/.test(body) && !selector.includes(".app-window.is-maximized"));
     assert.deepEqual(stretched.map(([, selector]) => selector.trim()).filter((selector) => !(tiles === "guide-grid" && selector === ".guide-grid")), [], `${tiles}: only the maximized rule may stretch`);
-    assert.ok(rules.some(([, selector]) => selector.includes(".app-window.is-maximized")), `${tiles}: a maximized rule exists`);
+    if (tiles === "broadcast-grid") assert.ok(rules.some(([, selector]) => selector.includes(".app-window.is-maximized")), `${tiles}: a maximized rule exists`);
   }
   assert.ok(source.includes("shownRecommendations.map("), "only the picked recommendations are rendered");
   assert.ok(!source.includes("content.searchRecommendations.map("));
@@ -450,7 +470,11 @@ test("every record picture goes through PortiaImage with its record id and the r
   // Collections stay lazy.
   const lazyOf = (file: string) => all.filter((entry) => entry.file === file).map((entry) => entry.tag);
   assert.ok(lazyOf("portia-desktop-documents.tsx").length >= 3 && lazyOf("portia-desktop-documents.tsx").every((tag) => tag.includes('priority="lazy"')));
-  assert.ok(lazyOf("portia-desktop.tsx").filter((tag) => tag.includes('priority="lazy"')).length >= 2, "information photo and trash image");
+  // 26.1-11: the information photo moved with the article into the seam portia-desktop-info.tsx.
+  // 26.1-12: the picture of a file of the bin moved with the viewer into the seam portia-desktop-trash.tsx.
+  assert.ok([...lazyOf("portia-desktop.tsx"), ...lazyOf("portia-desktop-info.tsx"), ...lazyOf("portia-desktop-trash.tsx")].filter((tag) => tag.includes('priority="lazy"')).length >= 2, "information photo and trash image");
+  assert.ok(lazyOf("portia-desktop-trash.tsx").length >= 1 && lazyOf("portia-desktop-trash.tsx").every((tag) => tag.includes('priority="lazy"')));
+  assert.ok(lazyOf("portia-desktop-info.tsx").length >= 1 && lazyOf("portia-desktop-info.tsx").every((tag) => tag.includes('priority="lazy"')));
   assert.ok(card.includes('recordId: `${virus.id}:mutation:${index}`, priority: "lazy"'));
   // No loading policy outside PortiaImage; the one fetchPriority left is the PORTIA mark of the boot screen.
   assert.ok(!source.includes('loading="eager"'));
@@ -473,13 +497,216 @@ test("PortiaImage sizes the box before the picture and keeps motion under the mo
   assert.match(styles, /html\[data-motion\]:not\(\[data-motion="off"\]\) \.portia-image img \{ transition: opacity var\(--motion-fast\)/);
 });
 
-test("window drag uses the live frame width and symmetric workspace bounds", () => {
+// Owner 2026-11-20 OWN-06 supersedes 18-04 variant A (the symmetric 8px inset): windows may leave the screen.
+test("window drag uses the live frame width and lets the window leave the screen (OWN-06)", () => {
   assert.ok(source.includes("width: rect.width"));
   assert.ok(source.includes("width: operation.parentWidth"));
   assert.ok(source.includes("dragGeometry(operation"));
   const geometry = readFileSync(new URL("./window-geometry.ts", import.meta.url), "utf8");
-  assert.ok(geometry.includes("bounds.width - width - margin"));
-  assert.doesNotMatch(geometry, /bounds\.width - 160/);
+  const drag = geometry.slice(geometry.indexOf("export function dragGeometry"), geometry.indexOf("export const titlebarHeight"));
+  assert.doesNotMatch(drag, /margin/, "no 8px inset in the drag rule");
+  assert.ok(drag.includes("Math.max(-width, start.x + dx)"), "the left limit is the window width beyond the edge");
+  assert.ok(drag.includes("Math.max(0, start.y + dy)"), "the top never rises above the workspace");
+  assert.ok(source.includes("windows may leave the screen, OWN-06"));
+});
+
+test("OWN-06: the taskbar marks a window whose title bar is out of reach, and a browser resize does not bring it back", () => {
+  assert.ok(source.includes('data-unreachable={outOfReach(app) ? "true" : undefined}'));
+  const start = source.indexOf("const outOfReach = ");
+  assert.ok(start >= 0);
+  const outOfReach = source.slice(start, start + 600);
+  assert.ok(outOfReach.includes("windows[app]"));
+  assert.ok(outOfReach.includes("!state.minimized && !state.maximized && !state.exiting"));
+  assert.ok(outOfReach.includes("!titlebarReachable(state.geometry, taskbarBounds)"));
+  const refit = source.slice(source.indexOf("const refit = () => {"), source.indexOf('window.addEventListener("resize", refit)'));
+  assert.ok(refit.includes("refitGeometry(geometry, bounds, minimumWindowSize(id))"));
+  assert.ok(!refit.includes(" fitGeometry(geometry"), "a partly carried window is not pulled back by the browser resize");
+  assert.ok(styles.includes(".taskbar-app[data-unreachable]::before"));
+  const markStart = styles.indexOf(".taskbar-app[data-unreachable]::before");
+  const mark = styles.slice(markStart, styles.indexOf("}", markStart));
+  assert.ok(mark.includes("border-bottom: 2px dashed var(--teal)"), "a dashed accent mark, no new colour");
+});
+
+test("OWN-06: the taskbar preview is its own seam with a small copy of the window, РАЗВЕРНУТЬ and ЗАКРЫТЬ", () => {
+  const seam = desktopFamily.find((part) => part.file === "portia-desktop-taskbar.tsx")?.text ?? "";
+  assert.ok(seam.includes("export function TaskbarPreview"));
+  assert.ok(seam.includes("export function useTaskbarPreview"));
+  assert.ok(seam.includes('role="group" aria-label={`${label}: окно`}'));
+  assert.ok(!seam.includes("previewRect") && !seam.includes("taskbar-preview-map"), "owner 21: no map of the screen, the window itself is shown");
+  assert.ok(seam.includes("cloneNode(true)") && seam.includes("export function previewCloneOf"));
+  assert.ok(seam.includes('className="taskbar-preview-thumb"') && seam.includes('aria-hidden="true"'));
+  assert.ok(seam.includes("titlebarReachable("));
+  assert.ok(seam.includes("За краем экрана"));
+  assert.ok(seam.includes('<button type="button" onClick={onMaximize}>РАЗВЕРНУТЬ</button>'));
+  assert.ok(seam.includes('<button type="button" onClick={onClose}>ЗАКРЫТЬ</button>'));
+  assert.ok(seam.includes('event.key !== "Escape"'));
+  assert.ok(seam.includes("PREVIEW_SHOW_MS = 300") && seam.includes("PREVIEW_HIDE_MS = 200"));
+  assert.ok(!seam.includes("localStorage") && !seam.includes("sessionStorage"), "the preview stores nothing (STAB-DESK-07)");
+});
+
+test("OWN-06 owner 21: the copy of the window is only a picture: inert, no ids, no embedded documents, refreshed at most once a second", () => {
+  const seam = desktopFamily.find((part) => part.file === "portia-desktop-taskbar.tsx")?.text ?? "";
+  const clone = seam.slice(seam.indexOf("export function previewCloneOf"), seam.indexOf("type TaskbarPreviewProps"));
+  assert.ok(clone.includes('copy.setAttribute("inert", "")') && clone.includes('copy.setAttribute("aria-hidden", "true")'));
+  for (const name of ["id", "name", "for", "autofocus", "tabindex", "data-window-app"]) assert.ok(seam.includes(`"${name}"`), `the copy loses ${name}`);
+  assert.ok(seam.includes('REPLACED_TAGS = ["iframe", "video", "canvas", "embed", "object"]'));
+  assert.ok(clone.includes("taskbar-preview-placeholder") && clone.includes("node.replaceWith(stub)"));
+  assert.ok(seam.includes("PREVIEW_REFRESH_MS = 1000") && seam.includes("window.setInterval(paint, PREVIEW_REFRESH_MS)"));
+  assert.ok(seam.includes("window.clearInterval(timer)") && seam.includes("canvas.replaceChildren()"), "the copy leaves with the preview");
+  assert.ok(seam.includes("lastPreviewClone") && seam.includes("minimized ? lastPreviewClone.get(app)"), "a minimized window shows its last picture");
+  assert.ok(seam.includes("taskbar-preview-fallback"), "no window and no picture: the icon of the app");
+  const preview = seam.slice(seam.indexOf("export function TaskbarPreview"));
+  assert.ok(!seam.includes("localStorage") && !seam.includes("fetch(") && !preview.includes("useState"), "no storage, no request, no new state");
+});
+
+test("OWN-06: a taskbar button and its preview share one span.taskbar-entry; hover, focus and Escape drive the preview", () => {
+  assert.ok(source.includes("<TaskbarPreview"));
+  const entry = source.slice(source.indexOf('<span key={app} className="taskbar-entry"'), source.indexOf('<span className="sr-only" role="status" aria-live="polite">{layoutAnnouncement}'));
+  assert.ok(entry.length > 200, "the entry wrapper exists");
+  assert.ok(entry.includes("onPointerEnter=") && entry.includes("onPointerLeave="));
+  assert.ok(entry.includes("preview.show(app, preview.shown ? 0 : PREVIEW_SHOW_MS)"));
+  assert.ok(entry.includes("preview.hide(PREVIEW_HIDE_MS)"));
+  assert.ok(entry.includes(":focus-visible"), "keyboard focus shows the preview at once");
+  assert.ok(entry.includes('event.pointerType === "touch"'), "touch never hovers");
+  assert.ok(entry.includes("onDismiss={() =>"), "Escape hides the preview");
+  assert.ok(entry.includes("onMaximize={() => maximizeFromPreview(app)}") && entry.includes("onClose={() => closeFromPreview(app)}"));
+  assert.ok(entry.includes("geometry={windows[app].maximized ? undefined : windows[app].geometry}"), "a maximized window fills the map");
+  const canShow = source.slice(source.indexOf("useTaskbarPreview<AppId>("), source.indexOf("useTaskbarPreview<AppId>(") + 260);
+  assert.ok(canShow.includes('window.matchMedia("(max-width: 900px)").matches') && canShow.includes("taskbarDrag.current"), "no preview on the phone or during a taskbar drag");
+  assert.ok(source.includes('button.closest(".taskbar-apps")'), "the drag finds the other buttons through the toolbar, not the entry");
+});
+
+test("26.1 WR-06: a window out of reach is told to a screen reader, and a preview that holds the keyboard focus is not closed by the pointer leaving", () => {
+  const entry = source.slice(source.indexOf('<span key={app} className="taskbar-entry"'), source.indexOf('<span className="sr-only" role="status" aria-live="polite">{layoutAnnouncement}'));
+  // The dashed mark is not the only signal: the button is described by a hidden text, present only while the window is out of reach.
+  assert.ok(entry.includes("aria-describedby={outOfReach(app) ? `taskbar-unreachable-${app}` : undefined}"));
+  assert.ok(entry.includes("{outOfReach(app) && <span className=\"sr-only\" id={`taskbar-unreachable-${app}`}>Окно за краем экрана</span>}"));
+  // pointerleave keeps the preview while the focus sits inside it; the blur of the entry still hides it when the focus leaves.
+  const leave = entry.slice(entry.indexOf("onPointerLeave="), entry.indexOf("onFocus="));
+  assert.ok(leave.includes('querySelector(".taskbar-preview")?.contains(document.activeElement)'));
+  assert.ok(leave.indexOf("contains(document.activeElement)") < leave.indexOf("preview.hide(PREVIEW_HIDE_MS)"));
+  assert.ok(entry.includes("onBlur=") && entry.includes("!event.currentTarget.contains(event.relatedTarget as Node | null)"));
+});
+
+test("OWN-06: РАЗВЕРНУТЬ opens a hidden window, maximizes an open one and only focuses a maximized one; ЗАКРЫТЬ is the ordinary close", () => {
+  const body = source.slice(source.indexOf("const maximizeFromPreview = "), source.indexOf("const closeFromPreview = "));
+  assert.ok(body.includes('openApp(app, originOf(button, "taskbar"))'));
+  assert.ok(body.includes("state.minimized || state.exiting"));
+  assert.ok(body.includes("toggleMaximize(app)"));
+  assert.ok(body.includes("focusApp(app)"));
+  assert.ok(body.includes("qualificationLocked && app === \"promotion\""));
+  const close = source.slice(source.indexOf("const closeFromPreview = "), source.indexOf("const closeFromPreview = ") + 160);
+  assert.ok(close.includes("closeApp(app)"), "the same close as the cross of the window: the editor still asks to save");
+});
+
+test("OWN-06: the preview CSS: above the taskbar, 220px, panel colours, accent frame for the window, no preview on the phone", () => {
+  const rule = (selector: string) => {
+    const start = styles.indexOf(selector + " {");
+    return start < 0 ? "" : styles.slice(start, styles.indexOf("}", start));
+  };
+  assert.ok(rule(".taskbar-entry").includes("position: relative"));
+  const preview = rule(".taskbar-preview");
+  assert.ok(preview.includes("bottom: calc(100% + 6px)") && preview.includes("width: 220px"));
+  assert.ok(preview.includes("background: var(--panel)") && preview.includes("border: 1px solid var(--line)") && preview.includes("box-shadow: 0 22px 60px rgba(0,0,0,.55)"));
+  const thumb = rule(".taskbar-preview-thumb");
+  assert.ok(thumb.includes("overflow: hidden") && thumb.includes("pointer-events: none") && thumb.includes("contain: strict"), "the frame of the copy is closed and takes no pointer");
+  assert.ok(rule(".taskbar-preview-canvas, .taskbar-preview-canvas *").includes("animation: none !important") && rule(".taskbar-preview-canvas, .taskbar-preview-canvas *").includes("transition: none !important"));
+  assert.ok(styles.includes(".taskbar-preview-placeholder {"));
+  assert.ok(styles.indexOf(".taskbar-preview-thumb {") < styles.indexOf("users-tab:start"), "new rules stand before the users-tab block");
+  assert.ok(!styles.includes(".taskbar-preview-map") && !styles.includes(".taskbar-preview-window"), "the map is gone");
+  assert.ok(rule(".taskbar-preview-actions button").includes("height: 28px"));
+  assert.ok(styles.includes('html[data-motion="full"] .taskbar-preview {'), "the fade is only for full motion");
+  assert.ok(styles.includes("  .taskbar-preview { display: none; }"), "phone: no preview");
+});
+
+// owner 2026-11-21 item 28: «Значки» became «Ярлыки», as in «Размер ярлыков»; the saved field iconGrid and the settings key stay, so a saved grid is kept.
+test("OWN-13 owner 22: «Выровнять ярлыки по сетке» is a saved setting, «Вернуть ярлыки в изначальное положение» forgets the saved places", () => {
+  assert.ok(source.includes('iconGrid: "off"') && source.includes('iconGrid: ["on", "off"]'), "the value is read back only from the known ones (T-26.1-52)");
+  assert.ok(source.includes("iconGrid: string"));
+  assert.ok(source.includes('<SettingsCategory title="Ярлыки рабочего стола"'), "the group is drawn by the shared category");
+  assert.ok(source.includes("<span>Выровнять ярлыки по сетке</span>") && source.includes("<span>Вернуть ярлыки в изначальное положение</span>"));
+  const components = readdirSync(new URL("../components/", import.meta.url)).filter((name) => name.endsWith(".tsx"))
+    .map((name) => readFileSync(new URL(`../components/${name}`, import.meta.url), "utf8")).join("\n");
+  for (const old of ["Значки рабочего стола", "Выровнять значки по сетке", "Вернуть значки в изначальное положение", "Значки выровнены", "Значки возвращены", "Выравнивание значков"]) {
+    assert.ok(!components.includes(old), `«${old}» is gone from the interface`);
+  }
+  assert.ok(source.includes('aria-pressed={desktopSettings.iconGrid === "on"}') && source.includes("onClick={toggleIconGrid}") && source.includes("onClick={restoreShortcutPositions}"));
+  const toggle = source.slice(source.indexOf("const toggleIconGrid = "), source.indexOf("const restoreShortcutPositions = "));
+  assert.ok(toggle.includes("alignedShortcutPositions(nav, desktopShortcutOrder, shortcutPlacement)") && toggle.includes("setShortcutPositions(aligned)"));
+  assert.ok(toggle.includes('announceLayout("Ярлыки выровнены по сетке")') && toggle.includes('announceLayout("Выравнивание ярлыков по сетке выключено")'), "a screen reader is told");
+  const restore = source.slice(source.indexOf("const restoreShortcutPositions = "), source.indexOf("const restoreShortcutPositions = ") + 330);
+  assert.ok(restore.includes("setShortcutPositions({})") && restore.includes('announceLayout("Ярлыки возвращены в изначальное положение")'));
+  assert.ok(source.includes("<ShortcutGridContext.Provider value={desktopSettings.iconGrid === \"on\"}>"), "the shortcuts learn about the grid through one context");
+  // owner 2026-11-21 item 28: the group has no layout of its own any more, it is the shared row of the settings category.
+  assert.ok(!styles.includes(".icon-layout-options {"));
+  // the factory reset already walks defaultDesktopSettings, so the grid goes back to off with it.
+  assert.ok(source.includes("Object.entries(defaultDesktopSettings).every("));
+  assert.ok(!source.includes("portia-desktop-icon-grid") && !source.includes("iconGridStorageKey"), "no new storage key (STAB-DESK-07)");
+});
+
+// owner 2026-11-21 item 28: every group of «Настройки» looks the same — one category (heading, one row of options and actions), in one order.
+test("OWN-13 owner item 28: every settings group is a SettingsCategory, in one order, under one set of rules", () => {
+  const start = source.indexOf('<AppWindow app="settings"');
+  const pane = source.slice(start, source.indexOf("</AppWindow>", start));
+  assert.ok(start > 0 && pane.includes("settings-app"));
+  assert.ok(!pane.includes("<section"), "no group of the settings window is drawn outside SettingsCategory");
+  assert.equal((source.match(/settings-section/g) ?? []).length, 1, "the group markup exists once, in SettingsCategory");
+  const companion = lf(readFileSync(new URL("../components/portia-companion-editor.tsx", import.meta.url), "utf8"));
+  assert.ok(!companion.includes("settings-section") && !companion.includes("<h2>"), "«Предметы» takes its heading and row from the category");
+  const order = [...pane.matchAll(/<(?:SettingGroup|SettingsCategory) title="([^"]+)"/g)].map((match) => match[1]);
+  // appearance, then motion, then the desktop, then the rest.
+  assert.deepEqual(order, ["Цвет интерфейса", "Фон рабочего стола", "Паук", "Анимации", "Размер ярлыков", "Ярлыки рабочего стола", "Предметы", "Содержимое сайта"]);
+  assert.ok(pane.includes("<CompanionItemsSettings />"));
+  assert.ok(pane.includes('sectionClassName="content-control-entry"'), "the content group still spans the maximized pane");
+
+  const body = (selector: string) => {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return styles.match(new RegExp(`\\n${escaped} \\{([^}]*)\\}`))?.[1] ?? "";
+  };
+  assert.match(body(".settings-section"), /margin-top: 28px/);
+  assert.match(body(".settings-section h2"), /font: 700 11px var\(--sans\);[^}]*text-transform: uppercase/);
+  assert.match(body(".setting-options"), /display: flex; flex-wrap: wrap; gap: 8px;/, "one row of buttons that wraps");
+  assert.match(body(".setting-options > button"), /min-height: var\(--control-height-compact\);/, "32px buttons on a PC");
+  assert.match(styles, /@media \(max-width: 900px\) \{[^@]*?\n {2}\.setting-options > button \{ min-height: var\(--tap-target\); \}/, "a tap target on a phone");
+  assert.match(body(".content-control-actions button, .content-control-actions a"), /min-height: var\(--control-height-compact\);/, "the same height as the other buttons");
+  assert.ok(styles.indexOf("\n.setting-options {") < styles.indexOf("users-tab:start"), "the rules stand before the users-tab block");
+  // a group class touches only the content of its row: no own margin, frame, heading or row layout.
+  const groupRule = /(?:^|\n)\s*\.(?:content-control-entry|companion-settings|companion-settings-buttons|icon-layout-options|color-options)(?: h2| > div[^{,]*)? \{/;
+  assert.doesNotMatch(styles, groupRule);
+});
+
+// owner 2026-11-20 OWN-11: the figure fades as one layer, so the items no longer show the body through.
+test("OWN-11: the offended Vivian fades as one figure", () => {
+  const lines = styles.split("\n");
+  const line = (start: string) => lines.find((candidate) => candidate.startsWith(start)) ?? "";
+  // 1. Opacity and the grey filter sit once, on the whole figure, without the accent filter.
+  const figure = line(".desktop-assistant.is-offended .assistant-figure {");
+  assert.ok(figure, "the figure has an offended rule");
+  assert.ok(figure.includes("opacity: .78"));
+  assert.ok(figure.includes("filter: brightness(.92) grayscale(.85) saturate(.4)"));
+  assert.ok(!figure.includes("var(--assistant-filter)"), "the accent filter never reaches the figure rule");
+  // 2. The pose stays on the picture and on the items, without their own opacity or grey filter.
+  for (const selector of [".desktop-assistant.is-offended .assistant-button img {", ".desktop-assistant.is-offended .assistant-items {"]) {
+    const pose = line(selector);
+    assert.ok(pose, selector);
+    for (const part of ["translate: 0 4px", "rotate: -3deg", "scale: -1 .94"]) assert.ok(pose.includes(part), `${selector} keeps ${part}`);
+    assert.ok(!pose.includes("opacity") && !pose.includes("filter"), `${selector} has no opacity or filter of its own`);
+  }
+  // 3. The recovery is smooth on the one layer; the reduced mode shortens it.
+  const base = line(".assistant-figure {");
+  assert.ok(base.includes("transition: filter 360ms ease, opacity 360ms ease"));
+  assert.ok(line('html[data-motion="reduced"] .assistant-figure {').includes("transition-duration: var(--motion-fast)"));
+  // 4. The pose animations of the picture and of the items are the same rules, selector aside.
+  const pictureAnimations = lines.filter((candidate) => candidate.includes(".assistant-button img {") && candidate.includes("animation:") && (candidate.includes(".is-offended") || candidate.includes(".is-recovering")));
+  assert.ok(pictureAnimations.length >= 4, "full and reduced motion each have a sulk and a recovery rule");
+  for (const picture of pictureAnimations) assert.ok(lines.includes(picture.replace(".assistant-button img {", ".assistant-items {")), `the items repeat: ${picture.slice(0, 90)}`);
+  assert.ok(lines.some((candidate) => candidate.startsWith('html[data-motion="off"] .desktop-assistant .assistant-items') && candidate.includes("animation: none")), "off: no animation on the items");
+  assert.ok(lines.some((candidate) => candidate.includes('html[data-motion="off"] .desktop-assistant .assistant-button img') && candidate.includes("animation: none")), "off: no animation on the picture");
+  // 5. The accent filter is only on the button (and on the settings stage copy of Vivian), never on the figure or the items.
+  const accentUses = lines.filter((candidate) => candidate.includes("filter: var(--assistant-filter)"));
+  assert.ok(accentUses.some((candidate) => candidate.startsWith(".assistant-button {")));
+  assert.ok(accentUses.every((candidate) => candidate.startsWith(".assistant-button {") || candidate.startsWith(".companion-stage-figure.is-assistant {")), "the accent filter stays on the button");
+  assert.ok(!accentUses.some((candidate) => candidate.includes(".assistant-figure") || candidate.includes(".assistant-items")));
 });
 
 test("shared shortcut hover feedback never translates the icon container", () => {
@@ -554,8 +781,10 @@ test("animated shortcuts keep one precise vector artwork through the resting han
 });
 
 test("guide sections start folded and the compact back control does not cover card content", () => {
-  assert.ok(source.includes('const guideCollapsedStorageKey = "portia-guide-collapsed-v2"'));
-  assert.ok(source.includes("useState<string[]>(() => sections.map((section) => section.id))"));
+  // Owner 2026-11-18: the device stores the OPENED sections, so a section it never saw (a new one) starts folded too.
+  assert.ok(source.includes('const guideExpandedStorageKey = "portia-guide-expanded-v3"'));
+  assert.ok(source.includes("const [expanded, setExpanded] = useState<string[]>([]);"));
+  assert.ok(source.includes("const folded = !expanded.includes(section.id);"));
   assert.doesNotMatch(source, /initialCollapsed\.current/);
   const back = /\.guide-back-bar \{([^}]*)\}/.exec(styles)?.[1] ?? "";
   assert.match(back, /height:\s*36px/);
@@ -811,7 +1040,7 @@ test("«Корзина» shows no restore or delete control on the desktop; the 
 test("«Таблица» and «Устав»: skeleton until onLoad, fatal panel after the 15s timeout, retry remounts the frame; sandbox and zoom stay (STAB-APP-06, T-19-20)", () => {
   const documents = desktopFamily.find((part) => part.file === "portia-desktop-documents.tsx")?.text ?? "";
   const start = documents.indexOf("export function EmbeddedDocument");
-  const embedded = documents.slice(start, documents.indexOf("// v2 starts every section folded", start));
+  const embedded = documents.slice(start, documents.indexOf("// Owner 2026-11-18: v3 stores the sections", start));
   assert.match(embedded, /<iframe[^>]*key=\{frameKey\}[^>]*onLoad=/);
   assert.ok(embedded.includes("sandbox={embedSandbox}"));
   assert.equal(count(documents, "sandbox={embedSandbox}"), 2, "the document frame and the YouTube frame");
@@ -1090,8 +1319,9 @@ test("UI-08 D-14: on a phone a sections bar stands above the article; the two-sc
   assert.ok(info.includes('<span aria-hidden="true">{infoSectionsLabel.glyph}</span>'));
   assert.ok(info.includes('<span className="info-sections-current">{infoSectionsTitle}</span>'));
   assert.ok(source.includes("infoCurrentTitle(content.infoSections, selectedSubsection?.id ?? selectedInfo.id)"));
-  // «Далее» stays in the article.
-  assert.ok(info.includes('<div className="info-next">'));
+  // «Далее» stays in the article (26.1-11: the article is InfoArticle of the seam portia-desktop-info.tsx; the window hands it next and onNext).
+  assert.ok(info.includes("next={infoNext} onNext={goInfoNext}"));
+  assert.ok(source.includes('<div className="info-next">'));
 });
 
 test("UI-08 D-14: the bar exists only on a phone, in the flow; the desktop .info-index rules are unchanged", () => {
@@ -1176,7 +1406,7 @@ test("UI-09 tracer: useShortcutPlacement measures .desktop-icons with a ResizeOb
   // The desktop hands the ref of nav.desktop-icons to the hook and the placed spots to every shortcut.
   assert.ok(source.includes("useShortcutPlacement(desktopIconsRef"), "the desktop calls the hook with the nav ref");
   assert.match(source, /<nav className="desktop-icons" ref=\{desktopIconsRef\}/);
-  assert.equal((source.match(/placed=\{placedShortcut\(shortcutPlacement, "/g) ?? []).length, 11, "all eleven shortcuts get their placed spot");
+  assert.equal((source.match(/placed=\{placedShortcut\(shortcutPlacement, "/g) ?? []).length, 12, "all twelve shortcuts get their placed spot");
   assert.ok(source.includes('"--shortcut-content-height"'), "the workspace grows to the content height");
   // A placed spot wins on this width only; the PC default and the saved-position style stay as they were.
   assert.ok(shortcutsSource.includes("placed ? placedShortcutLayout(placed.position) : position ? savedShortcutLayout(position) : defaultShortcutLayout[shortcutId]"));
@@ -1218,7 +1448,8 @@ test("UI-09: at 521–900px drag and Alt+Arrow work again; only the ≤520px gri
   const move = /const handlePointerMove = [\s\S]*?\n  \};/.exec(shortcutsSource)?.[0] ?? "";
   const finish = /const finishDrag = [\s\S]*?\n  \};/.exec(shortcutsSource)?.[0] ?? "";
   for (const handler of [move, finish, key]) assert.ok(handler.includes("dropBounds("), "the handler clamps inside the placement area on 521–900px");
-  assert.match(shortcutsSource, /const dropBounds = [^\n]*placed \? \{ size: placed\.cell, area: shortcutDropArea\(placed\.area\) \}/);
+  // Owner 2026-11-21 items 29–31: the area is the one of the placement's desktop grid (the PC is placed too now; at 521–900px it is the old drop area).
+  assert.match(shortcutsSource, /const dropBounds = [^\n]*placed \? \{ size: placed\.cell, area: placed\.grid\.area \}/);
   assert.ok(finish.includes("shortcutObstacles(") && key.includes("shortcutObstacles("));
   // The move is saved where it always was and announced the same way.
   assert.match(key, /onAnnounce\?\.\(.Ярлык «\$\{label\}» перемещён.\);/);
@@ -1234,4 +1465,103 @@ test("UI-09: at 521–900px a shortcut label wraps inside the icon width, two li
   }
   // The PC label is not touched: no rule for the label outside this width.
   assert.doesNotMatch(styles.replace(block, ""), /\.desktop-icon-label/);
+});
+
+test("owner 2026-11-18: «Справочник» draws every tile through GuideTile and has no sections column (round 3)", () => {
+  const documents = lf(readFileSync(new URL("../components/portia-desktop-documents.tsx", import.meta.url), "utf8"));
+  assert.equal((documents.match(/className=\{`guide-tile/g) ?? []).length, 1, "the tile markup exists once");
+  assert.equal((documents.match(/<GuideTile /g) ?? []).length, 2, "the section grid and the block «Карточки» use it");
+  assert.doesNotMatch(documents, /guide-index|guide-layout|Разделы справочника/);
+  assert.ok(documents.includes('return <div className="guide-app" ref={scroller} tabIndex={-1}>'));
+  // A tile has one fixed cover ratio (16:10 since owner 2026-11-20): the cover never gets the free ratio of an old frame.
+  assert.ok(documents.includes("tileFraming(item.coverFraming)") && /ratio !== undefined \? \{ x: framing\.x, y: framing\.y, zoom: framing\.zoom \}/.test(documents));
+  assert.match(styles, /\.guide-tile-cover img \{[^}]*object-position: 50% 50%/);
+});
+
+// owner 2026-11-21 item 23: equal tiles; the font shrinks first, the third line is the last resort. (Until 26.1-21 the title wrapped whole, with no
+// line-clamp, and a tile without a cover was a thin row of its own height; both are replaced: every tile is one size.)
+test("owner 2026-11-21 (OWN-01, item 23): a tile title gets a size from lib/guide-tile.ts, in a field of a fixed three lines; the font shrinks first, the third line is the last resort", () => {
+  const documents = lf(readFileSync(new URL("../components/portia-desktop-documents.tsx", import.meta.url), "utf8"));
+  assert.match(documents, /import \{ guideTileTitleFit \} from "@\/lib\/guide-tile"/);
+  assert.match(documents, /data-title-fit=\{guideTileTitleFit\(/, "GuideTile sets data-title-fit; both renderings go through GuideTile");
+  const title = styles.match(/\.guide-tile-title\s*\{([^}]*)\}/)?.[1] ?? "";
+  assert.ok(title.length > 0, "the title rule exists");
+  assert.doesNotMatch(title, /text-overflow|nowrap|min-height/, "no ellipsis, no single line");
+  assert.match(title, /height:\s*calc\(3 \* 1\.3 \* 13px \+ 12px\)/, "a fixed height of three lines of the regular size plus the padding");
+  assert.match(title, /overflow:\s*hidden/);
+  assert.match(title, /-webkit-line-clamp:\s*3/, "only the last resort: the third line is cut when 11px does not fit either");
+  assert.match(title, /font:\s*700 13px\/1\.3/);
+  assert.match(title, /padding:\s*6px 6px/, "the padding lib/guide-tile.ts estimates with");
+  assert.match(title, /overflow-wrap:\s*anywhere/);
+  assert.match(styles, /\.guide-tile\[data-title-fit="small"\] \.guide-tile-title\s*\{[^}]*font-size:\s*12px/);
+  assert.match(styles, /\.guide-tile\[data-title-fit="smaller"\] \.guide-tile-title\s*\{[^}]*font-size:\s*11px/);
+  assert.doesNotMatch(styles, /\.guide-tile[^{}]*\{[^}]*text-overflow:\s*ellipsis/, "no guide tile rule draws an ellipsis");
+});
+
+test("owner 2026-11-21 (item 23): all tiles are one size, with a cover and without; a tile with no cover draws the same 16:10 area with the guide icon; the full title is the tile's title", () => {
+  const documents = lf(readFileSync(new URL("../components/portia-desktop-documents.tsx", import.meta.url), "utf8"));
+  assert.doesNotMatch(documents, /guide-tile-thin/, "no thin tile");
+  assert.doesNotMatch(styles, /\.guide-tile-thin/, "no thin tile rule");
+  assert.match(documents, /<span className="guide-tile-cover is-empty" aria-hidden="true"><PortiaIcon name="guide" className="guide-tile-icon" \/><\/span>/);
+  assert.match(documents, /title=\{item\.title \|\| "Без названия"\}/, "the full title by the pointer");
+  assert.match(styles, /\.guide-tile-cover\.is-empty \{[^}]*display: grid[^}]*place-items: center/);
+  assert.match(styles, /\.guide-grid \{[^}]*grid-auto-rows: 1fr/, "the rows of the grid are one height");
+  assert.match(styles, /\.guide-tile \{[^}]*display: flex[^}]*flex-direction: column/);
+});
+
+// LIVE-04/LIVE-05 (26.1-13): the sweep over the whole family of the visitor's desktop (the window parts and the virus card). The visitor draws no live class and calls no live tool
+// without the answer of useLiveEdit, never provides the context, and never turns a link to a GIF back into text.
+// 26.1-16: the window «Повышение» of the visitor joins the sweep: its three extracted parts (rules, question, tasks) have live places of their own.
+const visitorFamily = [...desktopFamily, { file: "portia-virus-card.tsx", text: lf(readFileSync(new URL("../components/portia-virus-card.tsx", import.meta.url), "utf8")) }, { file: "portia-promotion.tsx", text: lf(readFileSync(new URL("../components/portia-promotion.tsx", import.meta.url), "utf8")) }];
+
+test("LIVE-04 (26.1-13): no component of the visitor draws a live class or calls a live tool outside the answer of useLiveEdit, and none provides the context", () => {
+  const apiCall = /\blive\.(?:text|rich|image|video|cards|addBar|order|date|flag|choice|remove)\(/;
+  const liveClass = /["`]live-[a-z]/;
+  const guarded = /\blive\b\s*(?:\?|&&|!==? null)|if \(!?live\)|\{live\b|live \?/;
+  let uses = 0;
+  for (const { file, text } of visitorFamily) {
+    assert.doesNotMatch(text, /LiveEditContext/, `${file}: only the seam of the editor knows the context object`);
+    assert.doesNotMatch(text, /portia-editor-live/, `${file}: the visitor does not import the seam of the editor`);
+    const lines = text.split("\n");
+    let own = 0;
+    for (const [index, line] of lines.entries()) {
+      if (!apiCall.test(line) && !liveClass.test(line)) continue;
+      own += 1;
+      // a helper that takes the tools as an argument is called only with a non-null answer
+      if (/\(live: LiveEditApi\b/.test(line)) continue;
+      const near = lines.slice(Math.max(0, index - 5), index + 1).join(" ");
+      assert.ok(guarded.test(near), `${file}:${index + 1}: a live class or tool outside a live branch: ${line.trim().slice(0, 100)}`);
+    }
+    if (own) assert.match(text, /\buseLive(?:Edit|Virus)\(/, `${file} asks for the tools before it uses them`);
+    uses += own;
+  }
+  assert.ok(uses > 30, "the sweep really saw the live branches of the visitor's components");
+});
+
+test("LIVE-05 (26.1-13): no component of the visitor and no live surface of the editor turns a link to a GIF back into text", () => {
+  for (const { file, text } of visitorFamily) assert.doesNotMatch(text, /embedMedia=\{false\}/, file); // planner-discipline-allow: embedMedia={false}
+  const seam = lf(readFileSync(new URL("../components/portia-editor-live.tsx", import.meta.url), "utf8"));
+  assert.doesNotMatch(seam, /embedMedia=\{false\}/); // planner-discipline-allow: embedMedia={false}
+  assert.match(seam, /<FormattedText\b[^>]*eagerMedia/, "a text at rest is the visitor's FormattedText, loaded at once");
+  assert.match(seam, /<EmbeddedMediaStrip text=\{text\} eager \/>/, "the GIFs of a text under edit stay on show");
+});
+
+// 26.1-REVIEW-2 WR-04: the picture of a minimised window is taken when it is minimised, and does not outlive the window or the viewer.
+// No DOM here, so this reads the sources (a structural check; the picture itself is UAT).
+test("WR-04 (26.1-REVIEW-2): the last picture of a window is taken at minimise, dropped at close, and dropped when the viewer changes", () => {
+  const seam = desktopFamily.find((part) => part.file === "portia-desktop-taskbar.tsx")?.text ?? "";
+  assert.match(seam, /export function rememberWindowPicture\(app: string\)/);
+  assert.match(seam, /export function forgetWindowPicture\(app: string\)/);
+  assert.match(seam, /export function forgetWindowPictures\(\)\s*\{\s*lastPreviewClone\.clear\(\);/);
+  const cleanup = seam.slice(seam.indexOf("window.clearInterval(timer);"), seam.indexOf("}, [app, minimized]);"));
+  assert.doesNotMatch(cleanup, /lastPreviewClone\.set/, "closing a preview no longer stores a picture (it could be an hour old)");
+  assert.match(source, /if \(kind === "minimize"\) rememberWindowPicture\(appId\);\s*else forgetWindowPicture\(appId\);/, "minimise takes the picture, close drops it");
+  assert.match(source, /forgetWindowPictures\(\);\s*return forgetWindowPictures;\s*\}, \[viewerKey, viewerPerson\]\)/, "a change of the viewer and the end of the desktop drop every picture");
+});
+
+// 26.1-REVIEW-2 IN-02 (in part): the copy of a window loses the classes that would make it a second locked or active window.
+test("IN-02 (26.1-REVIEW-2): the copy of a window is not locked and not active", () => {
+  const seam = desktopFamily.find((part) => part.file === "portia-desktop-taskbar.tsx")?.text ?? "";
+  const clone = seam.slice(seam.indexOf("export function previewCloneOf"), seam.indexOf("type TaskbarPreviewProps"));
+  assert.match(clone, /copy\.classList\.remove\("is-modal-locked", "is-active"\)/);
 });

@@ -1,4 +1,4 @@
-/** Question builder model and the one-line quota summary (quick 261117-px5). Pure; the reviewer module stays untouched. */
+/** Question builder model and the plain composition of the test (quick 261117-px5, OWN-08: quotas removed). Pure; the reviewer module stays untouched. */
 import { validateQuestionDraft, type QualificationQuotas, type QuestionDraft } from "./portia-promotion-reviewer.ts";
 
 export const QUALIFICATION_OPTION_MIN = 2;
@@ -77,27 +77,65 @@ export function builderDraftPayload(draft: BuilderDraft): QuestionDraft | null {
   return validateQuestionDraft({ type: draft.type, text, options, answer: draft.type === "single" ? marked[0] : marked });
 }
 
-// 1, 21, 31 ... «свободный»; every other count «свободных».
-const freeTextWord = (count: number) => (count % 10 === 1 && count % 100 !== 11 ? "свободный" : "свободных");
+// OWN-08 (owner 2026-11-20): the editor has no quotas. The test is every active question of the bank, or the marked ones.
 
-/** One plain line: what a test of these quotas contains and whether the active pool of the bank covers it. */
-export function qualificationQuotaSummary(quotas: QualificationQuotas, pools: QualificationQuotas, bankExists: boolean): { ok: boolean; text: string } {
-  const total = quotas.single + quotas.multiple + quotas.freeText;
-  if (total < 1) return { ok: false, text: "В тесте нет вопросов — задайте хотя бы один." };
-  const compose = (single: number, multiple: number, freeText: number, separator: string) => [
-    single > 0 ? `${single} с одним ответом` : "",
-    multiple > 0 ? `${multiple} с несколькими` : "",
-    freeText > 0 ? `${freeText} ${freeTextWord(freeText)}` : "",
-  ].filter(Boolean).join(separator);
-  const prefix = `В тесте: ${compose(quotas.single, quotas.multiple, quotas.freeText, " · ")}`;
-  if (!bankExists) return { ok: true, text: `${prefix} — банк ещё не создан: сохраните квоты, затем добавьте вопросы.` };
-  const missing = {
-    single: Math.max(0, quotas.single - pools.single),
-    multiple: Math.max(0, quotas.multiple - pools.multiple),
-    freeText: Math.max(0, quotas.freeText - pools.freeText),
-  };
-  if (missing.single + missing.multiple + missing.freeText > 0) {
-    return { ok: false, text: `${prefix} — не хватает активных: ${compose(missing.single, missing.multiple, missing.freeText, ", ")}` };
+/** The limit of portia_promo_confirm_test (1..100 questions) and of the bank counts (each 0..100, sum 1..100). */
+export const QUALIFICATION_TEST_MAX = 100;
+
+type PoolItem = { id?: string; type?: BuilderType; active: boolean; sortOrder?: number };
+
+/** Counts by type of the active questions, or of the active questions among the marked `ids`; no type means free text, like the editor. */
+export function qualificationTestQuotas(items: readonly PoolItem[], ids?: readonly string[]): QualificationQuotas {
+  const marked = ids ? new Set(ids) : null;
+  const counts: QualificationQuotas = { single: 0, multiple: 0, freeText: 0 };
+  for (const item of items) {
+    if (!item.active || (marked && !(item.id !== undefined && marked.has(item.id)))) continue;
+    const type = item.type ?? "free-text";
+    if (type === "single") counts.single += 1;
+    else if (type === "multiple") counts.multiple += 1;
+    else counts.freeText += 1;
   }
-  return { ok: true, text: `${prefix} — в банке хватает ✓` };
+  return counts;
 }
+
+// 1, 21, 31 ... «свободный» / «вопрос»; 2-4 «вопроса»; every other count the plural.
+const freeTextWord = (count: number) => (count % 10 === 1 && count % 100 !== 11 ? "свободный" : "свободных");
+const questionWord = (count: number) => {
+  if (count % 10 === 1 && count % 100 !== 11) return "вопрос";
+  return count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14) ? "вопроса" : "вопросов";
+};
+
+/** One plain line: how many questions the test has and of which types; asks for a question when there is none. */
+export function qualificationTestSummary(pools: QualificationQuotas): string {
+  const total = pools.single + pools.multiple + pools.freeText;
+  if (total < 1) return "Добавьте хотя бы один активный вопрос.";
+  const parts = [
+    pools.single > 0 ? `${pools.single} с одним ответом` : "",
+    pools.multiple > 0 ? `${pools.multiple} с несколькими` : "",
+    pools.freeText > 0 ? `${pools.freeText} ${freeTextWord(pools.freeText)}` : "",
+  ].filter(Boolean).join(" · ");
+  return `В тесте: ${total} ${questionWord(total)} (${parts})`;
+}
+
+/** Every active question in random order; more than QUALIFICATION_TEST_MAX gives a random QUALIFICATION_TEST_MAX of them. The same `random` gives the same set. */
+export function pickAutoQualificationSet(items: readonly (PoolItem & { id: string })[], random: () => number): string[] {
+  const pool = items.filter((item) => item.active).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (let at = pool.length - 1; at > 0; at -= 1) {
+    const other = Math.min(at, Math.max(0, Math.floor(random() * (at + 1))));
+    [pool[at], pool[other]] = [pool[other], pool[at]];
+  }
+  return pool.slice(0, QUALIFICATION_TEST_MAX).map((item) => item.id);
+}
+
+/** Why a set of this size cannot be confirmed; null from 1 to QUALIFICATION_TEST_MAX. */
+export function qualificationSetProblem(count: number): "empty" | "too-large" | null {
+  if (count < 1) return "empty";
+  return count > QUALIFICATION_TEST_MAX ? "too-large" : null;
+}
+
+/** Texts and codes of a set outside the limit: an honest answer, never the «bank changed» conflict. */
+export const qualificationSetMessages = {
+  empty: { code: "empty-set", text: "В наборе нет активных вопросов. Включите или добавьте вопрос." },
+  tooLarge: { code: "set-too-large", text: "В наборе больше 100 вопросов. Уберите лишние." },
+  capped: (activeCount: number) => `В тесте ${QUALIFICATION_TEST_MAX} из ${activeCount} активных вопросов (предел ${QUALIFICATION_TEST_MAX})`,
+} as const;

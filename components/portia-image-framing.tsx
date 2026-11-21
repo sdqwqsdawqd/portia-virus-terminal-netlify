@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { defaultImageFraming, imageFramingLimits, imageFramingStep, imageFramingStyles, normalizeImageFraming, type ImageFraming } from "@/lib/image-framing";
-import { coverFractions, frameAspectFor, framingFromDrag, framingFromKey, framingWithZoom, settleFraming, stageLayout, type FrameKind, type Size, type StageLayout } from "@/lib/image-framing-crop";
+import { coverFractions, frameAspectFor, frameFromHandle, framingFromDrag, framingFromKey, framingFromWindow, framingWithZoom, settleFraming, stageLayout, type FrameHandle, type FrameKind, type Rect, type Size, type StageLayout } from "@/lib/image-framing-crop";
 
 // D-66/D-67 (20-56, replaces the three sliders of D-63 / 20-53): under a picture field of the editor stands a compact block «Видимая часть»: a small preview of what the site
 // shows, in a frame of the proportions of its place, and the button «Изменить». The button opens the dialog «Видимая часть» (a native <dialog> in the top layer, like ConfirmDialog):
@@ -12,7 +12,8 @@ import { coverFractions, frameAspectFor, framingFromDrag, framingFromKey, framin
 // (portia-template-builder.test). Geometry lives in lib/image-framing-crop.ts. Every value that leaves the dialog goes through normalizeImageFraming: the default frame is never stored.
 // The captions are short (D-56) and live here, not in the editor file (D-58).
 
-/** The place of the site the picture is shown in: a band across a «Справочник» section, a 4:3 card cover, or the picture as it lies (dossier, mutation, «Информация», «Корзина»). */
+/** The place of the site the picture is shown in: a band across a «Справочник» section, a 4:3 card cover, the picture as it lies (dossier, mutation, «Информация», «Корзина»),
+ *  or a free frame whose proportions the editor drags (a photo block of a «Справочник» card, owner 2026-11-18). */
 export type ImageFramingBox = FrameKind;
 
 const subscribeResize = (notify: () => void) => {
@@ -26,6 +27,10 @@ const serverViewportWidth = () => 1440;
 const naturalPreviewBox: Size = { width: 200, height: 112 };
 
 function previewStyle(box: ImageFramingBox, aspect: number, natural: Size | undefined): React.CSSProperties {
+  if (box === "free") {
+    const fit = Math.min(naturalPreviewBox.width / aspect, naturalPreviewBox.height);
+    return { width: fit * aspect, height: fit };
+  }
   if (box !== "natural") return { aspectRatio: String(aspect) };
   const fit = natural ? Math.min(naturalPreviewBox.width / natural.width, naturalPreviewBox.height / natural.height) : 0;
   return natural ? { width: natural.width * fit, height: natural.height * fit } : { width: naturalPreviewBox.height * (4 / 3), height: naturalPreviewBox.height };
@@ -51,7 +56,7 @@ function FramingBlock({ src, framing, box, label, onChange }: { src: string; fra
   const [natural, setNatural] = useState<Size | undefined>();
   const viewportWidth = useSyncExternalStore(subscribeResize, readViewportWidth, serverViewportWidth);
   const current = normalizeImageFraming(framing);
-  const aspect = frameAspectFor(box, { image: natural, viewportWidth });
+  const aspect = frameAspectFor(box, { image: natural, viewportWidth, ratio: current?.ratio });
   const reportSize = useCallback((size: Size) => setNatural((previous) => (previous && previous.width === size.width && previous.height === size.height ? previous : size)), []);
 
   // The focus goes back to «Изменить» once the dialog is gone (while it is open the page is inert).
@@ -112,6 +117,12 @@ function keepFocusInside(event: React.KeyboardEvent<HTMLDialogElement>) {
 
 type Drag = { pointerId: number; startX: number; startY: number; framing: ImageFraming; layout: StageLayout };
 
+// Owner 2026-11-18: the frame is also resized by its handles. A place with its own proportions (band, cover, a dossier picture) keeps them, so its four
+// corners and four edges change only the zoom; a free frame changes its proportions as well.
+const frameHandles: FrameHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+/** The ratio of a free frame survives the helpers of the crop module, which know only x, y and zoom. */
+const keepRatio = (framing: ImageFraming, ratio: number | undefined): ImageFraming => (ratio === undefined ? framing : { ...framing, ratio });
+
 function FramingDialog({ src, label, box, initial, natural, onSize, viewportWidth, onApply, onCancel }: {
   src: string;
   label: string;
@@ -133,10 +144,13 @@ function FramingDialog({ src, label, box, initial, natural, onSize, viewportWidt
   // The state of the window is its own: the draft of the editor changes only on «Применить».
   const [draft, setDraft] = useState<ImageFraming>(initial ?? { ...defaultImageFraming });
   const [stage, setStage] = useState<Size | undefined>();
+  // While a handle is dragged the picture stands still and the frame follows the pointer; the framing is computed when the handle is let go.
+  const [resizing, setResizing] = useState<{ image: Rect; frame: Rect } | null>(null);
 
-  const aspect = frameAspectFor(box, { image: natural, viewportWidth });
+  const aspect = frameAspectFor(box, { image: natural, viewportWidth, ratio: draft.ratio });
   const cover = natural ? coverFractions(natural, aspect) : undefined;
   const layout = natural && stage ? stageLayout({ image: natural, frameAspect: aspect, framing: draft, stage }) : undefined;
+  const shown = resizing ?? (layout ? { image: layout.image, frame: layout.frame } : undefined);
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -163,15 +177,53 @@ function FramingDialog({ src, label, box, initial, natural, onSize, viewportWidt
   useEffect(() => { if (imageRef.current?.complete && imageRef.current.naturalWidth) onSize({ width: imageRef.current.naturalWidth, height: imageRef.current.naturalHeight }); }, [onSize]);
   useEffect(() => () => stopDragRef.current?.(), []);
 
-  const setZoom = (zoom: number) => setDraft((previous) => (cover ? framingWithZoom(previous, zoom, cover) : { ...previous, zoom }));
-  const apply = () => onApply(normalizeImageFraming(cover ? settleFraming(draft, cover) : draft));
+  const setZoom = (zoom: number) => setDraft((previous) => keepRatio(cover ? framingWithZoom(previous, zoom, cover) : { ...previous, zoom }, previous.ratio));
+  const apply = () => onApply(normalizeImageFraming(keepRatio(cover ? settleFraming(draft, cover) : draft, draft.ratio)));
+
+  const onHandlePointerDown = (handle: FrameHandle) => (event: React.PointerEvent<HTMLSpanElement>) => {
+    if (!layout || (event.pointerType === "mouse" && event.button !== 0)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    stopDragRef.current?.();
+    const pointerId = event.pointerId;
+    const start = { x: event.clientX, y: event.clientY };
+    const image = layout.image;
+    const frame0 = layout.frame;
+    const keepAspect = box !== "free";
+    // The zoom limit: the frame never shows less than a third of the share it covers at 100%.
+    const minWidth = keepAspect ? (layout.cover.fw / 3) * image.width : 0;
+    const minHeight = keepAspect ? (layout.cover.fh / 3) * image.height : 0;
+    let last: Rect = frame0;
+    setResizing({ image, frame: frame0 });
+    const move = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== pointerId) return;
+      last = frameFromHandle(frame0, image, handle, { dx: moveEvent.clientX - start.x, dy: moveEvent.clientY - start.y }, keepAspect, minWidth, minHeight);
+      setResizing({ image, frame: last });
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      stopDragRef.current = null;
+      setResizing(null);
+    };
+    const end = (endEvent: PointerEvent) => {
+      if (endEvent.pointerId !== pointerId) return;
+      if (last !== frame0) setDraft(framingFromWindow(image, last, box));
+      stop();
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+    stopDragRef.current = stop;
+  };
 
   const onStageKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (!event.key.startsWith("Arrow")) return;
     // The arrows belong to the picture here, not to the window of the editor or the desktop behind the dialog.
     event.preventDefault();
     event.stopPropagation();
-    if (layout) setDraft(framingFromKey(draft, event.key, layout));
+    if (layout) setDraft(keepRatio(framingFromKey(draft, event.key, layout), draft.ratio));
   };
 
   const onStagePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -185,7 +237,7 @@ function FramingDialog({ src, label, box, initial, natural, onSize, viewportWidt
     try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* the window listeners below are enough */ }
     const move = (moveEvent: PointerEvent) => {
       if (moveEvent.pointerId !== drag.pointerId) return;
-      setDraft(framingFromDrag(drag.framing, { dx: moveEvent.clientX - drag.startX, dy: moveEvent.clientY - drag.startY }, drag.layout));
+      setDraft(keepRatio(framingFromDrag(drag.framing, { dx: moveEvent.clientX - drag.startX, dy: moveEvent.clientY - drag.startY }, drag.layout), drag.framing.ratio));
     };
     const stop = () => {
       window.removeEventListener("pointermove", move);
@@ -235,11 +287,12 @@ function FramingDialog({ src, label, box, initial, natural, onSize, viewportWidt
         {!layout && <span className="portia-image-skeleton" aria-hidden="true" />}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img ref={imageRef} className="image-framing-dim" src={src} alt="" draggable={false} decoding="async" referrerPolicy="no-referrer" onLoad={(event) => { if (event.currentTarget.naturalWidth) onSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight }); }}
-          style={layout ? { left: layout.image.x, top: layout.image.y, width: layout.image.width, height: layout.image.height } : { visibility: "hidden" }} />
-        {layout && <div className="image-framing-window" style={{ left: layout.frame.x, top: layout.frame.y, width: layout.frame.width, height: layout.frame.height }}>
+          style={shown ? { left: shown.image.x, top: shown.image.y, width: shown.image.width, height: shown.image.height } : { visibility: "hidden" }} />
+        {shown && <div className={`image-framing-window${resizing ? " is-resizing" : ""}`} style={{ left: shown.frame.x, top: shown.frame.y, width: shown.frame.width, height: shown.frame.height }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img className="image-framing-lit" src={src} alt="" aria-hidden="true" draggable={false} decoding="async" referrerPolicy="no-referrer"
-            style={{ left: layout.image.x - layout.frame.x, top: layout.image.y - layout.frame.y, width: layout.image.width, height: layout.image.height }} />
+            style={{ left: shown.image.x - shown.frame.x, top: shown.image.y - shown.frame.y, width: shown.image.width, height: shown.image.height }} />
+          {frameHandles.map((handle) => <span key={handle} className={`image-framing-handle is-${handle}`} aria-hidden="true" onPointerDown={onHandlePointerDown(handle)} />)}
         </div>}
       </div>
       <div className="image-framing-zoom">
