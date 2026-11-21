@@ -1577,3 +1577,11 @@ test("WR-01 (26.1-REVIEW-2): only a refusal keeps the typed text; the answer of 
   assert.equal(liveCommitSucceeded(true), true);
   assert.equal(liveCommitSucceeded(undefined), true, "a commit that answers nothing is done");
 });
+
+// 26.1-REVIEW-2 WR-02 / IN-03: no jsdom here, so this one reads the source (a structural check, not a behaviour check; the behaviour is the unit tests above and UAT).
+test("WR-02 (26.1-REVIEW-2): the live mode of «Повышения» keeps the ordinary editors mounted (hidden) and gives each branch its own live surface", () => {
+  const promo = read("components/portia-promotion-editor-main.tsx");
+  assert.match(promo, /<div hidden=\{live\}[^>]*>\s*\{branch === "tasks" \? <PortiaPromotionOrdinaryEditor[\s\S]*?<PortiaPromotionQualificationEditor[\s\S]*?<\/div>/, "the ordinary editors are inside a wrapper that is hidden, not unmounted, by the live mode");
+  assert.doesNotMatch(promo, /live \? <PromotionLiveSurface[^\n]*: branch === "tasks" \?/, "the ordinary editors are not the else-branch of the live mode");
+  assert.match(promo, /\{live && <PromotionLiveSurface key=\{branch\}/, "a change of the branch starts a fresh live surface (message, dialog, pending order)");
+});
