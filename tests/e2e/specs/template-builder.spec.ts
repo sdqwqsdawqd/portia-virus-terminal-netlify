@@ -5,7 +5,7 @@ import { deflateSync } from "node:zlib";
 import type { Browser, Locator, Page, Request, TestInfo, ViewportSize } from "@playwright/test";
 import { DesktopPage } from "../pages/desktop.page";
 import { PromotionPage } from "../pages/promotion.page";
-import { templateExportViolations } from "../../../lib/portia-template-export.ts";
+import { templateDownloadName, templateExportViolations } from "../../../lib/portia-template-export.ts";
 import { classificationOptions } from "../../../lib/portia-content.ts";
 import { portiaContentFixture } from "../../../lib/testing/portia-content-fixture.ts";
 import { deterministicContract } from "../fixtures/determinism";
@@ -185,11 +185,13 @@ async function styleFirstWord(page: Page, builder: Locator, field: Locator, word
   await expect(panel).toHaveCount(0);
 }
 
-async function downloadHtml(page: Page, builder: Locator, testInfo: TestInfo, fileName = "shablon-dosye.html") {
+// OWN-12 (owner 2026-11-21, item 24; 26.1-18): the file is named after the virus, `{name}.html`; a virus without a usable name keeps the old `shablon-dosye.html`.
+// `virusName` is the name the scenario typed into the virus (the field «Название» of the main tab), "" when it typed none. `fileName` is only where the file is saved for the checks.
+async function downloadHtml(page: Page, builder: Locator, testInfo: TestInfo, virusName: string, fileName = "template.html") {
   const pending = page.waitForEvent("download");
   await builder.getByRole("button", { name: "Скачать HTML" }).click();
   const file = await pending;
-  expect(file.suggestedFilename()).toBe("shablon-dosye.html");
+  expect(file.suggestedFilename()).toBe(templateDownloadName(virusName, "html"));
   const target = testInfo.outputPath(fileName);
   await file.saveAs(target);
   return { html: await readFile(target, "utf8"), target };
@@ -284,7 +286,7 @@ test("[STAB-TMPL-01] styling: a ready style on a word reaches the preview span a
   await expect(styled).toHaveCSS("font-size", "22px");
   await expect(preview.locator(".formatted-content span", { hasText: "и далее" })).not.toHaveCSS("font-weight", "800");
 
-  const { html } = await downloadHtml(page, builder, testInfo);
+  const { html } = await downloadHtml(page, builder, testInfo, "Вирус с оформлением");
   expect(html).toMatch(/<span style="font-size: 22px; font-weight: 800;">Слово<\/span>/);
   expect(html).toContain("и далее");
   expect(html).not.toMatch(/<script/i);
@@ -338,7 +340,8 @@ test("[STAB-TMPL-01] mutations: add two, style the second, delete the first - on
   await expect(preview.getByRole("img", { name: "Вторая" })).toBeVisible();
 
   await expect(builder.getByRole("button", { name: "Скачать HTML" })).toBeEnabled();
-  const { html } = await downloadHtml(page, builder, testInfo);
+  // here «Название» is the name of a mutation; the virus has none, so the file keeps the old name (shablon-dosye.html)
+  const { html } = await downloadHtml(page, builder, testInfo, "");
   expect(html).toContain("M-01");
   expect(html).not.toContain("M-02");
   expect(html).toContain("<h4>Вторая</h4>");
@@ -367,7 +370,7 @@ test("[STAB-TMPL-01] classification: a changed value shows in the preview and th
   await expect(spread).toContainText("Тезей");
   await expect(spread).toContainText("УРОВЕНЬ 2");
 
-  const { html } = await downloadHtml(page, builder, testInfo);
+  const { html } = await downloadHtml(page, builder, testInfo, "Вирус с классом");
   expect(html).toContain("Апейрон</strong><small>УРОВЕНЬ 3</small>");
   expect(html).toContain("Тезей</strong><small>УРОВЕНЬ 2</small>");
   expect(writes).toEqual([]);
@@ -455,7 +458,7 @@ test("[STAB-TMPL-01] D-55 the downloaded HTML is the archive card", async ({ pag
   const group = builder.locator("section.editor-group", { has: page.getByRole("heading", { name: "Классификация" }) });
   await group.locator("select").nth(0).selectOption("Апейрон"); // level 3
 
-  const { html, target } = await downloadHtml(page, builder, testInfo);
+  const { html, target } = await downloadHtml(page, builder, testInfo, "Вирус из файла");
   await keepExport(testInfo, target, "template-html");
   expect(html).toContain('class="record-view');
   expect(html).toContain("classification-panel");
@@ -503,8 +506,8 @@ test("[STAB-TMPL-01] D-55 the downloaded PNG is the archive card", async ({ page
   const pending = page.waitForEvent("download");
   await builder.getByRole("button", { name: "Скачать PNG" }).click();
   const file = await pending;
-  expect(file.suggestedFilename()).toBe("shablon-dosye.png");
-  const target = testInfo.outputPath("shablon-dosye.png");
+  expect(file.suggestedFilename()).toBe("Вирус из растра.png"); // OWN-12: named after the virus
+  const target = testInfo.outputPath("template.png");
   await file.saveAs(target);
   await keepExport(testInfo, target, "template-png");
   const bytes = await readFile(target);
@@ -544,7 +547,7 @@ test("[STAB-TMPL-01] a local image and long text reach the preview, the offline 
   await expect(preview.locator("figure.subject-media figcaption")).toHaveText("Фото после заражения");
 
   // HTML: the image is embedded, nothing points at a server, and it opens offline.
-  const { html, target: htmlPath } = await downloadHtml(page, builder, testInfo);
+  const { html, target: htmlPath } = await downloadHtml(page, builder, testInfo, "Вирус с картинкой");
   expect(html).toMatch(/<img [^>]*src="data:image\/png;base64,/);
   expect(html).not.toMatch(/(?:src|href)=["']?(?:https?:)?\/\//i);
   expect(html).not.toMatch(/<script|<link|url\(/i);
@@ -572,8 +575,8 @@ test("[STAB-TMPL-01] a local image and long text reach the preview, the offline 
   await builder.getByRole("button", { name: "Скачать PNG" }).click();
   await expect(builder.getByRole("status")).toHaveText("Готовим файл…");
   const pngFile = await pngDownload;
-  expect(pngFile.suggestedFilename()).toBe("shablon-dosye.png");
-  const pngPath = testInfo.outputPath("shablon-dosye.png");
+  expect(pngFile.suggestedFilename()).toBe("Вирус с картинкой.png"); // OWN-12: named after the virus
+  const pngPath = testInfo.outputPath("template.png");
   await pngFile.saveAs(pngPath);
   const pngBytes = await readFile(pngPath);
   expect([...pngBytes.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -714,11 +717,11 @@ test("[STAB-TMPL-01] an encoding failure keeps the draft, shows a status and ret
   await page.evaluate(() => { (window as unknown as { __pngMode?: string }).__pngMode = undefined; });
   const retried = page.waitForEvent("download");
   await builder.getByRole("button", { name: "Повторить скачивание" }).click();
-  expect((await retried).suggestedFilename()).toBe("shablon-dosye.png");
+  expect((await retried).suggestedFilename()).toBe("Черновик остаётся.png"); // OWN-12: named after the virus
   await expect(builder.getByRole("status")).toContainText("Файл скачан на устройство");
   await expect(builder.getByRole("alert")).toHaveCount(0);
   await expect(builder.getByRole("button", { name: "Повторить скачивание" })).toHaveCount(0);
-  expect(downloads).toEqual(["shablon-dosye.png"]);
+  expect(downloads).toEqual(["Черновик остаётся.png"]);
   expect(writes).toEqual([]);
 });
 
@@ -739,7 +742,8 @@ test("[STAB-TMPL-01] a card too long for PNG is refused with an HTML alternative
   await expect(builder.getByRole("button", { name: "Повторить скачивание" })).toHaveCount(0);
   expect(downloads).toEqual([]);
 
-  const { html } = await downloadHtml(page, builder, testInfo, "long.html");
+  // the name is cut at 80 characters (templateDownloadName)
+  const { html } = await downloadHtml(page, builder, testInfo, "Д".repeat(110), "long.html");
   // Both fields keep all 1999 typed lines; nothing is cut.
   expect(html.split("п\n").length - 1).toBe(2 * 1999);
   await expect(builder.getByRole("alert")).toHaveCount(0);
@@ -913,7 +917,7 @@ test("[STAB-TMPL-01] participant builds a text template, downloads it and opens 
   await expect(download).toBeEnabled();
   expect(downloads).toHaveLength(1);
 
-  const savedPath = testInfo.outputPath("shablon-dosye.html");
+  const savedPath = testInfo.outputPath("template.html"); // the name of the file on disk is the check's own; the virus name here is markup and is cleaned by templateDownloadName
   await file.saveAs(savedPath);
   const html = await readFile(savedPath, "utf8");
   expectNoExecutableContent(html);
@@ -1048,7 +1052,7 @@ for (const format of ["HTML", "PNG"] as const) {
       const retry = builder.getByRole("button", { name: "Повторить скачивание" });
       testInfo.annotations.push({ type: "d61-outcome", description: `${testInfo.project.name} ${format}: ${fileName === null ? "no file" : `file ${fileName}`}; page errors: ${JSON.stringify(browserErrors)}` });
       if (fileName !== null) {
-        expect(fileName).toBe(format === "PNG" ? "shablon-dosye.png" : "shablon-dosye.html");
+        expect(fileName).toBe(format === "PNG" ? "Скачанный шаблон.png" : "Скачанный шаблон.html"); // OWN-12: named after the virus
         await expect(builder.getByRole("status")).toContainText("Файл скачан на устройство");
         await expect(exportAlert).toHaveCount(0);
         await expect(builder.getByRole("alert")).toHaveCount(0);
@@ -1144,7 +1148,7 @@ test("[STAB-TMPL-01] D-60 class values stay whole in the preview and in the down
     sizes.push("pc-maximized");
   }
 
-  const { html, target } = await downloadHtml(page, builder, testInfo, "classes.html");
+  const { html, target } = await downloadHtml(page, builder, testInfo, "Класс без переноса", "classes.html");
   // The rule travels into the file with the card (templateCardCss), so the file is read at the card's own width and at a phone's.
   expect(html).toContain("class-cell");
   // D-65 (20-55): the rule is the size of the value by the width of its cell (not below 12 px) and no break inside a word, not columns by value.
@@ -1342,7 +1346,7 @@ test("[STAB-TMPL-01] D-65 the card is laid out like the archive's record: photo 
   expectValuesFit(frame.values, "export frame (source of the PNG)");
 
   // The downloaded file at the card's own width: the same hero, grid and values.
-  const { target } = await downloadHtml(page, builder, testInfo, "layout.html");
+  const { target } = await downloadHtml(page, builder, testInfo, "Раскладка как в базе", "layout.html");
   const offline = await browser.newContext({ offline: true, locale: "ru-RU", viewport: { width: 1060, height: 900 } });
   try {
     const filePage = await offline.newPage();
@@ -1420,7 +1424,7 @@ test("[STAB-TMPL-01] D-65 on a phone the card is laid out like the archive's rec
   expect(card.pageOverflow, "the page does not scroll sideways").toBeLessThanOrEqual(0);
 
   // The downloaded file at a phone's width: the same layout as the archive on the phone.
-  const { target } = await downloadHtml(page, builder, testInfo, "phone.html");
+  const { target } = await downloadHtml(page, builder, testInfo, "Телефон как в базе", "phone.html");
   const offline = await browser.newContext({ offline: true, locale: "ru-RU", viewport: { width: 412, height: 900 } });
   try {
     const filePage = await offline.newPage();
