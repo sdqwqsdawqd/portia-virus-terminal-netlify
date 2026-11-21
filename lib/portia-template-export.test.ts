@@ -403,6 +403,12 @@ test("templateDownloadName names the file after the virus and keeps Cyrillic", (
   assert.equal(templateDownloadName("Тест Ж-1", "png"), "Тест Ж-1.png");
 });
 
+// 26.1-REVIEW-2 CR-03: the e2e scenario of a too-long card has no virus name; the cut of a long name is checked here instead.
+test("templateDownloadName cuts a long name at 80 characters and names an empty one by default", () => {
+  assert.equal(templateDownloadName("Д".repeat(110), "html"), `${"Д".repeat(80)}.html`);
+  assert.equal(templateDownloadName("", "html"), "shablon-dosye.html");
+});
+
 test("templateDownloadName drops characters a file name cannot carry and trims edges", () => {
   assert.equal(templateDownloadName("a/b:c*?", "png"), "abc.png");
   assert.equal(templateDownloadName('<a>"b"|c\d', "html"), "abcd.html");

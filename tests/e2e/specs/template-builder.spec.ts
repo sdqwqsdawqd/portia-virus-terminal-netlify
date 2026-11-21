@@ -742,8 +742,9 @@ test("[STAB-TMPL-01] a card too long for PNG is refused with an HTML alternative
   await expect(builder.getByRole("button", { name: "Повторить скачивание" })).toHaveCount(0);
   expect(downloads).toEqual([]);
 
-  // the name is cut at 80 characters (templateDownloadName)
-  const { html } = await downloadHtml(page, builder, testInfo, "Д".repeat(110), "long.html");
+  // The virus has no name in this scenario (the name is typed only in the next one), so the file keeps the default name (templateDownloadName("")).
+  // The cut at 80 characters is checked by the unit test of templateDownloadName.
+  const { html } = await downloadHtml(page, builder, testInfo, "", "long.html");
   // Both fields keep all 1999 typed lines; nothing is cut.
   expect(html.split("п\n").length - 1).toBe(2 * 1999);
   await expect(builder.getByRole("alert")).toHaveCount(0);
