@@ -2997,6 +2997,18 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 .promo-live .promotion-free-answer textarea:disabled, .promo-live .promotion-question input:disabled { cursor: default; }
 .promo-live-readonly { display: block; white-space: pre-wrap; overflow-wrap: anywhere; }
 .promo-live-empty { margin: 0; color: var(--muted); font: 400 13px/1.5 var(--doc); }
+/* LIVE-01..04 (26.1-19): живой «Доступ» — экраны ворот посетителя (его классы: access-card, access-status, access-error) в рамке просмотра; рамка ворот .access-gate не меняется. Шрифты — от 11px. */
+.access-live-bar { justify-content: flex-end; padding: 12px 24px 0; }
+.access-live { display: grid; gap: 10px; padding: 12px 24px 24px; }
+.access-live-states { display: flex; flex-wrap: wrap; gap: 6px; }
+.access-live-state { min-height: 32px; padding: 0 12px; border: 1px solid var(--line); background: transparent; color: var(--muted); font: 700 11px var(--sans); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.access-live-state:hover { border-color: var(--teal-dim); }
+.access-live-state[aria-selected="true"] { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); }
+.access-live-note, .access-preview-note { margin: 0; color: var(--muted); font: 400 13px/1.5 var(--doc); }
+.access-gate-live { display: grid; place-items: center; min-height: 520px; padding: 24px; border: 1px solid var(--line); background: var(--bg); color: var(--paper); overflow: auto; }
+.access-gate-live .access-card { box-shadow: none; }
+.access-gate-live .access-card button:disabled { cursor: not-allowed; }
+@media (max-width: 900px) { .access-live-state { min-height: var(--tap-target); } .access-live-bar, .access-live { padding-left: 12px; padding-right: 12px; } }
 /* users-tab:start — Phase 22 «Пользователи» (USR-01..USR-09): sharp corners, values from 22-UI-SPEC, nothing else in the file changes */
 .tab-count { min-width: 24px; margin-left: 8px; padding: 0 8px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px/1.35 var(--mono); text-align: center; }
 .users-tab { display: grid; gap: 24px; min-width: 0; }

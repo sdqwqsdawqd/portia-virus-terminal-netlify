@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { AccessGateScreen } from "@/components/portia-access-gate";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { AccessGateScreen, type AccessGateFormState } from "@/components/portia-access-gate-screen";
 import { GuideApp } from "@/components/portia-desktop-documents";
 import { RowBadges, ScientistDocument, VirusRecord } from "@/components/portia-desktop-dossier";
 import { BroadcastCard, BroadcastsHeader, InfoArticle, broadcastTabs } from "@/components/portia-desktop-info";
@@ -11,13 +11,12 @@ import { FormattedTextarea, findFormatField, type FormatTarget } from "@/compone
 import { LevelPicker } from "@/components/portia-level-picker";
 import { LiveEditContext, type LiveEditApi } from "@/components/portia-live-edit";
 import { EmbeddedMediaStrip, FormattedText } from "@/components/portia-virus-card";
-import { accessGateLayout, type AccessGateView } from "@/lib/access-gate-view";
-import type { AccessOrigin } from "@/lib/access-levels";
+import { accessGateLayout } from "@/lib/access-gate-view";
 import { localDateKey, type BroadcastTab } from "@/lib/broadcasts";
 import type { ImageFraming } from "@/lib/image-framing";
 import {
-  applyLiveAdd, applyLiveCards, applyLiveChoice, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveLogText, applyLiveMove, applyLivePhrase, applyLiveRemove, applyLiveSettings, applyLiveText, findLiveVirus, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveFormatKey, liveNewId, livePhraseLines, livePhraseSlice, liveRecycleKeys, liveRemovedKeys, liveSettingsOk, liveTextKey, LIVE_PHRASE_GROUPS, LIVE_SEAM_TABS,
-  type LiveAddKind, type LiveApp, type LivePhraseGroup, type LiveCardsTarget, type LiveChoiceTarget, type LiveContainer, type LiveDateTarget, type LiveFlagTarget, type LiveImageTarget, type LiveList, type LiveRemovable, type LiveSettingsPatch, type LiveTarget,
+  accessPreviewStates, applyLiveAdd, applyLiveCards, applyLiveChoice, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveLogText, applyLiveMove, applyLivePhrase, applyLiveRemove, applyLiveSettings, applyLiveText, findLiveVirus, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveFormatKey, liveNewId, livePhraseLines, livePhraseSlice, liveRecycleKeys, liveRemovedKeys, liveSettingsOk, liveTextKey, LIVE_PHRASE_GROUPS, LIVE_SEAM_TABS,
+  type AccessPreviewId, type LiveAddKind, type LiveApp, type LivePhraseGroup, type LiveCardsTarget, type LiveChoiceTarget, type LiveContainer, type LiveDateTarget, type LiveFlagTarget, type LiveImageTarget, type LiveList, type LiveRemovable, type LiveSettingsPatch, type LiveTarget,
 } from "@/lib/live-edit";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
 import { findGuide, findInfo, type PortiaContent, type RichTextDocument } from "@/lib/portia-content";
@@ -197,7 +196,13 @@ export const liveCopy = {
   cardsGroup: "Карточки блока",
   cardsFull: "Выбрано 24",
   /** «Доступ» (26.1-19): the preview of the visitor's gate screens. */
-  access: { surface: "Экран посетителя", submitNote: "Просмотр: заявка не отправляется" },
+  access: {
+    surface: "Экран посетителя",
+    states: "Состояние экрана",
+    stateLabels: { checking: "Проверка", form: "Форма", "form-error": "Ошибка формы", pending: "Ожидание", approved: "Одобрено", rejected: "Отклонено", revoked: "Отозвано", error: "Ошибка связи" } satisfies Record<AccessPreviewId, string>,
+    note: "Тексты экранов — часть сайта",
+    submitNote: "Просмотр: заявка не отправляется",
+  },
 } as const;
 
 /** Everything the editor hands the live mode: the draft and the ways to change it, the format panel, the upload, and the choices the tabs keep. */
@@ -954,25 +959,40 @@ export function LiveRemove({ bridge, item, title }: { bridge: LiveEditorBridge; 
 
 // The one under review in the sense of access is a visitor who files a request. Their screens are code of the site, not data of the draft, so the preview shows them
 // and edits nothing. It makes no request and touches no storage of the device: the screen is handed fixed samples and handlers that only keep what is typed here.
-const accessFormView: AccessGateView = { kind: "decision", decision: { mode: "closed", state: { state: "none" }, allowed: false, level: null, editor: false } };
-
+// The decision of the checkpoint (owner 2026-11-21, 26.1-OWNER-REQUEST item 25): option A - a preview in every state, texts not edited; editing them would need a new field readable without access.
 /**
  * The tab «Доступ» of the editor: the button «ЖИВОЙ РЕЖИМ» above the accounts of the editors (`manager`, kept mounted so nothing typed there is lost) and, with the mode on,
- * the screens of the visitor's gate in place of it.
+ * the screens of the visitor's gate in place of it, one tab per state (lib/live-edit.ts, accessPreviewStates). The texts of the screens are code of the site: shown, not edited.
  */
 export function AccessLiveTab({ manager }: { manager: ReactNode }) {
   const [on, setOn] = useState(false);
+  const [current, setCurrent] = useState<AccessPreviewId>("form");
   const [nickname, setNickname] = useState("");
-  const [origin, setOrigin] = useState<AccessOrigin | null>(null);
+  const [origin, setOrigin] = useState<AccessGateFormState["origin"]>(null);
+  const state = accessPreviewStates.find((item) => item.id === current) ?? accessPreviewStates[0];
+  // arrows move between the tabs of the states (the pattern of a tab list); the tab picked gets the focus
+  const move = (event: KeyboardEvent<HTMLDivElement>) => {
+    const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+    if (!step) return;
+    event.preventDefault();
+    const at = accessPreviewStates.findIndex((item) => item.id === state.id);
+    const next = accessPreviewStates[(at + step + accessPreviewStates.length) % accessPreviewStates.length];
+    setCurrent(next.id);
+    event.currentTarget.querySelector<HTMLElement>(`[data-state="${next.id}"]`)?.focus();
+  };
   return <>
-    <div className="etab-actions access-live-bar"><LiveModeToggle on={on} onToggle={() => setOn((current) => !current)} /></div>
+    <div className="etab-actions access-live-bar"><LiveModeToggle on={on} onToggle={() => setOn((value) => !value)} /></div>
     <div hidden={on}>{manager}</div>
     {on && <div className="live-surface access-live" data-live-app="access" role="group" aria-label={liveCopy.access.surface}>
-      <div className="access-gate-live">
+      <div className="access-live-states" role="tablist" aria-label={liveCopy.access.states} onKeyDown={move}>
+        {accessPreviewStates.map((item) => <button key={item.id} type="button" role="tab" className="access-live-state" data-state={item.id} aria-selected={item.id === state.id} tabIndex={item.id === state.id ? 0 : -1} onClick={() => setCurrent(item.id)}>{liveCopy.access.stateLabels[item.id]}</button>)}
+      </div>
+      <p className="access-live-note">{liveCopy.access.note}</p>
+      <div className="access-gate-live" role="tabpanel">
         <AccessGateScreen
-          layout={accessGateLayout(accessFormView, true)}
-          checking={false}
-          form={{ nickname, origin, submitting: false, formError: "", fieldErrors: { nickname: false, origin: false } }}
+          layout={accessGateLayout(state.view, true)}
+          checking={state.view.kind === "checking"}
+          form={{ nickname, origin, submitting: false, formError: "", fieldErrors: state.fieldErrors }}
           onNickname={setNickname}
           onOrigin={setOrigin}
           onSubmit={(event) => event.preventDefault()}

@@ -524,7 +524,8 @@ test("UI-05: the window markup keeps three controls with close last and none on 
 const CORNER_SELECTORS = [".corner-close", ".custom-color-picker-head .corner-close", ".floating-text-format > header .corner-close"];
 // The five crosses under guard: the request card, the two notification toasts, the colour picker, the format panel.
 const cornerCrossSites = [
-  { file: "components/portia-access-gate.tsx", label: "Закрыть заявку", count: 1, keep: "access-close" },
+  // 26.1-19: the request card is drawn by components/portia-access-gate-screen.tsx now (the gate and the live «Доступ» of the editor share it)
+  { file: "components/portia-access-gate-screen.tsx", label: "Закрыть заявку", count: 1, keep: "access-close" },
   { file: "components/portia-access-gate.tsx", label: "Закрыть уведомление", count: 1, keep: "quest-toast-close" },
   { file: "components/portia-desktop.tsx", label: "Закрыть уведомление", count: 2, keep: "quest-toast-close" },
   { file: "components/custom-color-picker.tsx", label: "Закрыть выбор цвета", count: 1, keep: null },

@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS } from "./content-limits.ts";
-import { LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText, liveRecycleKeys, applyLivePhrase, liveFormatKey, livePhraseLines, livePhraseSlice, applyLiveSettings, liveSettingsOk, LIVE_SEAM_TABS, PROMO_NEW_TASK_TEXT, promoMoveId, promoNewQuestion, promoNextOrder, promoOrderChanges, promoQuestionEdit } from "./live-edit.ts";
+import { accessPreviewStates, LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText, liveRecycleKeys, applyLivePhrase, liveFormatKey, livePhraseLines, livePhraseSlice, applyLiveSettings, liveSettingsOk, LIVE_SEAM_TABS, PROMO_NEW_TASK_TEXT, promoMoveId, promoNewQuestion, promoNextOrder, promoOrderChanges, promoQuestionEdit } from "./live-edit.ts";
 import { broadcastFeed } from "./broadcasts.ts";
+import { accessGateLayout } from "./access-gate-view.ts";
 import { validateQuestionDraft } from "./portia-promotion-reviewer.ts";
 import { portiaTextKey, type PortiaContent } from "./portia-content.ts";
 
@@ -1455,14 +1456,74 @@ test("LIVE-02/04 (26.1-19, T-26.1-46): the live preview of the gate makes no req
   assert.match(tab, /<AccessGateScreen\b/);
   assert.match(tab, /onSubmit=\{\(event\) => event\.preventDefault\(\)\}/, "a submit sends nothing");
   assert.match(tab, /preview=\{/, "the submit button is locked");
+  // the screen has a file of its own: the gate carries device caches and the session, which must not come into the graph of the editor's seam (the builder's import-graph test)
+  const screenFile = read("components/portia-access-gate-screen.tsx");
+  const screen = sliceOf(screenFile, "export function AccessGateScreen");
+  assert.doesNotMatch(screenFile, /fetch\(|localStorage|sessionStorage|useEffect|document\.|from "@\/lib\/(?!access-gate-view|access-levels)/, "the extracted screen only draws and calls what it is given");
+  assert.match(screenFile, /^import type\b/m, "types and React only");
+  assert.match(screen, /export function AccessGateScreen\(/);
   const gate = read("components/portia-access-gate.tsx");
-  const screen = sliceOf(gate, "export function AccessGateScreen");
-  assert.doesNotMatch(screen, /fetch\(|localStorage|sessionStorage|useEffect|document\./, "the extracted screen only draws and calls what it is given");
-  assert.match(gate, /export function AccessGateScreen\(/);
+  assert.match(gate, /from "@\/components\/portia-access-gate-screen"/);
   assert.match(gate, /<AccessGateScreen\b/, "the gate draws its card by the extracted screen");
+  assert.doesNotMatch(gate, /<section className="access-card"/, "the card markup lives in the screen only");
   const live = sliceOf(gate, "export function PortiaAccessGate");
   for (const request of ['fetch("/api/access/status"', 'fetch("/api/access/request"', "clearDeviceContentCaches", "claimApprovedNotice", "purgeLegacyDeviceCaches"]) assert.ok(live.includes(request), `the gate keeps ${request}`);
-  assert.match(gate, /disabled=\{form\.submitting \|\| !!preview\}/);
+  assert.match(screenFile, /disabled=\{form\.submitting \|\| !!preview\}/);
   // without the preview the ids and the markup are the gate's own
-  assert.match(gate, /const prefix = preview \? "access-preview" : "access";/);
+  assert.match(screenFile, /const prefix = preview \? "access-preview" : "access";/);
+  assert.match(screenFile, /onClick=\{preview \? \(event\) => event\.preventDefault\(\) : undefined\}>ВХОД ДЛЯ РЕДАКТОРА/, "the preview does not follow the editor-login link");
+});
+
+test("LIVE-02 (26.1-19): the sample states of the visitor's gate cover every screen; each is a valid input of the layout and gives the screen it names", () => {
+  assert.deepEqual(accessPreviewStates.map((item) => item.id), ["checking", "form", "form-error", "pending", "approved", "rejected", "revoked", "error"]);
+  assert.equal(new Set(accessPreviewStates.map((item) => item.id)).size, accessPreviewStates.length, "no state twice");
+  const layouts = Object.fromEntries(accessPreviewStates.map((item) => [item.id, accessGateLayout(item.view, true)]));
+  for (const item of accessPreviewStates) {
+    const layout = layouts[item.id];
+    assert.equal(layout.showCard, true, `${item.id}: the card is on show`);
+    assert.equal(layout.desktop, false, `${item.id}: a screen before the desktop`);
+    assert.equal(layout.showReopen, false, item.id);
+  }
+  assert.equal(accessPreviewStates[0].view.kind, "checking");
+  assert.deepEqual([layouts.checking.showForm, layouts.checking.showError, layouts.checking.status], [false, false, null]);
+  assert.deepEqual([layouts.form.showForm, layouts.form.status], [true, null]);
+  assert.deepEqual([layouts["form-error"].showForm, layouts["form-error"].status], [true, null]);
+  assert.deepEqual([layouts.pending.showForm, layouts.pending.status], [false, "pending"]);
+  assert.deepEqual([layouts.approved.showForm, layouts.approved.status], [false, "approved"]);
+  assert.deepEqual([layouts.rejected.showForm, layouts.rejected.status], [true, "rejected"]);
+  assert.deepEqual([layouts.revoked.showForm, layouts.revoked.status], [true, "revoked"]);
+  assert.deepEqual([layouts.error.showForm, layouts.error.showError], [false, true]);
+  // the errors of the form are shown by the state «Ошибка формы» only
+  assert.deepEqual(accessPreviewStates.filter((item) => item.fieldErrors.nickname || item.fieldErrors.origin).map((item) => item.id), ["form-error"]);
+});
+
+test("LIVE-02 (26.1-19): the states are tabs of the preview; the screens, their texts and the note stay code of the site", () => {
+  const seam = read("components/portia-editor-live.tsx");
+  const tab = sliceOf(seam, "export function AccessLiveTab");
+  assert.match(tab, /role="tablist"/);
+  assert.match(tab, /role="tab"/);
+  assert.match(tab, /aria-selected=\{/);
+  assert.match(tab, /accessPreviewStates\.map\(/);
+  assert.match(tab, /<AccessGateScreen\b/);
+  const copy = seam.slice(seam.indexOf("access: {"), seam.indexOf("} as const;", seam.indexOf("access: {")));
+  const note = /note: "([^"]+)"/.exec(copy)?.[1] ?? "";
+  assert.equal(note, "Тексты экранов — часть сайта", "option A of the checkpoint: one short line that the texts are not edited here");
+  assert.ok(note.split(/\s+/).length <= 7, "D-56: at most seven words");
+  for (const id of ["checking", "form", "form-error", "pending", "approved", "rejected", "revoked", "error"]) assert.ok(copy.includes(`"${id}"`) || copy.includes(`${id}:`), `a label for ${id}`);
+  assert.match(tab, /liveCopy\.access\.note/);
+  // the preview edits nothing: no live tool, no change of the draft
+  assert.doesNotMatch(tab, /changeDraft|bridge|LiveEditContext|applyLive/);
+});
+
+test("LIVE-04 (26.1-19): the preview styles stand after the live block and before users-tab, in fonts of 11px and more", () => {
+  const css = read("app/portia.css");
+  const at = css.indexOf(".access-gate-live {");
+  assert.ok(at > css.indexOf(".live-surface { width: 100%"), "after the live block");
+  assert.ok(at < css.indexOf("/* users-tab:start"), "before users-tab");
+  assert.ok(css.indexOf("/* users-tab:start") < css.indexOf("/* ui-unify:start"), "users-tab stands before ui-unify");
+  const block = css.slice(at, css.indexOf("/* users-tab:start"));
+  assert.doesNotMatch(block, /font(?:-size)?:[^;}]*\b(?:9|10)px/);
+  // the gate's own rules are not changed by the preview: the fixed full-screen frame stays the gate's
+  assert.match(css, /^\.access-gate \{ position: fixed; inset: 0;/m);
+  assert.doesNotMatch(block, /\.access-gate \{/);
 });

@@ -37,6 +37,43 @@ const liveAppOfTab: Record<LiveTab, LiveApp> = { guide: "guide", info: "info", b
  */
 export const LIVE_SEAM_TABS = ["promo", "access"] as const;
 
+/** The screens of the visitor's gate the preview of «Доступа» can show (26.1-19), in the order of its tabs. */
+export type AccessPreviewId = "checking" | "form" | "form-error" | "pending" | "approved" | "rejected" | "revoked" | "error";
+
+/**
+ * The state of a request in a sample, in the shape of the gate's own (lib/access-store.ts). Both shapes below are written out, not imported: this file is in the import graph of the template builder,
+ * which must hold no module of the access side, not even for a type. The checks of the shapes are the uses: the preview hands `view` to `accessGateLayout`, and the test does too.
+ */
+type SampleRequest =
+  | { state: "none" }
+  | { state: "pending"; nickname: string }
+  | { state: "approved"; nickname: string; level: 1; origin: "outside" }
+  | { state: "rejected" | "revoked"; nickname: string; retryAt: null };
+
+/** The view of a sample, as an input of `accessGateLayout` (lib/access-gate-view.ts): the check, the connection error, or an answer of a gate with the closure on. */
+export type AccessPreviewView = { kind: "checking" } | { kind: "error" } | { kind: "decision"; decision: { mode: "closed"; state: SampleRequest; allowed: false; level: null; editor: false } };
+
+/** A sample state of the gate: the view the gate would hold and the errors the request form shows with it. */
+export type AccessPreviewState = { id: AccessPreviewId; view: AccessPreviewView; fieldErrors: { nickname: boolean; origin: boolean } };
+
+const noErrors = { nickname: false, origin: false };
+const closed = (state: SampleRequest): AccessPreviewView => ({ kind: "decision", decision: { mode: "closed", state, allowed: false, level: null, editor: false } });
+
+/**
+ * «Доступ» in the live mode (26.1-19, owner 2026-11-21, item 13): the screens of a visitor who files a request, each by a sample state of the gate. None of them is a real answer of the server
+ * (no nickname of a person, no level of a person); the preview draws them without a request. Closure is on in every sample, so «Отклонено» and «Отозвано» keep their texts (D-09, D-21).
+ */
+export const accessPreviewStates: readonly AccessPreviewState[] = [
+  { id: "checking", view: { kind: "checking" }, fieldErrors: noErrors },
+  { id: "form", view: closed({ state: "none" }), fieldErrors: noErrors },
+  { id: "form-error", view: closed({ state: "none" }), fieldErrors: { nickname: true, origin: true } },
+  { id: "pending", view: closed({ state: "pending", nickname: "Nickname" }), fieldErrors: noErrors },
+  { id: "approved", view: closed({ state: "approved", nickname: "Nickname", level: 1, origin: "outside" }), fieldErrors: noErrors },
+  { id: "rejected", view: closed({ state: "rejected", nickname: "Nickname", retryAt: null }), fieldErrors: noErrors },
+  { id: "revoked", view: closed({ state: "revoked", nickname: "Nickname", retryAt: null }), fieldErrors: noErrors },
+  { id: "error", view: { kind: "error" }, fieldErrors: noErrors },
+];
+
 /** The app the live mode of an editor tab shows; null where the tab has none. */
 export function liveAppForTab(tab: string): LiveApp | null {
   return (LIVE_TABS as readonly string[]).includes(tab) ? liveAppOfTab[tab as LiveTab] : null;
