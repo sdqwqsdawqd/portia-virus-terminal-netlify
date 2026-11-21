@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { MAX_BLOCKS, MAX_SCIENTIST_LOGS, MAX_SUBSECTIONS } from "./content-limits.ts";
-import { accessPreviewStates, LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText, liveRecycleKeys, applyLivePhrase, liveFormatKey, livePhraseLines, livePhraseSlice, applyLiveSettings, liveSettingsOk, LIVE_SEAM_TABS, PROMO_NEW_TASK_TEXT, promoMoveId, promoNewQuestion, promoNextOrder, promoOrderChanges, promoQuestionEdit, liveCommitDecision, createLiveCommandQueue, runLivePayloads } from "./live-edit.ts";
+import { accessPreviewStates, LIVE_EXCLUDED, LIVE_TABS, TEXT_LIMIT, applyLiveAdd, applyLiveCards, applyLiveFraming, applyLiveImage, applyLiveMove, applyLiveRemove, applyLiveText, liveAddKinds, liveAppForTab, liveMediaUrls, liveAddBlocked, liveBroadcastFeed, liveContainerFull, liveNewId, liveRemovedKeys, liveTextKey, applyLiveDate, applyLiveFlag, liveDateError, applyLiveChoice, applyLiveLogText, liveRecycleKeys, applyLivePhrase, liveFormatKey, livePhraseLines, livePhraseSlice, applyLiveSettings, liveSettingsOk, LIVE_SEAM_TABS, PROMO_NEW_TASK_TEXT, promoMoveId, promoNewQuestion, promoNextOrder, promoOrderChanges, promoQuestionEdit, liveCommitDecision, liveCommitSucceeded, createLiveCommandQueue, runLivePayloads } from "./live-edit.ts";
 import { broadcastFeed } from "./broadcasts.ts";
 import { accessGateLayout } from "./access-gate-view.ts";
 import { validateQuestionDraft } from "./portia-promotion-reviewer.ts";
@@ -1569,4 +1569,11 @@ test("CR-02 (26.1-REVIEW-2): the commands of a changed order are sent in turn an
   assert.deepEqual(sent, ["a", "b"], "nothing is sent after the refusal");
   assert.equal((await runLivePayloads([{ id: "a" }], async () => ({ }))).ok, false, "an answer without the state is not a save");
   assert.deepEqual(await runLivePayloads([], takes(null)), { ok: true, done: 0, last: null });
+});
+
+// 26.1-REVIEW-2 WR-01: a text the server did not take is kept in its place.
+test("WR-01 (26.1-REVIEW-2): only a refusal keeps the typed text; the answer of nothing is still «done»", () => {
+  assert.equal(liveCommitSucceeded(false), false, "a refused text stays where it was typed");
+  assert.equal(liveCommitSucceeded(true), true);
+  assert.equal(liveCommitSucceeded(undefined), true, "a commit that answers nothing is done");
 });

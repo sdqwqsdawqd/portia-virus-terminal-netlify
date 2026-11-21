@@ -15,7 +15,7 @@ import { accessGateLayout } from "@/lib/access-gate-view";
 import { localDateKey, type BroadcastTab } from "@/lib/broadcasts";
 import type { ImageFraming } from "@/lib/image-framing";
 import {
-  accessPreviewStates, applyLiveAdd, applyLiveCards, applyLiveChoice, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveLogText, applyLiveMove, applyLivePhrase, applyLiveRemove, applyLiveSettings, applyLiveText, findLiveVirus, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveCommitDecision, liveFormatKey, liveNewId, livePhraseLines, livePhraseSlice, liveRecycleKeys, liveRemovedKeys, liveSettingsOk, liveTextKey, LIVE_PHRASE_GROUPS, LIVE_SEAM_TABS,
+  accessPreviewStates, applyLiveAdd, applyLiveCards, applyLiveChoice, applyLiveDate, applyLiveFlag, applyLiveFraming, applyLiveImage, applyLiveLogText, applyLiveMove, applyLivePhrase, applyLiveRemove, applyLiveSettings, applyLiveText, findLiveVirus, liveAddBlocked, liveAddKinds, liveAppForTab, liveBroadcastFeed, liveDateError, liveCommitDecision, liveCommitSucceeded, liveFormatKey, liveNewId, livePhraseLines, livePhraseSlice, liveRecycleKeys, liveRemovedKeys, liveSettingsOk, liveTextKey, LIVE_PHRASE_GROUPS, LIVE_SEAM_TABS,
   type AccessPreviewId, type LiveAddKind, type LiveApp, type LivePhraseGroup, type LiveCardsTarget, type LiveChoiceTarget, type LiveContainer, type LiveDateTarget, type LiveFlagTarget, type LiveImageTarget, type LiveList, type LiveRemovable, type LiveSettingsPatch, type LiveTarget,
 } from "@/lib/live-edit";
 import { parseYoutubeId } from "@/lib/portia-content-normalize";
@@ -117,6 +117,7 @@ export const liveCopy = {
     transition: "Переход",
     saving: "Сохраняем изменения…",
     notSaved: "Изменения не сохранены. Проверьте данные.",
+    conflictKept: "Данные изменились. Текст остался в поле.",
     refused: "Не сохранено: проверьте текст и варианты.",
     refusedTask: "Не сохранено: текст не пустой.",
     answerError: "Проверьте варианты и ответ.",
@@ -646,16 +647,18 @@ export function LiveText({ bridge, target, value, className }: { bridge: LiveEdi
 /**
  * 26.1-16: a text in place that is written once, when the place is left: for data that is not in the draft (the banks of «Повышения»), where each keystroke cannot be a command.
  * What is typed stays on the screen while the command runs; Escape puts the saved text back and writes nothing; a paste is plain text (T-26.1-22); a single line ends with Enter.
- * `onCommit` gets the text as typed and answers when the command is done; a text that equals the saved one (but for the ends) sends no command.
+ * `onCommit` gets the text as typed and answers when the command is done: `false` says the server did not take it, and the text stays where it was typed; a text that equals the saved one (but for the ends) sends no command.
  */
-export function LiveCommitText({ value, onCommit, label, placeholder, className, multiline = false, maxLength }: { value: string; onCommit: (raw: string) => Promise<unknown> | void; label: string; placeholder?: string; className?: string; multiline?: boolean; maxLength?: number }) {
+export function LiveCommitText({ value, onCommit, label, placeholder, className, multiline = false, maxLength }: { value: string; onCommit: (raw: string) => Promise<boolean | void>; label: string; placeholder?: string; className?: string; multiline?: boolean; maxLength?: number }) {
   const ref = useRef<HTMLSpanElement>(null);
   const [typed, setTyped] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
-  // a place that is not being typed in shows the saved text, but never while its own command runs (the typed text would flash back)
+  // a text the server did not take stays in its place, marked, until it is left again or given up with Escape (26.1-REVIEW-2 WR-01)
+  const [failed, setFailed] = useState(false);
+  // a place that is not being typed in shows the saved text, but never while its own command runs (the typed text would flash back) or while it keeps a refused text
   useLayoutEffect(() => {
     const element = ref.current;
-    if (!element || running || window.document.activeElement === element || element.textContent === value) return;
+    if (!element || running || typed !== null || window.document.activeElement === element || element.textContent === value) return;
     element.textContent = value;
   });
   // Escape sets this before it blurs the place: the blur runs inside the same key handler, where `typed` still holds the text that is being given up (26.1-REVIEW-2 CR-01).
@@ -663,9 +666,15 @@ export function LiveCommitText({ value, onCommit, label, placeholder, className,
   const commit = (raw: string) => {
     const skip = cancelled.current;
     cancelled.current = false;
-    if (liveCommitDecision({ raw, saved: value, cancelled: skip }) === "skip") { setTyped(null); return; }
+    if (liveCommitDecision({ raw, saved: value, cancelled: skip }) === "skip") { setTyped(null); setFailed(false); return; }
     setRunning(true);
-    void Promise.resolve(onCommit(raw)).catch(() => undefined).finally(() => { setTyped(null); setRunning(false); });
+    setFailed(false);
+    // `false` (or a throw) is a refusal: the typed text is kept, never put back to the saved one
+    void Promise.resolve(onCommit(raw)).then(liveCommitSucceeded, () => false).then((saved) => {
+      setRunning(false);
+      if (saved) setTyped(null);
+      else { setTyped(raw); setFailed(true); }
+    });
   };
   if (multiline) {
     const shown = typed ?? value;
@@ -675,6 +684,7 @@ export function LiveCommitText({ value, onCommit, label, placeholder, className,
       rows={Math.max(3, shown.split("\n").length)}
       maxLength={maxLength}
       aria-label={label}
+      aria-invalid={failed || undefined}
       placeholder={placeholder}
       onChange={(event) => setTyped(event.target.value)}
       onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); cancelled.current = true; setTyped(null); event.currentTarget.blur(); } }}
@@ -688,6 +698,7 @@ export function LiveCommitText({ value, onCommit, label, placeholder, className,
     suppressContentEditableWarning
     role="textbox"
     aria-label={label}
+    aria-invalid={failed || undefined}
     data-placeholder={placeholder}
     spellCheck
     onKeyDown={(event) => {

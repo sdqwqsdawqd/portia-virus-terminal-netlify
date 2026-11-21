@@ -187,22 +187,22 @@ function PromotionLiveSurface({ kind, banks, busy, post, requestConfirm }: { kin
     return body ? [{ action: "save-question", bankId, questionId, ...body }] : liveCopy.promo.refused;
   };
 
-  const commitText = async (target: LiveTarget, raw: string) => {
-    if (!bank) return;
+  // Answers whether the server took the text: a place that was not taken keeps what was typed (26.1-REVIEW-2 WR-01).
+  const commitText = async (target: LiveTarget, raw: string): Promise<boolean> => {
+    if (!bank) return false;
     const bankId = bank.id;
-    if (target.kind === "promo-rules") { await run({ action: "save-qualification-rules", transitionId: transition.transitionId, rulesText: raw }, "Правила сохранены."); return; }
+    if (target.kind === "promo-rules") return (await run({ action: "save-qualification-rules", transitionId: transition.transitionId, rulesText: raw }, "Правила сохранены.")) !== null;
     if (target.kind === "promo-task-text") {
       const taskId = target.taskId;
-      if (!items.some((entry) => entry.id === taskId)) return;
-      if (!raw.trim()) { refuse(liveCopy.promo.refusedTask); return; }
-      await runCommands(() => { const task = itemNow(bankId, taskId); return task ? [taskBody(bankId, task, { text: raw })] : []; }, "Задание обновлено.");
-      return;
+      if (!items.some((entry) => entry.id === taskId)) return false;
+      if (!raw.trim()) { refuse(liveCopy.promo.refusedTask); return false; }
+      return (await runCommands(() => { const task = itemNow(bankId, taskId); return task ? [taskBody(bankId, task, { text: raw })] : []; }, "Задание обновлено.")) !== null;
     }
-    if (target.kind !== "promo-question-text" && target.kind !== "promo-question-option") return;
+    if (target.kind !== "promo-question-text" && target.kind !== "promo-question-option") return false;
     const questionId = target.questionId;
-    if (!items.some((entry) => entry.id === questionId)) return;
+    if (!items.some((entry) => entry.id === questionId)) return false;
     const edit = target.kind === "promo-question-text" ? { text: raw } : { option: target.index, text: raw };
-    await runCommands(() => questionCommand(bankId, questionId, edit), "Вопрос обновлён.");
+    return (await runCommands(() => questionCommand(bankId, questionId, edit), "Вопрос обновлён.")) !== null;
   };
 
   const rulesAvailable = Boolean(bank) && typeof bank?.rulesText === "string";
@@ -382,7 +382,7 @@ export function PromotionEditorMain({ visible, canManageEditors }: { visible: bo
   if (denied) return <div className="promotion-editor"><div className="empty-state" role="alert"><strong>Доступ закрыт</strong></div></div>;
   return <div className="promotion-editor">
     <EditorActionBar label="Разделы повышения" nav={<nav className="promotion-editor-branches" aria-label="Разделы повышения">{([['requests','ЗАПРОСЫ',ordinaryCount + qualificationCount],['tasks','ЗАДАНИЯ',banks.taskBanks.length],['qualification','КВАЛИФИКАЦИЯ',qualificationCount]] as const).map(([id,label,count]) => <button key={id} type="button" className={branch === id ? "active" : ""} aria-current={branch === id ? "true" : undefined} aria-label={`${label}: ${count}`} onKeyDown={moveButtonTab} onClick={() => { setBranch(id); if (id === "requests") { setKind("ordinary"); setSelectedRequestId(""); } setRequestView("queue"); }}>{label}<span className="tab-count" aria-hidden="true">{count}</span></button>)}{!isPhone && deviceReset}</nav>} statusText={message} tone={message ? (note.ok ? "saved" : "error") : ""} actions={<LiveModeToggle on={live} onToggle={() => setLive((current) => !current)} />} />
-    {message && conflict && <div className="promotion-editor-conflict"><p>Данные изменились. Ваш ввод сохранён.</p><div><button type="button" onClick={() => void (branch === "requests" ? loadQueue() : Promise.all([loadQueue(), loadBanks()]))}>Загрузить их версию</button><button type="button" onClick={() => { setConflict(false); setMessage(""); }}>Оставить мой ввод</button></div></div>}
+    {message && conflict && <div className="promotion-editor-conflict"><p>{live && branch !== "requests" ? liveCopy.promo.conflictKept : "Данные изменились. Ваш ввод сохранён."}</p><div><button type="button" onClick={() => void (branch === "requests" ? loadQueue() : Promise.all([loadQueue(), loadBanks()]))}>Загрузить их версию</button><button type="button" onClick={() => { setConflict(false); setMessage(""); }}>Оставить мой ввод</button></div></div>}
     {branch === "requests" ? <>
       <div className="promotion-requests-toolbar">
       <div className="promotion-queue-filters" role="group" aria-label="Типы запросов"><button type="button" className={kind === "ordinary" ? "active" : ""} aria-pressed={kind === "ordinary"} aria-label={`Обычное повышение: ${ordinaryCount}`} onKeyDown={moveButtonTab} onClick={() => { setKind("ordinary"); setSelectedRequestId(""); setRequestView("queue"); }}>ОБЫЧНОЕ ПОВЫШЕНИЕ <span aria-hidden="true">{ordinaryCount}</span></button><button type="button" className={kind === "qualification" ? "active" : ""} aria-pressed={kind === "qualification"} aria-label={`Квалификация: ${qualificationCount}`} onKeyDown={moveButtonTab} onClick={() => { setKind("qualification"); setSelectedRequestId(""); setRequestView("queue"); }}>КВАЛИФИКАЦИЯ <span aria-hidden="true">{qualificationCount}</span></button></div>

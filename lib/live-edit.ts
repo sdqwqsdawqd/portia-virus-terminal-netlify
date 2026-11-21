@@ -1030,6 +1030,11 @@ export function liveCommitDecision(input: { raw: string; saved: string; cancelle
   return input.raw.trim() === input.saved.trim() ? "skip" : "commit";
 }
 
+/** 26.1-REVIEW-2 WR-01: the answer of a commit. Only `false` is a refusal (an answer of nothing is the old «done»); a refused text is kept in its place, not put back. */
+export function liveCommitSucceeded(answer: unknown): boolean {
+  return answer !== false;
+}
+
 /** One command of the banks at a time, in the order they were asked for (26.1-REVIEW-2 CR-02): a task starts when the one before it is done, whether that one worked or not. */
 export type LiveCommandQueue = {
   /** Runs `task` after every task queued before it. The result is the task's own; a task that throws rejects only its own promise. */
