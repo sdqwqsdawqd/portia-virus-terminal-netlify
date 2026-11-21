@@ -2886,7 +2886,8 @@ html[data-motion="off"] .assistant-button:hover + .assistant-items, html[data-mo
 .live-surface .guide-app { height: auto; overflow: visible; }
 .etab-actions button.live-toggle { min-height: 32px; padding: 0 12px; font-size: 11px; letter-spacing: .08em; }
 .etab-actions button.live-toggle[aria-pressed="true"] { border-color: var(--teal); background: var(--teal-soft); color: var(--teal); }
-.live-editable { outline: 1px dashed transparent; outline-offset: 2px; cursor: text; }
+/* 26.1-27 (владелец, п. 33): место правки — это сам текст участника: шрифт, кегль, межстрочный интервал и цвет — от исходного элемента, своих отступов, рамки и фона нет; обводка — outline, размер не меняется. */
+.live-editable { margin: 0; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; line-height: inherit; letter-spacing: inherit; outline: 1px dashed transparent; outline-offset: 2px; cursor: text; }
 .live-editable:hover, .live-editable:focus, .live-editable:focus-visible { outline-color: var(--teal); }
 span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55; }
 .live-rich { display: block; min-height: 1.6em; }
@@ -2961,7 +2962,11 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 .live-surface .virus-list .order-drag-handle { grid-template-columns: none; }
 .live-surface .record-view { max-height: none; }
 .live-surface .record-header .live-editable { display: inline-block; min-width: 3ch; }
-.live-surface .record-status .live-editable { min-width: 6ch; }
+/* 26.1-27 (владелец, п. 33): плашка состояния растёт по набранному тексту — ширина по тексту (без предела 140px телефона), длинный текст переносится, высота растёт; точка стоит у первой строки и не сжимается.
+   Правило участника `.record-status span` (красная точка 7px) задевает и место правки — оно возвращается к обычному тексту. */
+.live-surface .record-status { width: fit-content; max-width: 100%; height: auto; align-items: flex-start; white-space: normal; }
+.live-surface .record-status > span:first-child { flex: none; margin-top: calc((1lh - 7px) / 2); }
+.live-surface .record-status .live-editable { flex: 0 1 auto; width: auto; height: auto; border-radius: 0; background: transparent; white-space: normal; overflow-wrap: anywhere; }
 /* 26.1-12: классификация, фото, мутации и записи учёных. Выпадающее окно стоит на тёмной панели, поэтому цвет текста задан, а не унаследован от бумаги карточки. */
 .live-choice { display: inline-block; max-width: 100%; }
 .live-surface .live-choice-button { max-width: 100%; min-height: 24px; padding: 0 6px; border: 1px dashed var(--line-bright); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
