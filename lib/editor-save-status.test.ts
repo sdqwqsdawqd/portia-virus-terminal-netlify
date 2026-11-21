@@ -411,3 +411,13 @@ test("«ОТОЗВАТЬ» asks first through ConfirmDialog and is disabled whil
   assert.doesNotMatch(region, /onClick=\{\(\) => void removeEditor\(editor\.email\)\}/);
   assert.match(region, /label: "ОТМЕНА", tone: "secondary", autoFocus: true/);
 });
+
+// 26.1-20 (owner 2026-11-21, item 20, T-26.1-48): the compact mark is not the only sign of a failed save: its colour follows the state and the reasons stay a live alert.
+test("26.1-20: the compact unsaved mark tells an error from a plain unsaved state by colour, and the reasons stay announced", () => {
+  const shell = readFileSync(new URL("../components/portia-editor-tab-shell.tsx", import.meta.url), "utf8");
+  assert.match(shell, /data-tone=\{notice \? "saved" : tone \|\| "dirty"\}/, "the tone of the mark is the tone of the status");
+  assert.match(styles, /\.etab-unsaved-mark\[data-tone="error"\][^{]*\{[^}]*color:\s*#e07d74/, "an error is the same red as the status line");
+  assert.match(styles, /\.etab-unsaved-mark\[data-tone="dirty"\][^{]*\{[^}]*color:\s*var\(--warning\)/, "unsaved is the warning colour");
+  assert.ok(lf(shell).includes('<p key={index} className="etab-message" role="alert">'), "every reason is still an alert paragraph");
+  assert.equal(saveStatusText("dirty"), "Есть несохранённые изменения", "the full text for the details and the live region is the same vocabulary");
+});

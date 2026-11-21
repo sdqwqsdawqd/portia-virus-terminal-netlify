@@ -1130,3 +1130,55 @@ test("owner 2026-11-21 item 17: the editor gives the strip of the guide cards it
   assert.ok(guide.includes("В разделе нет карточек. Добавьте первую кнопкой «+ ДОБАВИТЬ КАРТОЧКУ»."), "the empty section still names the button");
   assert.ok(!stripComments(editor).includes("<button className=\"secondary-control limit-add\" type=\"button\" disabled={section.cards.length"), "no limit-add button of the cards left in the file");
 });
+
+// ---- 26.1-20 (owner 2026-11-21, item 20): несохранённые изменения — компактная отметка справа вверху ----
+test("owner 2026-11-21 item 20: what took the room of the section tabs on «Информация» is named: a no-wrap status line of about forty characters, and the reasons as full-width rows", () => {
+  // The finding of 26.1-20 Task 3, held as facts of the sheet: in the bar the status paragraph is not shrinkable text but a no-wrap line that stands beside the nav and the buttons.
+  assert.equal(declared(".etab-bar .etab-status.editor-save-status", "white-space"), "nowrap", "the long status stays one line, so it keeps its width instead of wrapping");
+  assert.equal(declared(".etab-nav", "flex"), "1 1 auto", "the section tabs get what is left");
+  assert.equal(declared(".etab-nav", "min-width"), "0");
+  assert.equal(declared(".etab-message", "padding"), "0 16px", "a reason is a row of the whole bar width under it");
+});
+
+test("owner 2026-11-21 item 20: the unsaved changes are a small mark at the right end of the bar; the full line and the reasons are in the details, one live region stays", () => {
+  const code = stripComments(shell);
+  assert.ok(code.includes('className="etab-unsaved"') && code.includes("Не сохранено: ${unsavedCount}"), "the mark says «Не сохранено: N» and nothing about sections");
+  assert.ok(code.includes("const compact = unsavedCount > 0 || Boolean(notice);"), "the mark replaces the long line while there is something unsaved or a notice; otherwise nothing changes");
+  assert.match(code, /className=\{`etab-status editor-save-status \$\{notice \? "saved" : tone\}`\} role="status" aria-live="polite" data-compact=\{compact \|\| undefined\}/, "the one live region keeps the full text, only its look changes");
+  const barStart = code.indexOf('<section className="etab-bar" aria-label={label}>');
+  const barEnd = code.indexOf("</section>", barStart);
+  const bar = code.slice(barStart, barEnd);
+  assert.ok(bar.indexOf('className="etab-actions"') < bar.indexOf("<UnsavedMark"), "the mark is the last of the row, the right corner");
+  assert.ok(bar.includes("{compact && <UnsavedMark"), "no mark without something unsaved");
+  assert.ok(!bar.includes("<BarMessages"), "the reasons are not drawn as rows of the bar");
+  const mark = code.slice(code.indexOf("function UnsavedMark"), code.indexOf("export function EditorActionBar"));
+  assert.ok(mark.includes('type="button"') && mark.includes("aria-expanded={open}") && mark.includes("aria-controls={detailsId}"), "the mark is a button that tells whether the details are shown");
+  assert.ok(mark.includes("onMouseEnter") && mark.includes("onMouseLeave") && mark.includes("onFocus") && mark.includes("onBlur"), "details on hover and on focus");
+  assert.ok(mark.includes('event.key !== "Escape"') && mark.includes("setOpen(false)"), "Escape closes the details");
+  assert.ok(mark.includes('className="etab-unsaved-details"') && mark.includes("data-open={open || undefined}"), "the details are always in the tree and shown by data-open, so a screen reader reads the reasons and the keyboard reaches their buttons");
+  assert.ok(mark.includes("<BarMessages messages={messages} />") && mark.includes("{status}"), "the details hold the full line and the reasons, each reason still role=alert");
+  assert.ok(mark.includes("data-tone={"), "T-26.1-48: the mark changes colour with the state of the save");
+  assert.doesNotMatch(code, /dangerouslySetInnerHTML/);
+  // The old rows stay where they were for a bar without the mark.
+  assert.ok(code.includes("{compact ? null : <BarMessages messages={messages} />}") || code.includes("{!compact && <BarMessages messages={messages} />}"), "without the mark the reasons are rows as before");
+  assert.equal(code.split('role="status"').length - 1, 1, "R05: one live region in the shell (the draft row is not live)");
+});
+
+test("owner 2026-11-21 item 20: the mark is 28px on a PC and a tap target on a phone, 11-13px font; the long status goes out of the row without leaving the tree; the details are a popup", () => {
+  assert.equal(declared(".etab-bar > .etab-unsaved", "flex"), "none");
+  assert.equal(declared(".etab-unsaved > .etab-unsaved-mark", "min-height"), "28px");
+  assert.equal(declared(".etab-unsaved > .etab-unsaved-mark", "min-height", PHONE), "var(--tap-target)");
+  const size = Number.parseFloat((declared(".etab-unsaved > .etab-unsaved-mark", "font") ?? "").match(/(\d+)px/)?.[1] ?? "NaN");
+  assert.ok(size >= 11 && size <= 13, "font 11-13px");
+  assert.equal(declared(".etab-status[data-compact]", "position"), "absolute", "the long line leaves the row, so the tabs get its width");
+  assert.equal(declared(".etab-status[data-compact]", "clip"), "rect(0, 0, 0, 0)", "but stays read by a screen reader");
+  assert.equal(declared(".etab-unsaved-details", "position"), "absolute");
+  assert.equal(declared(".etab-unsaved-details", "right"), "0");
+  assert.equal(declared(".etab-unsaved-details:not([data-open])", "clip-path"), "inset(50%)", "closed: out of sight, in the tree");
+  assert.equal(declared(".etab-unsaved-details .etab-message", "padding"), "0", "the reasons in the details are not rows of the bar width");
+  for (const tone of ["error", "conflict", "saved", "partial"]) {
+    assert.ok(styles.includes(`.etab-unsaved-mark[data-tone="${tone}"]`) || styles.includes(`[data-tone="${tone}"]`), `${tone} has its colour`);
+  }
+  assert.ok(styles.indexOf(".etab-unsaved") < styles.indexOf("/* users-tab:start"), "the new rules stand before users-tab");
+  assert.ok(styles.trimEnd().endsWith("/* ui-unify:end */"), "the block of ui-unify stays the last");
+});

@@ -579,6 +579,23 @@ html[data-motion="full"] .portia-image-skeleton { background: linear-gradient(10
    Only colours and fonts here: the layout of the bar is in the ui-unify block at the end of the file. */
 .etab-bar { background: var(--panel); }
 .etab-message { color: var(--warning); font: 400 13px/1.35 var(--sans); }
+/* 26.1-20 (owner 2026-11-21, item 20): the unsaved changes are one small mark at the right end of the bar; the long status line leaves the row (it stays one live region for a screen reader),
+   the full line and the reasons of a refused save stand in the details, shown on hover and on focus. Closed details stay in the tree, clipped, so the reasons are still read as alerts. */
+.etab-status[data-compact] { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+.etab-bar > .etab-unsaved { position: relative; flex: none; margin-left: auto; }
+.etab-unsaved > .etab-unsaved-mark { display: inline-flex; align-items: center; gap: 7px; min-height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--radius-tab); background: transparent; color: var(--warning); font: 700 12px var(--sans); letter-spacing: .03em; white-space: nowrap; cursor: pointer; }
+.etab-unsaved > .etab-unsaved-mark:hover, .etab-unsaved > .etab-unsaved-mark[aria-expanded="true"] { background: var(--panel-2); }
+.etab-unsaved-dot { flex: none; width: 8px; height: 8px; border-radius: var(--radius-round); background: currentColor; }
+.etab-unsaved-mark[data-tone="dirty"], .etab-unsaved-mark[data-tone="partial"] { color: var(--warning); }
+.etab-unsaved-mark[data-tone="error"], .etab-unsaved-mark[data-tone="conflict"] { border-color: #e07d74; color: #e07d74; }
+.etab-unsaved-mark[data-tone="saved"] { color: var(--teal); }
+.etab-unsaved-details { position: absolute; top: 100%; right: 0; z-index: 5; box-sizing: border-box; display: grid; gap: 6px; width: max-content; max-width: min(420px, calc(100vw - 32px)); margin-top: 4px; padding: 10px 12px; border: 1px solid var(--line); background: var(--panel-2); box-shadow: 0 8px 24px rgba(0, 0, 0, .35); overflow-wrap: anywhere; }
+.etab-unsaved-details:not([data-open]) { width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.etab-unsaved-details > .etab-unsaved-status { margin: 0; color: oklch(.812 calc(.02 * var(--accent-chroma)) var(--accent-hue)); font: 600 12px/1.4 var(--sans); }
+.etab-unsaved-details .etab-message { margin: 0; padding: 0; }
+@media (max-width: 900px) {
+  .etab-unsaved > .etab-unsaved-mark { min-height: var(--tap-target); }
+}
 /* Review WR-01: the label of the draft row that a tab outside the draft tabs shows while the shared draft is unsaved. */
 .etab-draft-label { color: oklch(.632 calc(.029 * var(--accent-chroma)) var(--accent-hue)); font: 700 11px/1 var(--sans); letter-spacing: .07em; }
 /* D-12: the empty detail pane (nothing picked): heading 16px 700, lines 13px 400 in the secondary text colour. */
