@@ -645,6 +645,31 @@ export function LiveText({ bridge, target, value, className }: { bridge: LiveEdi
 }
 
 /**
+ * Review 3 WR-04: the multi-line places are as tall as their text through CSS `field-sizing: content`. A browser without it (Firefox, an older Safari)
+ * draws `rows` lines, and a long rule or quest condition is one paragraph, so the field would be one line with its own scroll. There the height is
+ * the text's own: set from scrollHeight after every change of the text and of the field's width, with no floor, like the visitor's paragraph.
+ * `text` null: the place is not a textarea, nothing to do.
+ */
+function useTextHeightFallback(ref: React.RefObject<HTMLTextAreaElement | null>, text: string | null) {
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (text === null || !element || typeof CSS === "undefined" || CSS.supports("field-sizing", "content")) return;
+    let width = -1;
+    const fit = () => {
+      width = element.clientWidth;
+      element.style.height = "auto";
+      // scrollHeight leaves the border out; offsetHeight - clientHeight puts it back for box-sizing: border-box
+      element.style.height = `${element.scrollHeight + element.offsetHeight - element.clientHeight}px`;
+    };
+    fit();
+    // only a new width changes the wrapping; the height written by fit() is not a reason to fit again
+    const observer = new ResizeObserver(() => { if (element.clientWidth !== width) fit(); });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ref, text]);
+}
+
+/**
  * 26.1-16: a text in place that is written once, when the place is left: for data that is not in the draft (the banks of «Повышения»), where each keystroke cannot be a command.
  * What is typed stays on the screen while the command runs; Escape puts the saved text back and writes nothing; a paste is plain text (T-26.1-22); a single line ends with Enter.
  * `onCommit` gets the text as typed and answers when the command is done: `false` says the server did not take it, and the text stays where it was typed; a text that equals the saved one (but for the ends) sends no command.
@@ -655,6 +680,8 @@ export function LiveCommitText({ value, onCommit, label, placeholder, className,
   const [running, setRunning] = useState(false);
   // a text the server did not take stays in its place, marked, until it is left again or given up with Escape (26.1-REVIEW-2 WR-01)
   const [failed, setFailed] = useState(false);
+  const area = useRef<HTMLTextAreaElement>(null);
+  useTextHeightFallback(area, multiline ? typed ?? value : null);
   // a place that is not being typed in shows the saved text, but never while its own command runs (the typed text would flash back) or while it keeps a refused text
   useLayoutEffect(() => {
     const element = ref.current;
@@ -679,6 +706,7 @@ export function LiveCommitText({ value, onCommit, label, placeholder, className,
   if (multiline) {
     const shown = typed ?? value;
     return <textarea
+      ref={area}
       className={`live-editable live-textarea${className ? ` ${className}` : ""}`}
       value={shown}
       rows={shown.split("\n").length}
@@ -712,7 +740,10 @@ export function LiveCommitText({ value, onCommit, label, placeholder, className,
 
 /** A plain text of several lines in place (the conditions of a quest): a plain textarea, so what reaches the draft is a string as typed. */
 export function LiveTextarea({ bridge, target, value }: { bridge: LiveEditorBridge; target: LiveTarget; value: string }) {
+  const area = useRef<HTMLTextAreaElement>(null);
+  useTextHeightFallback(area, value);
   return <textarea
+    ref={area}
     className="live-editable live-textarea"
     value={value}
     rows={value.split("\n").length}

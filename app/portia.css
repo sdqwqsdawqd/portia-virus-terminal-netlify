@@ -2958,7 +2958,7 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 .live-date > span { font: 700 11px var(--sans); letter-spacing: .08em; text-transform: uppercase; }
 .live-date input { width: 150px; min-height: 28px; }
 .live-date small { color: var(--danger); font: 11px var(--sans); }
-/* 26.1-27 (п. 33): условия — абзац участника: без рамки и отступов, высота по тексту (field-sizing; без него — строки по числу абзацев), угла изменения размера нет. */
+/* 26.1-27 (п. 33): условия — абзац участника: без рамки и отступов, высота по тексту (field-sizing; без него высоту по scrollHeight ставит useTextHeightFallback), угла изменения размера нет. */
 .live-surface .broadcast-conditions .live-textarea { display: block; width: 100%; box-sizing: border-box; resize: none; field-sizing: content; overflow-wrap: anywhere; }
 .live-card-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
 .live-card-tools .live-remove-wrap { position: static; margin-left: auto; }
