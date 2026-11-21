@@ -828,7 +828,14 @@ export function LiveRich({ bridge, target, text, document, className }: { bridge
 function LivePopover({ onClose, children }: { onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const outside = (event: PointerEvent) => { if (event.target instanceof Node && !ref.current?.parentElement?.contains(event.target)) onClose(); };
+    // Owner 2026-11-22: a layer the field inside opens over the page (the panel of the routes of transmission, drawn into document.body) belongs to
+    // the popover; a press in it must reach its checkbox, not close the popover and the field with it.
+    const outside = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) return;
+      const element = event.target instanceof Element ? event.target : event.target.parentElement;
+      if (element?.closest("[data-floating-layer]")) return;
+      if (!ref.current?.parentElement?.contains(event.target)) onClose();
+    };
     window.document.addEventListener("pointerdown", outside);
     return () => window.document.removeEventListener("pointerdown", outside);
   }, [onClose]);
