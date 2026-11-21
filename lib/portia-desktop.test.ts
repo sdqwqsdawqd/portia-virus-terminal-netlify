@@ -1518,3 +1518,10 @@ test("WR-04 (26.1-REVIEW-2): the last picture of a window is taken at minimise, 
   assert.match(source, /if \(kind === "minimize"\) rememberWindowPicture\(appId\);\s*else forgetWindowPicture\(appId\);/, "minimise takes the picture, close drops it");
   assert.match(source, /forgetWindowPictures\(\);\s*return forgetWindowPictures;\s*\}, \[viewerKey, viewerPerson\]\)/, "a change of the viewer and the end of the desktop drop every picture");
 });
+
+// 26.1-REVIEW-2 IN-02 (in part): the copy of a window loses the classes that would make it a second locked or active window.
+test("IN-02 (26.1-REVIEW-2): the copy of a window is not locked and not active", () => {
+  const seam = desktopFamily.find((part) => part.file === "portia-desktop-taskbar.tsx")?.text ?? "";
+  const clone = seam.slice(seam.indexOf("export function previewCloneOf"), seam.indexOf("type TaskbarPreviewProps"));
+  assert.match(clone, /copy\.classList\.remove\("is-modal-locked", "is-active"\)/);
+});

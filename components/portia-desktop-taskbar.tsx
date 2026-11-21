@@ -103,6 +103,8 @@ export function previewCloneOf(source: HTMLElement): HTMLElement {
     stub.style.height = `${from.offsetHeight}px`;
     node.replaceWith(stub);
   }
+  // The root of the copy is a picture, not a second active or locked window: `.app-window.promotion-window.is-modal-locked` (more specific than the picture's frame rule) would move it (26.1-REVIEW-2 IN-02).
+  copy.classList.remove("is-modal-locked", "is-active");
   copy.setAttribute("inert", "");
   copy.setAttribute("aria-hidden", "true");
   return copy;
