@@ -19,3 +19,19 @@ export function parseManualIds(value: unknown): string[] | undefined | "invalid"
   if (!Array.isArray(value) || value.length > MANUAL_IDS_MAX) return "invalid";
   return value.every((id) => typeof id === "string" && id.length <= ID_MAX_LENGTH) ? value as string[] : "invalid";
 }
+
+/** L2: the status of a failed counts sync before a confirm. A rights refusal of the RPC (`forbidden` / SQLSTATE 42501) is 403; everything else stays the 409 of a changed bank. */
+export function syncFailureStatus(error: { code?: unknown; message?: unknown } | null | undefined): 403 | 409 {
+  if (!error) return 409;
+  return error.code === "42501" || (typeof error.message === "string" && error.message.trim() === "forbidden") ? 403 : 409;
+}
+
+/** L3: the preview secret, or null when it is missing or too short (the reader throws or returns fewer than 32 characters). Never the reason, so nothing about the setup leaks. */
+export function previewSecretOrNull(read: () => string): string | null {
+  try {
+    const secret = read();
+    return typeof secret === "string" && secret.length >= 32 ? secret : null;
+  } catch {
+    return null;
+  }
+}

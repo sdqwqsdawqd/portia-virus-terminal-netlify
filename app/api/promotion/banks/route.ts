@@ -14,7 +14,7 @@ import { qualificationPromotionTransitions } from "@/lib/portia-promotion";
 import { createPreviewToken, verifyPreviewToken } from "@/lib/portia-promotion-preview-token";
 import { pickAutoQualificationSet, qualificationSetMessages, qualificationSetProblem, qualificationTestQuotas } from "@/lib/portia-qualification-builder";
 import { qualificationRulesSaveFailure, qualificationRulesText } from "@/lib/portia-qualification-rules";
-import { bankBodyTooLarge, parseManualIds } from "@/lib/promotion-bank-request";
+import { bankBodyTooLarge, parseManualIds, previewSecretOrNull, syncFailureStatus } from "@/lib/promotion-bank-request";
 import { parseJsonObject } from "@/lib/request-json";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -58,7 +58,7 @@ async function qualificationRequestOwnership(supabase: Awaited<ReturnType<typeof
   return row && row.assignedToMe === true && row.status === "claimed" && transitionId !== undefined && row.targetTitleId === transitionId ? "owned" : "not-owned";
 }
 
-type SyncFailure = "stale" | "changed" | "program" | "pending-database";
+type SyncFailure = "stale" | "changed" | "program" | "pending-database" | "forbidden";
 
 // OWN-08 (owner 2026-11-20): quotas are gone from the editor; the stored counts only satisfy portia_promo_confirm_test (the set must be as long as their sum),
 // so they follow the set being confirmed. Called only after the token, the activity of every id, the size of the set (1..100) and the ownership of the request were checked.
@@ -69,6 +69,8 @@ async function syncQualificationCounts(supabase: Awaited<ReturnType<typeof creat
   const command = parsePromotionBankCommand({ action: "save-qualification-bank", transitionId: bank.transitionId, quotas: wanted });
   if (!command) return { failure: "program" };
   const { error } = await supabase.rpc("portia_promo_bank_command", { p_action: command.action, p_payload: command });
+  // 26.1-17 L2: a rights refusal of the RPC is the closed tab (403), not the «bank changed» conflict.
+  if (error && syncFailureStatus(error) === 403) return { failure: "forbidden" };
   if (error) return { failure: error.code === "42883" ? "pending-database" : "stale" };
   const reloaded = await bankState(supabase);
   const fresh = reloaded?.qualificationBanks.find((item) => item.id === bank.id);
@@ -104,7 +106,9 @@ export async function POST(request: Request) {
     const state = await bankState(supabase);
     const bank = state && kind ? (kind === "ordinary" ? state.taskBanks : state.qualificationBanks).find((item) => item.id === bankId) : null;
     if (!kind || !bank) return Response.json({ error: "Банк не найден." }, { status: 404, headers: noStoreHeaders });
-    const secret = promotionDeviceSecret();
+    // 26.1-17 L3: the rights (first step) and the bank are already checked, so a missing secret is a plain 503 that says nothing about the setup.
+    const secret = previewSecretOrNull(promotionDeviceSecret);
+    if (secret === null) return Response.json({ error: "Сборка набора временно недоступна.", code: "pending-config" }, { status: 503, headers: noStoreHeaders });
     if (body.action === "preview") {
       // 26.1-17 L1: the selection is bounded (at most 100 ids of 64 characters; replaceId of 64 characters) before anything is looked up.
       const manualIds = parseManualIds(body.manualIds);
@@ -152,6 +156,7 @@ export async function POST(request: Request) {
       if (ownership === "not-owned") return Response.json({ error: "Не удалось подтвердить набор.", code: "confirm-conflict" }, { status: 409, headers: noStoreHeaders });
       const synced = await syncQualificationCounts(supabase, bank, ids);
       if ("failure" in synced) {
+        if (synced.failure === "forbidden") return denied("forbidden");
         if (synced.failure === "program") return Response.json({ error: "Не удалось подтвердить набор.", code: "confirm-failed" }, { status: 500, headers: noStoreHeaders });
         // The counts may already be written: the answer carries the bank as the server has it now.
         const fresh = await stateField(supabase);

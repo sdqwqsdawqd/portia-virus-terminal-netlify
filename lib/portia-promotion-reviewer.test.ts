@@ -419,3 +419,19 @@ test("26.1-17 L1: the body limit is checked on the raw text before the JSON is p
   assert.match(post, /manualIds === "invalid" \|\| replaceId\.length > 64\) return Response\.json\([^\n]*code: "invalid-selection" \}, \{ status: 400/);
   assert.match(post, /replaceId\.length > 64/);
 });
+
+test("26.1-17 L2/L3: a rights refusal of the sync is the 403 of the tab, a missing preview secret is a plain 503 after the rights and the bank lookup", () => {
+  const route = bankRouteSource();
+  const post = route.slice(route.indexOf("export async function POST"));
+  // L2: the sync reports `forbidden` and the confirm answers with the same denied("forbidden") as every other refused call.
+  assert.ok(route.includes("syncFailureStatus(error) === 403"));
+  assert.match(post, /synced\.failure === "forbidden"\) return denied\("forbidden"\)/);
+  // L3: the secret is read only after the rights (first step) and the bank lookup (404), and shared by preview and confirm.
+  const authAt = post.indexOf("requirePromotionReviewer(");
+  const notFoundAt = post.indexOf('"Банк не найден."');
+  const secretAt = post.indexOf("previewSecretOrNull(");
+  assert.ok(authAt !== -1 && notFoundAt > authAt && secretAt > notFoundAt, "rights, then the bank, then the secret");
+  assert.ok(!route.includes("promotionDeviceSecret()"), "the secret is never read unguarded");
+  assert.match(post, /secret === null\) return Response\.json\(\{ error: "Сборка набора временно недоступна\.", code: "pending-config" \}, \{ status: 503, headers: noStoreHeaders \}\)/);
+  assert.ok(post.indexOf("secret === null") < post.indexOf('body.action === "preview"', secretAt), "one check ahead of both preview and confirm");
+});
