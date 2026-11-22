@@ -228,7 +228,9 @@ test("D-56 (20-37): the register and the sources agree (old texts gone, new text
   const historicEnv = {
     ...realEnv,
     sourcePaths: () => realEnv.sourcePaths().filter((path) => !replacedCopy.has(path) && path !== movedSeam),
-    hintPaths: () => realEnv.hintPaths().filter((path) => !replacedCopy.has(path) && path !== movedSeam),
+    // Owner 2026-11-22: the home page carries the app's description for the Google Cloud app verification (what the app is for, how Google sign-in is
+    // used); it is a required statement asked for by the owner, not a hint of the interface, so the long-text search leaves app/page.tsx out.
+    hintPaths: () => realEnv.hintPaths().filter((path) => !replacedCopy.has(path) && path !== movedSeam && path !== "app/page.tsx"),
     read: (path: string) => (path === "components/portia-desktop.tsx" ? `${realEnv.read(path)}\n${realEnv.read(movedSeam)}` : realEnv.read(path)),
   };
   const errors = validateRegistry(registry().filter((row) => !replacedCopy.has(row.file)), historicEnv, appliedFiles.filter((path) => !replacedCopy.has(path)));
