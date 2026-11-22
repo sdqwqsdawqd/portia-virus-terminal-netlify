@@ -3066,6 +3066,14 @@ span.live-editable:empty::before { content: attr(data-placeholder); opacity: .55
 .access-gate-live .access-card { box-shadow: none; }
 .access-gate-live .access-card button:disabled { cursor: not-allowed; }
 @media (max-width: 900px) { .access-live-state { min-height: var(--tap-target); } .access-live-bar, .access-live { padding-left: 12px; padding-right: 12px; } }
+/* Owner 2026-11-22: the links to the privacy policy and the terms (Google Cloud verification). Quiet, in the empty middle of the system bar on a PC
+   (never over a shortcut or a window); on a phone they follow the page. */
+.legal-links { position: fixed; z-index: 21; top: 0; left: 50%; height: 44px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; font: 500 11px/1 var(--sans); opacity: .55; }
+.legal-links a { color: oklch(.72 calc(.03 * var(--accent-chroma)) var(--accent-hue)); text-decoration: none; }
+.legal-links a:hover, .legal-links a:focus-visible { text-decoration: underline; opacity: 1; }
+@media (max-width: 900px) {
+  .legal-links { position: static; height: auto; transform: none; justify-content: center; padding: 12px 16px 72px; }
+}
 /* users-tab:start — Phase 22 «Пользователи» (USR-01..USR-09): sharp corners, values from 22-UI-SPEC, nothing else in the file changes */
 .tab-count { min-width: 24px; margin-left: 8px; padding: 0 8px; border: 1px solid var(--warning); color: var(--warning); font: 700 11px/1.35 var(--mono); text-align: center; }
 .users-tab { display: grid; gap: 24px; min-width: 0; }
