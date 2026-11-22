@@ -48,6 +48,14 @@ const nextConfig: NextConfig = {
   // A package lock exists above the repository on this workstation; pinning the root keeps
   // Turbopack from treating the user profile as part of this application.
   turbopack: { root: process.cwd() },
+  // Owner 2026-11-22: the privacy policy and the terms are plain static files (no app, no script), linked from nowhere in the desktop,
+  // public for the Google Cloud app verification. Clean addresses point at them.
+  async rewrites() {
+    return [
+      { source: "/privacy", destination: "/privacy.html" },
+      { source: "/terms", destination: "/terms.html" },
+    ];
+  },
   async headers() {
     return [{
       source: "/(.*)",
