@@ -14,7 +14,7 @@ const plexMono = IBM_Plex_Mono({ subsets: ["latin", "cyrillic"], weight: ["400",
 
 export const metadata: Metadata = {
   title: "PORTIA — вирусный архив",
-  description: "PORTIA OS это операционная система, имеющая в себе база данных вирусов и важной информации.",
+  description: "PORTIA — некоммерческое веб-приложение игрового сообщества: вымышленный архив вирусов, справочник, заявки на доступ и редактор. PORTIA is a non-commercial community web app: a fictional virus archive, a guide, access requests and an editor.",
   icons: {
     icon: "/assets/portia-virus-icon.png",
     shortcut: "/assets/portia-virus-icon.png",
